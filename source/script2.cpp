@@ -28,9 +28,11 @@ GNU General Public License for more details.
 // GUI-related: Tray //
 ///////////////////////
 
-ResultType TrayTipParseOptions(LPTSTR aOptions, NOTIFYICONDATA &nic)
+ResultType TrayTipParseOptions(LPCTSTR aOptions, NOTIFYICONDATA &nic)
 {
-	LPTSTR next_option, option_end;
+	if (!aOptions)
+		return OK;
+	LPCTSTR next_option, option_end;
 	TCHAR option[1+MAX_NUMBER_SIZE];
 	for (next_option = omit_leading_whitespace(aOptions); ; next_option = omit_leading_whitespace(option_end))
 	{
@@ -79,7 +81,7 @@ invalid_option:
 }
 
 
-ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
+bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
 {
 	NOTIFYICONDATA nic = {0};
 	nic.cbSize = sizeof(nic);
@@ -88,8 +90,10 @@ ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
 	nic.uFlags = NIF_INFO;
 	// nic.uTimeout is no longer used because it is valid only on Windows 2000 and Windows XP.
 	if (!TrayTipParseOptions(aOptions, nic))
-		return FAIL;
-	if (*aTitle && !*aText)
+		return FR_FAIL;
+	if (!aTitle) aTitle = _T("");
+	if (!aText) aText = _T("");
+	if (aTitle && !*aText)
 		// As passing an empty string hides the TrayTip (or does nothing on Windows 10),
 		// pass a space to ensure the TrayTip is shown.  Testing showed that Windows 10
 		// will size the notification to fit only the title, as if there was no text.

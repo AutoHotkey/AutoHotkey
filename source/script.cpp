@@ -238,7 +238,6 @@ FuncEntry g_BIF[] =
 	BIFA(Thread, 1, 3, ACT_THREAD),
 	BIF1(ToolTip, 0, 4),
 	BIF1(TraySetIcon, 0, 3),
-	BIFA(TrayTip, 0, 3, ACT_TRAYTIP),
 	BIFn(Trim, 1, 2, BIF_Trim),
 	BIF1(Type, 1, 1),
 	BIF1(VarSetStrCapacity, 1, 2, {1}),
@@ -11744,9 +11743,6 @@ ResultType Line::Perform()
 		// is in a variable reference (very rare in this case).
 		}
 		return OK;
-
-	case ACT_TRAYTIP:
-		return TrayTip(THREE_ARGS);
 
 
 //////////////////////////////////////////////////////////////////////////

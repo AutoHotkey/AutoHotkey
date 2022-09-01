@@ -171,3 +171,6 @@ md_func(Suspend, (In_Opt, Int32, Mode))
 
 md_func_x(SysGet, SysGet, Int32, (In, Int32, Index))
 md_func(SysGetIPAddresses, (Ret, Object, RetVal))
+
+
+md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options))
