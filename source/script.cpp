@@ -270,8 +270,6 @@ FuncEntry g_BIF[] =
 	BIFn(WinKill, 0, 5, BIF_WinShow),
 	BIFn(WinMaximize, 0, 4, BIF_WinShow),
 	BIFn(WinMinimize, 0, 4, BIF_WinShow),
-	BIFA(WinMinimizeAll, 0, 0, ACT_WINMINIMIZEALL),
-	BIFA(WinMinimizeAllUndo, 0, 0, ACT_WINMINIMIZEALLUNDO),
 	BIF1(WinMove, 0, 8),
 	BIFn(WinMoveBottom, 0, 4, BIF_WinMoveTopBottom),
 	BIFn(WinMoveTop, 0, 4, BIF_WinMoveTopBottom),
@@ -11667,15 +11665,6 @@ ResultType Line::Perform()
 			return PerformClick(buf_temp);
 		}
 		return PerformClick(ARG1);
-
-	case ACT_WINMINIMIZEALL:
-		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);
-		DoWinDelay;
-		return OK;
-	case ACT_WINMINIMIZEALLUNDO:
-		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 416, 0);
-		DoWinDelay;
-		return OK;
 
 	case ACT_CRITICAL:
 	{

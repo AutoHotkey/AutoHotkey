@@ -2132,3 +2132,19 @@ BIF_DECL(BIF_WinExistActive)
 
 	_f_return_i((size_t)hwnd);
 }
+
+
+
+bif_impl void WinMinimizeAll()
+{
+	PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);
+	DoWinDelay;
+}
+
+
+
+bif_impl void WinMinimizeAllUndo()
+{
+	PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 416, 0);
+	DoWinDelay;
+}
