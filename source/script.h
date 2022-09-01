@@ -724,7 +724,7 @@ private:
 	bool CatchThis(ExprTokenType &aThrown);
 	friend BIF_DECL(BIF_PerformAction);
 
-	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
+	static FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
 public:
 	#define SET_S_DEREF_BUF(ptr, size) Line::sDerefBuf = ptr, Line::sDerefBufSize = size
@@ -1105,7 +1105,7 @@ public:
 		return aDefault;
 	}
 
-	static ToggleValueType ConvertOnOffAlways(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOffAlways(LPCTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, ALWAYSON, ALWAYSOFF, or blank.
 	{
 		if (ToggleValueType toggle = ConvertOnOff(aBuf))

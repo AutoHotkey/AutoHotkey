@@ -157,9 +157,12 @@ md_func_x(SendText, SendText, Void, (In, String, Text))
 
 
 md_func(SetDefaultMouseSpeed, (In, Int32, Speed))
+md_func(SetCapsLockState, (In_Opt, String, State))
 md_func(SetControlDelay, (In, Int32, Delay))
 md_func(SetKeyDelay, (In_Opt, Int32, Delay), (In_Opt, Int32, Duration), (In_Opt, String, Mode))
 md_func(SetMouseDelay, (In, Int32, Delay), (In_Opt, String, Mode))
+md_func(SetNumLockState, (In_Opt, String, State))
+md_func(SetScrollLockState, (In_Opt, String, State))
 md_func(SetWinDelay, (In, Int32, Delay))
 md_func(SetWorkingDir, (In, String, Path))
 

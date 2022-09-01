@@ -1824,11 +1824,9 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 // Keyboard Functions //
 ////////////////////////
 
-ResultType Line::SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText)
-// Caller must have already validated that the args are correct.
-// Always returns OK, for use as caller's return value.
+FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPCTSTR aToggleText)
 {
-	ToggleValueType toggle = ConvertOnOffAlways(aToggleText, NEUTRAL);
+	ToggleValueType toggle = Line::ConvertOnOffAlways(aToggleText, NEUTRAL);
 	switch (toggle)
 	{
 	case TOGGLED_ON:
@@ -1856,6 +1854,8 @@ ResultType Line::SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR 
 		// so it can be left for a future enhancement:
 		ForceLock = NEUTRAL;
 		break;
+	default:
+		return FR_E_ARG(0);
 	}
 	return OK;
 }

@@ -320,6 +320,7 @@ void SetKeyHistoryMax(int aMax);
 #define KEYEVENT_PHYS(event_type, vk, sc) KeyEvent(event_type, vk, sc, NULL, false, KEY_PHYS_IGNORE)
 
 ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue);
+FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPCTSTR aToggleText);
 
 #define STD_MODS_TO_DISGUISE (MOD_LALT|MOD_RALT|MOD_LWIN|MOD_RWIN)
 void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, HWND aTargetWindow

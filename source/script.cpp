@@ -201,10 +201,7 @@ FuncEntry g_BIF[] =
 	BIF1(Run, 1, 4, {4}),
 	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
-	BIFA(SetCapslockState, 0, 1, ACT_SETCAPSLOCKSTATE),
-	BIFA(SetNumlockState, 0, 1, ACT_SETNUMLOCKSTATE),
 	BIFn(SetRegView, 1, 1, BIF_SetBIV),
-	BIFA(SetScrollLockState, 0, 1, ACT_SETSCROLLLOCKSTATE),
 	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
 	BIF1(SetTimer, 0, 3),
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
@@ -11733,18 +11730,6 @@ ResultType Line::Perform()
 
 
 //////////////////////////////////////////////////////////////////////////
-
-	////////////////////////////////////////////////////////////////////////////////////////
-	// For these, it seems best not to report an error during runtime if there's
-	// an invalid value (e.g. something other than On/Off/Blank) in a param containing
-	// a dereferenced variable, since settings are global and affect all subroutines,
-	// not just the one that we would otherwise report failure for:
-	case ACT_SETNUMLOCKSTATE:
-		return SetToggleState(VK_NUMLOCK, g_ForceNumLock, ARG1);
-	case ACT_SETCAPSLOCKSTATE:
-		return SetToggleState(VK_CAPITAL, g_ForceCapsLock, ARG1);
-	case ACT_SETSCROLLLOCKSTATE:
-		return SetToggleState(VK_SCROLL, g_ForceScrollLock, ARG1);
 
 	case ACT_SLEEP:
 	{

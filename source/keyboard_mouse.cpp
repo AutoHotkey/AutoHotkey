@@ -4476,6 +4476,21 @@ bif_impl void SendEvent(LPCTSTR aKeys)
 	SendKeys(aKeys, SCM_NOT_RAW, SM_EVENT);
 }
 
+bif_impl FResult SetNumLockState(LPCTSTR aState)
+{
+	return SetToggleState(VK_NUMLOCK, g_ForceNumLock, aState);
+}
+
+bif_impl FResult SetCapsLockState(LPCTSTR aState)
+{
+	return SetToggleState(VK_CAPITAL, g_ForceCapsLock, aState);
+}
+
+bif_impl FResult SetScrollLockState(LPCTSTR aState)
+{
+	return SetToggleState(VK_SCROLL, g_ForceScrollLock, aState);
+}
+
 bif_impl FResult MouseClick(LPCTSTR aButton, int *aX, int *aY, int *aClickCount, int *aSpeed, LPCTSTR aDownOrUp, LPCTSTR aRelative)
 {
 	return PerformMouse(ACT_MOUSECLICK, aButton, aX, aY, nullptr, nullptr, aSpeed, aRelative, aClickCount, aDownOrUp);
