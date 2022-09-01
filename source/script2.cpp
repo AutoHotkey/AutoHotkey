@@ -2588,6 +2588,85 @@ BIF_DECL(BIF_SetTimer)
 
 
 
+bif_impl void ScriptSleep(int aDelay)
+{
+	MsgSleep(aDelay);
+}
+
+
+
+bif_impl void Critical(LPCTSTR aSetting)
+{
+	// v1.0.46: When the current thread is critical, have the script check messages less often to
+	// reduce situations where an OnMessage or GUI message must be discarded due to "thread already
+	// running".  Using 16 rather than the default of 5 solves reliability problems in a custom-menu-draw
+	// script and probably many similar scripts -- even when the system is under load (though 16 might not
+	// be enough during an extreme load depending on the exact preemption/timeslice dynamics involved).
+	// DON'T GO TOO HIGH because this setting reduces response time for ALL messages, even those that
+	// don't launch script threads (especially painting/drawing and other screen-update events).
+	// Some hardware has a tickcount granularity of 15 instead of 10, so this covers more variations.
+	DWORD peek_frequency_when_critical_is_on = 16; // Set default.  See below.
+	// v1.0.48: Below supports "Critical 0" as meaning "Off" to improve compatibility with A_IsCritical.
+	// In fact, for performance, only the following are no recognized as turning on Critical:
+	//     - "On"
+	//     - ""
+	//     - Integer other than 0.
+	// Everything else is considered to be "Off", including "Off", any non-blank string that
+	// doesn't start with a non-zero number, and zero itself.
+	g->ThreadIsCritical = !aSetting || !*aSetting // i.e. a first arg that's omitted or blank is the same as "ON". See comments above.
+		|| !_tcsicmp(aSetting, _T("On"))
+		|| (peek_frequency_when_critical_is_on = ATOU(aSetting)); // Non-zero integer also turns it on. Relies on short-circuit boolean order.
+	if (g->ThreadIsCritical) // Critical has been turned on. (For simplicity even if it was already on, the following is done.)
+	{
+		g->PeekFrequency = peek_frequency_when_critical_is_on;
+		g->AllowThreadToBeInterrupted = false;
+		// Ensure uninterruptibility never times out.  IsInterruptible() relies on this to avoid the
+		// need to check g->ThreadIsCritical, which in turn allows global_maximize_interruptibility()
+		// and DialogPrep() to avoid resetting g->ThreadIsCritical, which allows it to reliably be
+		// used as the default setting for new threads, even when the auto-execute thread itself
+		// (or the idle thread) needs to be interruptible, such as while displaying a dialog->
+		// In other words, g->ThreadIsCritical only represents the desired setting as set by the
+		// script, and isn't the actual mechanism used to make the thread uninterruptible.
+		g->UninterruptibleDuration = -1;
+	}
+	else // Critical has been turned off.
+	{
+		// Since Critical is being turned off, allow thread to be immediately interrupted regardless of
+		// any "Thread Interrupt" settings.
+		g->PeekFrequency = DEFAULT_PEEK_FREQUENCY;
+		g->AllowThreadToBeInterrupted = true;
+	}
+	// The thread's interruptibility has been explicitly set; so the script is now in charge of
+	// managing this thread's interruptibility.
+}
+
+
+
+bif_impl FResult Thread(LPCTSTR aCommand, int *aValue1, int *aValue2)
+{
+	switch (Line::ConvertThreadCommand(aCommand))
+	{
+	case THREAD_CMD_PRIORITY:
+		if (aValue1)
+			g->Priority = *aValue1;
+		return OK;
+	case THREAD_CMD_INTERRUPT:
+		// If either one is blank, leave that setting as it was before.
+		if (aValue1)
+			g_script.mUninterruptibleTime = *aValue1;  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
+		if (aValue2)
+			g_script.mUninterruptedLineCountMax = *aValue2;  // 32-bit also, to help performance (since huge values seem unnecessary).
+		return OK;
+	case THREAD_CMD_NOTIMERS:
+		g->AllowTimers = (aValue1 && *aValue1 == 0); // Double-negative NoTimers=false -> allow timers.
+		return OK;
+	default:
+		return FR_E_ARG(0);
+	}
+}
+
+
+
 //////////////////////////////
 // Event Handling Functions //
 //////////////////////////////

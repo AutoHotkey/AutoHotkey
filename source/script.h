@@ -1087,7 +1087,7 @@ public:
 		return MATCHMODE_INVALID;
 	}
 
-	static ThreadCommands ConvertThreadCommand(LPTSTR aBuf)
+	static ThreadCommands ConvertThreadCommand(LPCTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return THREAD_CMD_INVALID;
 		if (!_tcsicmp(aBuf, _T("Priority"))) return THREAD_CMD_PRIORITY;

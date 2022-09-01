@@ -484,11 +484,11 @@ BIV_DECL_R(BIV_IsPaused) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCriti
 
 BIV_DECL_R(BIV_IsCritical) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
 {
-	// It seems more useful to return g->PeekFrequency than "On" or "Off" (ACT_CRITICAL ensures that
+	// It seems more useful to return g->PeekFrequency than "On" or "Off" (Critical() ensures that
 	// g->PeekFrequency!=0 whenever g->ThreadIsCritical==true).  Also, the word "Is" in "A_IsCritical"
 	// implies a value that can be used as a boolean such as "if A_IsCritical".
 	if (g->ThreadIsCritical)
-		_f_return_i(g->PeekFrequency); // ACT_CRITICAL ensures that g->PeekFrequency > 0 when critical is on.
+		_f_return_i(g->PeekFrequency); // Critical() ensures that g->PeekFrequency > 0 when critical is on.
 	// Otherwise:
 	_f_return_i(0);
 }

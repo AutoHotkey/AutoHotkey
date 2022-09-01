@@ -2,6 +2,7 @@
 md_func_x(BlockInput, ScriptBlockInput, Void, (In, String, Mode))
 
 md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
+md_func_x(Critical, Critical, Void, (In_Opt, String, OnOffNumber))
 
 md_func(DriveGetCapacity, (In, String, Path), (Ret, Int64, RetVal))
 md_func(DriveGetFilesystem, (In, String, Drive), (Ret, String, RetVal))
@@ -167,6 +168,9 @@ md_func(SetWinDelay, (In, Int32, Delay))
 md_func(SetWorkingDir, (In, String, Path))
 
 
+md_func_x(Sleep, ScriptSleep, Void, (In, Int32, Delay))
+
+
 md_func_x(SoundBeep, SoundBeep, Void, (In_Opt, Int32, Duration), (In_Opt, Int32, Frequency))
 md_func(SoundPlay, (In, String, Path), (In_Opt, String, Wait))
 
@@ -177,6 +181,8 @@ md_func(Suspend, (In_Opt, Int32, Mode))
 md_func_x(SysGet, SysGet, Int32, (In, Int32, Index))
 md_func(SysGetIPAddresses, (Ret, Object, RetVal))
 
+
+md_func(Thread, (In, String, Command), (In_Opt, Int32, Value1), (In_Opt, Int32, Value2))
 
 md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options))
 

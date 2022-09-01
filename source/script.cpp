@@ -90,7 +90,6 @@ FuncEntry g_BIF[] =
 	BIFn(ControlShow, 1, 5, BIF_Control),
 	BIFn(ControlShowDropDown, 1, 5, BIF_Control),
 	BIF1(Cos, 1, 1),
-	BIFA(Critical, 0, 1, ACT_CRITICAL),
 	BIF1(DateAdd, 3, 3),
 	BIF1(DateDiff, 3, 3),
 	BIFn(DetectHiddenText, 1, 1, BIF_SetBIV),
@@ -207,7 +206,6 @@ FuncEntry g_BIF[] =
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
 	BIFA(Shutdown, 1, 1, ACT_SHUTDOWN),
 	BIF1(Sin, 1, 1),
-	BIFA(Sleep, 1, 1, ACT_SLEEP),
 	BIF1(Sort, 1, 3),
 	BIFn(SoundGetInterface, 1, 3, BIF_Sound),
 	BIFn(SoundGetMute, 0, 2, BIF_Sound),
@@ -231,7 +229,6 @@ FuncEntry g_BIF[] =
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
 	BIF1(Tan, 1, 1),
-	BIFA(Thread, 1, 3, ACT_THREAD),
 	BIF1(ToolTip, 0, 4),
 	BIF1(TraySetIcon, 0, 3),
 	BIFn(Trim, 1, 2, BIF_Trim),
@@ -11661,85 +11658,8 @@ ResultType Line::Perform()
 		}
 		return PerformClick(ARG1);
 
-	case ACT_CRITICAL:
-	{
-		// v1.0.46: When the current thread is critical, have the script check messages less often to
-		// reduce situations where an OnMessage or GUI message must be discarded due to "thread already
-		// running".  Using 16 rather than the default of 5 solves reliability problems in a custom-menu-draw
-		// script and probably many similar scripts -- even when the system is under load (though 16 might not
-		// be enough during an extreme load depending on the exact preemption/timeslice dynamics involved).
-		// DON'T GO TOO HIGH because this setting reduces response time for ALL messages, even those that
-		// don't launch script threads (especially painting/drawing and other screen-update events).
-		// Some hardware has a tickcount granularity of 15 instead of 10, so this covers more variations.
-		DWORD peek_frequency_when_critical_is_on = 16; // Set default.  See below.
-		// v1.0.48: Below supports "Critical 0" as meaning "Off" to improve compatibility with A_IsCritical.
-		// In fact, for performance, only the following are no recognized as turning on Critical:
-		//     - "On"
-		//     - ""
-		//     - Integer other than 0.
-		// Everything else, if considered to be "Off", including "Off", "Any non-blank string that
-		// doesn't start with a non-zero number", and zero itself.
-		g.ThreadIsCritical = !*ARG1 // i.e. a first arg that's omitted or blank is the same as "ON". See comments above.
-			|| !_tcsicmp(ARG1, _T("ON"))
-			|| (peek_frequency_when_critical_is_on = ArgToUInt(1)); // Non-zero integer also turns it on. Relies on short-circuit boolean order.
-		if (g.ThreadIsCritical) // Critical has been turned on. (For simplicity even if it was already on, the following is done.)
-		{
-			g.PeekFrequency = peek_frequency_when_critical_is_on;
-			g.AllowThreadToBeInterrupted = false;
-			// Ensure uninterruptibility never times out.  IsInterruptible() relies on this to avoid the
-			// need to check g->ThreadIsCritical, which in turn allows global_maximize_interruptibility()
-			// and DialogPrep() to avoid resetting g->ThreadIsCritical, which allows it to reliably be
-			// used as the default setting for new threads, even when the auto-execute thread itself
-			// (or the idle thread) needs to be interruptible, such as while displaying a dialog.
-			// In other words, g->ThreadIsCritical only represents the desired setting as set by the
-			// script, and isn't the actual mechanism used to make the thread uninterruptible.
-			g.UninterruptibleDuration = -1;
-		}
-		else // Critical has been turned off.
-		{
-			// Since Critical is being turned off, allow thread to be immediately interrupted regardless of
-			// any "Thread Interrupt" settings.
-			g.PeekFrequency = DEFAULT_PEEK_FREQUENCY;
-			g.AllowThreadToBeInterrupted = true;
-		}
-		// Once ACT_CRITICAL returns, the thread's interruptibility has been explicitly set; so the script
-		// is now in charge of managing this thread's interruptibility.
-		return OK;
-	}
-
-	case ACT_THREAD:
-		switch (ConvertThreadCommand(ARG1))
-		{
-		case THREAD_CMD_PRIORITY:
-			g.Priority = ArgToInt(2);
-			break;
-		case THREAD_CMD_INTERRUPT:
-			// If either one is blank, leave that setting as it was before.
-			if (*ARG2)
-				g_script.mUninterruptibleTime = ArgToInt(2);  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
-			if (*ARG3)
-				g_script.mUninterruptedLineCountMax = ArgToInt(3);  // 32-bit also, to help performance (since huge values seem unnecessary).
-			break;
-		case THREAD_CMD_NOTIMERS:
-			g.AllowTimers = (*ARG2 && ArgToInt64(2) == 0);
-			break;
-		// If invalid command, do nothing since that is always caught at load-time unless the command
-		// is in a variable reference (very rare in this case).
-		}
-		return OK;
-
 
 //////////////////////////////////////////////////////////////////////////
-
-	case ACT_SLEEP:
-	{
-		// Only support 32-bit values for this command, since it seems unlikely anyone would to have
-		// it sleep more than 24.8 days or so.  It also helps performance on 32-bit hardware because
-		// MsgSleep() is so heavily called and checks the value of the first parameter frequently:
-		int sleep_time = ArgToInt(1); // Keep it signed vs. unsigned for backward compatibility (e.g. scripts that do Sleep -1).
-		MsgSleep(sleep_time);
-		return OK;
-	}
 
 	case ACT_OUTPUTDEBUG:
 #ifdef CONFIG_DEBUGGER

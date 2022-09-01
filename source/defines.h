@@ -620,8 +620,6 @@ enum enum_act {
 // All others are not included in g_act, and are only used with BIF_PerformAction:
 // ================================================================================
 , ACT_CLICK, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG
-, ACT_SLEEP
-, ACT_CRITICAL, ACT_THREAD
 , ACT_OUTPUTDEBUG
 , ACT_SHUTDOWN
 };
@@ -989,7 +987,7 @@ inline void global_set_defaults(ScriptThreadSettings &g)
 	g.DetectHiddenWindows = false;  // Same as AutoIt2 but unlike AutoIt3; seems like a more intuitive default.
 	g.DetectHiddenText = true;  // Unlike AutoIt, which defaults to false.  This setting performs better.
 	#define DEFAULT_PEEK_FREQUENCY 5
-	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in ACT_CRITICAL.
+	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in Critical().
 	g.AllowTimers = true;
 	g.ThreadIsCritical = false;
 	g.WinDelay = 100;
