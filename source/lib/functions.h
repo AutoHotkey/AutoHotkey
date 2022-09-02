@@ -136,6 +136,9 @@ md_func(MouseMove,
 	(In_Opt, String, Relative))
 
 
+md_func_x(OutputDebug, OutputDebug, Void, (In, String, Text))
+
+
 md_func(Pause, (In_Opt, Int32, NewState))
 
 

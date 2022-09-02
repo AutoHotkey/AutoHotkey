@@ -2667,6 +2667,16 @@ bif_impl FResult Thread(LPCTSTR aCommand, int *aValue1, int *aValue2)
 
 
 
+bif_impl void OutputDebug(LPCTSTR aText)
+{
+#ifdef CONFIG_DEBUGGER
+	if (!g_Debugger.OutputStdErr(aText))
+#endif
+		OutputDebugString(aText);
+}
+
+
+
 //////////////////////////////
 // Event Handling Functions //
 //////////////////////////////

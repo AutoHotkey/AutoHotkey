@@ -176,7 +176,6 @@ FuncEntry g_BIF[] =
 	BIFn(OnExit, 1, 2, BIF_On),
 	BIF1(OnMessage, 2, 3),
 	BIF1(Ord, 1, 1),
-	BIFA(OutputDebug, 1, 1, ACT_OUTPUTDEBUG),
 	BIF1(PixelGetColor, 2, 3),
 	BIF1(PixelSearch, 7, 8, {1, 2}),
 	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
@@ -11660,13 +11659,6 @@ ResultType Line::Perform()
 
 
 //////////////////////////////////////////////////////////////////////////
-
-	case ACT_OUTPUTDEBUG:
-#ifdef CONFIG_DEBUGGER
-		if (!g_Debugger.OutputStdErr(ARG1))
-#endif
-			OutputDebugString(ARG1); // It does not return a value for the purpose of setting ErrorLevel.
-		return OK;
 
 	case ACT_SHUTDOWN:
 		return Util_Shutdown(ArgToInt(1)) ? OK : FAIL; // Range of ARG1 is not validated in case other values are supported in the future.
