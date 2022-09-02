@@ -353,12 +353,13 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 
 	// Check for obvious errors to prevent an Access Violation.
 	// Address can be zero for StrPut if length is also zero (see below).
-	if ( address < FIRST_VALID_ADDRESS
+	// Address can be zero for StrGet if buffer size is zero (if length was zero, the function already returned).
+	if ( address < FIRST_VALID_ADDRESS && max_bytes != 0
 		// Also check for overlap, in case memcpy is used instead of MultiByteToWideChar/WideCharToMultiByte.
 		// (Behaviour for memcpy would be "undefined", whereas MBTWC/WCTBM would fail.)  Overlap in the
 		// other direction (source_string beginning inside address..length) should not be possible.
-		|| (address >= source_string && address <= ((LPTSTR)source_string + source_length))
-		// The following catches StrPut(X, &Y) where Y is uninitialized or has zero capacity.
+		|| (address >= source_string && address <= ((LPTSTR)source_string + source_length) && source_string)
+		// The following catches StrPut(X, StrPtr(Y)) where Y has zero capacity.
 		|| (address == Var::sEmptyString && source_length) )
 	{
 		_f_throw_param(source_string ? 1 : 0);
