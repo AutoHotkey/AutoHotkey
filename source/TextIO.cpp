@@ -274,6 +274,12 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, BOOL aReadLine)
 										// \r\n translation is disabled, so this \r\n should be written out as is.
 										if (target_used + 2 > aBufLen)
 										{
+											if (aBufLen == 1) // Read(1) must be permitted to split the \r\n.
+											{
+												src += (src_size >> 1);
+												aBuf[target_used++] = '\r';
+												break;
+											}
 											// This \r\n wouldn't fit.  Seems best to leave the \r in the buffer for next
 											// time rather than returning just the \r (even though \r\n translation isn't
 											// enabled, it seems best to treat this \r\n as a single unit).
