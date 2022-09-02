@@ -115,7 +115,6 @@ enum ExcptModeType {EXCPTMODE_NONE = 0
 	//, EXCPTMODE_TRY = 1 // Currently unused: Try block present.
 	, EXCPTMODE_CATCH = 2 // Exception will be suppressed or caught.
 	, EXCPTMODE_DELETE = 4 // Unhandled exceptions will display ERR_ABORT_DELETE vs. ERR_ABORT.
-	, EXCPTMODE_LINE_WORKAROUND = 8 // See comments in BIF_PerformAction.
 	, EXCPTMODE_CAUGHT = 0x10 // An exception is already being handled within a CATCH, and is not shadowed by TRY.
 };
 
@@ -604,7 +603,7 @@ enum enum_act {
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_STATIC
 , ACT_HOTKEY_IF // Must be before ACT_FIRST_COMMAND.
-, ACT_EXIT // Used both with BIF_PerformAction and AddLine(), but excluded from the "named" range below so the function is preferred.
+, ACT_EXIT // Used with AddLine(), but excluded from the "named" range below so that the function is preferred.
 , ACT_IF, ACT_FIRST_NAMED_ACTION = ACT_IF
 , ACT_ELSE
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE

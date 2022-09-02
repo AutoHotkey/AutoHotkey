@@ -720,9 +720,7 @@ private:
 	ResultType PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
 	ResultType PerformAssign();
-	ResultType Perform();
 	bool CatchThis(ExprTokenType &aThrown);
-	friend BIF_DECL(BIF_PerformAction);
 
 	static FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
@@ -1781,7 +1779,7 @@ protected:
 	NativeFunc(LPCTSTR aName) : Func(aName) {}
 
 public:
-	UCHAR *mOutputVars = nullptr; // String of indices indicating which params are output vars (for BIF_PerformAction).
+	UCHAR *mOutputVars = nullptr; // String of indices indicating which params are output vars.
 
 	bool IsBuiltIn() override { return true; }
 
@@ -3358,7 +3356,6 @@ BIF_DECL(BIF_Process);
 BIF_DECL(BIF_ProcessSetPriority);
 BIF_DECL(BIF_Wait);
 
-BIF_DECL(BIF_PerformAction);
 BIF_DECL(BIF_SetBIV);
 
 

@@ -26,7 +26,6 @@ GNU General Public License for more details.
 #define BIFn(name, minp, maxp, bif, ...) {_T(#name), bif, minp, maxp, FID_##name, __VA_ARGS__}
 #define BIFi(name, minp, maxp, bif, id, ...) {_T(#name), bif, minp, maxp, id, __VA_ARGS__}
 #define BIF1(name, minp, maxp, ...) {_T(#name), BIF_##name, minp, maxp, 0, __VA_ARGS__}
-#define BIFA(name, minp, maxp, act) {_T(#name), BIF_PerformAction, minp, maxp, act}
 // The following array defines all built-in functions, their min and max parameter counts,
 // and which real C++ function contains their implementation.  The macros above are used to
 // reduce repetition and implement code-sharing: BIFs which share a C++ function are assigned
@@ -11623,86 +11622,6 @@ ResultType Line::PerformAssign()
 	}
 
 	return ExpandArgs(); // ExpandExpression() will also take care of the assignment (for performance).
-}
-
-
-
-ResultType Line::Perform()
-// Performs only this line's action.
-// Returns OK or FAIL.
-// The function should not be called to perform any flow-control actions such as
-// Goto, Return, Block-Begin, Block-End, If, Else, etc.
-{
-	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
-
-	// Even though the loading-parser already checked, check again, for now,
-	// at least until testing raises confidence.  UPDATE: Don't do this because
-	// sometimes the number of parameters required at load-time is different from
-	// that at runtime, because params are taken out or added to the param list:
-	//if (nArgs < g_act[mActionType].MinParams) ...
-
-
-	// Since above didn't return, this line's mActionType isn't handled here,
-	// so caller called it wrong.  ACT_INVALID should be impossible because
-	// Script::AddLine() forbids it.
-
-#ifdef _DEBUG
-	return LineError(_T("DEBUG: Perform(): Unhandled action type."));
-#else
-	return FAIL;
-#endif
-}
-
-
-
-BIF_DECL(BIF_PerformAction)
-{
-	ActionTypeType act = _f_callee_id;
-
-	// An array of args is constructed containing the var or text of each parameter,
-	// which is also placed into sArgDeref[] so ExpandArgs() can be skipped.
-	// This function is intended to be transitional; eventually all ACT functions
-	// should be converted to BIF.
-	ArgStruct arg[MAX_ARGS];
-	
-	TCHAR number_buf[MAX_ARGS * MAX_NUMBER_SIZE]; // Enough for worst case.
-
-	for (int i = 0; i < aParamCount; ++i)
-	{
-		arg[i].is_expression = false;
-		arg[i].postfix = aParam[i]; // For ArgToInt64() etc.
-		arg[i].type = ARG_TYPE_NORMAL;
-		arg[i].text = TokenToString(*aParam[i], number_buf + (i * MAX_NUMBER_SIZE));
-		arg[i].deref = NULL;
-		Line::sArgDeref[i] = arg[i].text;
-		// length won't actually be used.
-		//arg[i].length = (ArgLengthType)_tcslen(arg[i].text);
-	}
-
-	int max_params = aResultToken.func->mParamCount;
-	for (int i = aParamCount; i < max_params; ++i)
-		Line::sArgDeref[i] = _T("");
-	
-	// Since our ArgStructs aren't fully initialized, it isn't safe to call line->ToText().
-	// To avoid that in the event of an error, make g->ExcptMode non-zero so that errors are
-	// displayed via UnhandledException(), which locates the proper Line via line number.
-	auto outer_excptmode = g->ExcptMode;
-	g->ExcptMode |= EXCPTMODE_LINE_WORKAROUND;
-
-	// Construct a Line containing the required context for Perform().
-	Line line(0, 0, act, arg, aParamCount);
-
-	// PERFORM THE ACTION
-	ResultType result = line.Perform();
-
-	if (result == OK) // Can be OK, FAIL or EARLY_EXIT.
-		aResultToken.ReturnPtr(_T(""), 0);
-	else
-		// Pass back the result code (FAIL or EARLY_EXIT).
-		aResultToken.SetExitResult(result);
-
-
-	g->ExcptMode = outer_excptmode;
 }
 
 

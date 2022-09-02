@@ -97,7 +97,7 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 	// stack, which implies no script code can be executing.
 	ASSERT(!g->ThrownToken);
 
-	if (!aLine || !aLine->mLineNumber) // The mLineNumber check is a workaround for BIF_PerformAction.
+	if (!aLine)
 		aLine = mCurrLine;
 
 	ResultToken *token;
@@ -272,9 +272,6 @@ ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultTy
 	ASSERT(aErrorText);
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
-	
-	if (g->ExcptMode == EXCPTMODE_LINE_WORKAROUND && mCurrLine)
-		aLine = mCurrLine;
 	
 	if ((g->ExcptMode || mOnError.Count() || aPrototype && aPrototype->HasOwnProps()) && aErrorType != WARN)
 		return ThrowRuntimeException(aErrorText, aExtraInfo, aLine, aErrorType, aPrototype);
