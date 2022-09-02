@@ -2052,16 +2052,16 @@ process_completed_line:
 			*hotkey_flag = '\0'; // Terminate so that buf is now the hotkey's name.
 			hotkey_flag += HOTKEY_FLAG_LENGTH;  // Now hotkey_flag is the hotkey's action, if any.
 			
-			LPTSTR otb_brace = omit_leading_whitespace(hotkey_flag);
-			hotkey_uses_otb = *otb_brace == '{' && !*omit_leading_whitespace(otb_brace + 1);
-			if (!hotstring_start)
+			LPTSTR next_nonspace = omit_leading_whitespace(hotkey_flag);
+			hotkey_uses_otb = *next_nonspace == '{' && !next_nonspace[1]; // Has already been rtrimmed by GetLine().
+			if (!hotstring_start || hotstring_execute)
 			{
 				// Mustn't use ltrim(hotkey_flag) because that would cause buf.length to become incorrect:
-				hotkey_flag = omit_leading_whitespace(hotkey_flag); // Has already been rtrimmed by GetLine().
-				// Not done because Hotkey::TextInterpret() does not allow trailing whitespace: 
-				//rtrim(buf); // Trim the new substring inside of buf (due to temp termination). It has already been ltrimmed.
-				
-				 // To use '{' as remap_dest, escape it!.
+				hotkey_flag = next_nonspace;
+			}
+			if (!hotstring_start)
+			{
+				// To use '{' as remap_dest, escape it.
 				if (hotkey_flag[0] == g_EscapeChar && hotkey_flag[1] == '{')
 					hotkey_flag++;
 
