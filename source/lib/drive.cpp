@@ -219,19 +219,12 @@ bif_impl FResult DriveGetList(LPCTSTR aType, StrRet &aRetVal)
 	if (!found_drives)
 		return FR_E_OUTOFMEM;
 	int found_drives_count;
-	UCHAR letter;
-	TCHAR buf[128], *buf_ptr;
-
-	for (found_drives_count = 0, letter = 'A'; letter <= 'Z'; ++letter)
+	TCHAR letter[] = { 0, ':', '\\', '\0' };
+	for (found_drives_count = 0, *letter = 'A'; *letter <= 'Z'; ++*letter)
 	{
-		buf_ptr = buf;
-		*buf_ptr++ = letter;
-		*buf_ptr++ = ':';
-		*buf_ptr++ = '\\';
-		*buf_ptr = '\0';
-		UINT this_type = GetDriveType(buf);
+		UINT this_type = GetDriveType(letter);
 		if (this_type == drive_type || (drive_type == ALL_DRIVE_TYPES && this_type != DRIVE_NO_ROOT_DIR))
-			found_drives[found_drives_count++] = letter;  // Store just the drive letters.
+			found_drives[found_drives_count++] = *letter;  // Store just the drive letters.
 	}
 	found_drives[found_drives_count] = '\0';  // Terminate the string of found drive letters.
 	// An empty list should not be flagged as failure, even for FIXED drive_type.
