@@ -754,10 +754,15 @@ void GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			_o_return_empty;
 
 		case P_Focused:
+		{
 			//if (IS_INVOKE_SET) // Prior validation ensures this is never true.
 				// Not allowed because it's unclear what should happen when Focused := false,
 				// and because the side effects of Focus() don't fit with property semantics.
-			_o_return(GetFocus() == hwnd);
+			HWND focus = GetFocus();
+			// For controls like ComboBox and ActiveX that may have a focused child window,
+			// also consider the control focused if any child of the control is focused.
+			_o_return(focus == hwnd || IsChild(hwnd, focus));
+		}
 
 		case M_SetFont:
 			if (!gui->ControlSetFont(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalString(1)))
