@@ -1850,6 +1850,23 @@ void KeyEventMenuMask(KeyEventTypes aEventType, DWORD aExtraInfo)
 // Mouse related //
 ///////////////////
 
+
+BIF_DECL(BIF_Click)
+{
+	TCHAR args[1024]; // Arbitrary size, significantly larger than anything likely to be valid.
+	*args = '\0';
+	for (int i = 0; i < aParamCount; ++i)
+	{
+		if (TokenToObject(*aParam[i]))
+			_f_throw_param(i);
+		LPTSTR arg = TokenToString(*aParam[i], _f_number_buf);
+		sntprintfcat(args, _countof(args), _T("%s,"), arg);
+	}
+	PerformClick(args);
+}
+
+
+
 ResultType PerformClick(LPTSTR aOptions)
 {
 	int x, y;

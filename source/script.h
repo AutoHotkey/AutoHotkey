@@ -3316,6 +3316,7 @@ BIF_DECL(BIF_ComObjFlags);
 BIF_DECL(BIF_ComObjQuery);
 
 
+BIF_DECL(BIF_Click);
 BIF_DECL(BIF_Control);
 BIF_DECL(BIF_ControlClick);
 BIF_DECL(BIF_ControlFocus);

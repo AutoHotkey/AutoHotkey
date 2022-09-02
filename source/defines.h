@@ -617,9 +617,9 @@ enum enum_act {
 , ACT_SWITCH, ACT_CASE // Keep ACT_TRY..ACT_CASE together for ACT_EXPANDS_ITS_OWN_ARGS.
 , ACT_LAST_NAMED_ACTION = ACT_CASE
 // ================================================================================
-// All others are not included in g_act, and are only used with BIF_PerformAction:
+// All others are not included in g_act, and are only used for misc. purposes:
 // ================================================================================
-, ACT_CLICK, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG
+, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG // Used by PerformMouse().
 };
 
 #define ACT_IS_IF(ActionType) (ActionType == ACT_IF)

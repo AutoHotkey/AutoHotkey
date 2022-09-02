@@ -44,7 +44,7 @@ FuncEntry g_BIF[] =
 	BIF1(CaretGetPos, 0, 2, {1, 2}),
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
-	BIFA(Click, 0, 6, ACT_CLICK),
+	BIF1(Click, 0, 6),
 	BIFn(ClipWait, 0, 2, BIF_Wait),
 #ifdef ENABLE_DLLCALL
 	BIFn(ComCall, 2, NA, BIF_DllCall),
@@ -11633,7 +11633,6 @@ ResultType Line::Perform()
 // The function should not be called to perform any flow-control actions such as
 // Goto, Return, Block-Begin, Block-End, If, Else, etc.
 {
-	TCHAR buf_temp[MAX_REG_ITEM_SIZE]; // For registry and other things.
 	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
 
 	// Even though the loading-parser already checked, check again, for now,
@@ -11642,20 +11641,6 @@ ResultType Line::Perform()
 	// that at runtime, because params are taken out or added to the param list:
 	//if (nArgs < g_act[mActionType].MinParams) ...
 
-	switch (mActionType)
-	{
-	case ACT_CLICK:
-		if (mArgc > 1)
-		{
-			// Join all args so that Click(x,y) is equivalent to Click %x% %y%.  Anything longer than
-			// _countof(buf_temp) is almost certainly invalid, so simply truncate in that case.
-			*buf_temp = '\0';
-			for (int i = 0; i < mArgc; ++i)
-				sntprintfcat(buf_temp, _countof(buf_temp), _T("%s,"), sArgDeref[i]);
-			return PerformClick(buf_temp);
-		}
-		return PerformClick(ARG1);
-	} // switch()
 
 	// Since above didn't return, this line's mActionType isn't handled here,
 	// so caller called it wrong.  ACT_INVALID should be impossible because
