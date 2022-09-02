@@ -171,6 +171,9 @@ md_func(SetWinDelay, (In, Int32, Delay))
 md_func(SetWorkingDir, (In, String, Path))
 
 
+md_func(Shutdown, (In, Int32, Flags))
+
+
 md_func_x(Sleep, ScriptSleep, Void, (In, Int32, Delay))
 
 

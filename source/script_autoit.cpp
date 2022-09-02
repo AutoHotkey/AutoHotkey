@@ -1797,9 +1797,9 @@ void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut, DWORD aBufSize)
 
 
 
-bool Util_Shutdown(int nFlag)
+FResult Shutdown(int nFlag)
 // Shutdown or logoff the system.
-// Returns false if the function could not get the rights to shutdown.
+// Returns OK if successful.
 {
 /* 
 flags can be a combination of:
@@ -1814,7 +1814,7 @@ flags can be a combination of:
 
 	// Get a token for this process.
  	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) 
-		return false;						// Don't have the rights
+		return FR_E_WIN32;
  
 	// Get the LUID for the shutdown privilege.
  	LookupPrivilegeValue(NULL, SE_SHUTDOWN_NAME, &tkp.Privileges[0].Luid); 
@@ -1827,27 +1827,13 @@ flags can be a combination of:
  
 	// Cannot test the return value of AdjustTokenPrivileges.
  	if (GetLastError() != ERROR_SUCCESS) 
-		return false;						// Don't have the rights
+		return FR_E_WIN32;
 
 	// ExitWindows
 	if (ExitWindowsEx(nFlag, 0))
-		return true;
+		return OK;
 	else
-		return false;
-
-}
-
-
-
-BOOL Util_ShutdownHandler(HWND hwnd, DWORD lParam)
-{
-	// if the window is me, don't terminate!
-	if (hwnd != g_hWnd)
-		Util_WinKill(hwnd);
-
-	// Continue the enumeration.
-	return TRUE;
-
+		return FR_E_WIN32;
 }
 
 

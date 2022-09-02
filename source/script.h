@@ -270,8 +270,8 @@ void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
 DWORD ProcessExist(LPTSTR aProcess);
 DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly);
 
-bool Util_Shutdown(int nFlag);
-BOOL Util_ShutdownHandler(HWND hwnd, DWORD lParam);
+FResult Shutdown(int nFlag);
+
 void Util_WinKill(HWND hWnd);
 
 enum MainWindowModes {MAIN_MODE_NO_CHANGE, MAIN_MODE_LINES, MAIN_MODE_VARS

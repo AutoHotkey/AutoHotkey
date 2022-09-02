@@ -620,7 +620,6 @@ enum enum_act {
 // All others are not included in g_act, and are only used with BIF_PerformAction:
 // ================================================================================
 , ACT_CLICK, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG
-, ACT_SHUTDOWN
 };
 
 #define ACT_IS_IF(ActionType) (ActionType == ACT_IF)

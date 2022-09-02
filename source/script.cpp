@@ -203,7 +203,6 @@ FuncEntry g_BIF[] =
 	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
 	BIF1(SetTimer, 0, 3),
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
-	BIFA(Shutdown, 1, 1, ACT_SHUTDOWN),
 	BIF1(Sin, 1, 1),
 	BIF1(Sort, 1, 3),
 	BIFn(SoundGetInterface, 1, 3, BIF_Sound),
@@ -11656,12 +11655,6 @@ ResultType Line::Perform()
 			return PerformClick(buf_temp);
 		}
 		return PerformClick(ARG1);
-
-
-//////////////////////////////////////////////////////////////////////////
-
-	case ACT_SHUTDOWN:
-		return Util_Shutdown(ArgToInt(1)) ? OK : FAIL; // Range of ARG1 is not validated in case other values are supported in the future.
 	} // switch()
 
 	// Since above didn't return, this line's mActionType isn't handled here,
