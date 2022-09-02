@@ -5955,7 +5955,10 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 				if (value_length >= _countof(buf)) // Default expressions shouldn't realistically be longer than LINE_SIZE.
 					return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
 				if (value_length <= MAX_NUMBER_SIZE)
+				{
 					tcslcpy(buf, param_start, value_length + 1); // Make a temp copy to simplify the below (especially IsNumeric).
+					value_length = rtrim(buf, value_length); // trim white space for _tcsicmp below
+				}
 				else
 					*buf = '\0'; // It can't be any of the optimized defaults, so skip the copy.
 				if (!_tcsicmp(buf, _T("False")))
