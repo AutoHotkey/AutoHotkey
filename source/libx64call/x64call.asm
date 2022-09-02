@@ -1,7 +1,10 @@
 ;///////////////////////////////////////////////////////////////////////
 ;
 ;	Windows x64 dynamic function call
-;	Code adapted from http://www.dyncall.org/
+;	Code adapted from http://www.dyncall.org/ by fincs.
+;	Prolog directives added by Lexikos to fix exception handling.
+;	Get*RetVal procs added by Lexikos for retrieving float return values.
+;	Simplified DynaCall by Lexikos, based on PerformDynaCall.
 ;
 ;///////////////////////////////////////////////////////////////////////
 
@@ -26,27 +29,20 @@
 
 .code
 
+include ksamd64.inc
+
 PerformDynaCall proc frame
-	option prologue:none, epilogue:none
+	push_reg rbp
+	push_reg rsi
+	push_reg rdi
+	set_frame rbp, 0
+	.endprolog
 
 	; Arguments:
 	; rcx: size of arguments to be passed via stack
 	; rdx: pointer to arguments to be passed via stack
 	; r8:  pointer to arguments to be passed by registers
 	; r9:  target function pointer
-
-	; Save some registers
-	push rbp
-.pushreg rbp
-	push rsi
-.pushreg rsi
-	push rdi
-.pushreg rdi
-
-	; Save the stack pointer
-	mov rbp, rsp
-.setframe rbp, 0
-.endprolog
 
 	; Setup stack frame by subtracting the size of the arguments
 	sub rsp, rcx
@@ -91,16 +87,69 @@ PerformDynaCall proc frame
 	ret
 PerformDynaCall endp
 
-read_xmm0_float proc
-	option prologue:none, epilogue:none
+DynaCall proc frame
+	push_reg rbp
+	push_reg rsi
+	push_reg rdi
+	set_frame rbp, 0
+	.endprolog
+
+	; Arguments:
+	; rcx: number of QWORDs to be passed as arguments
+	; rdx: pointer to arguments
+	; r8:  target function pointer
+	; r9:  not used
+
+	; Setup stack frame by subtracting the max(num_args,4) * 8
+	mov rax, 4
+	cmp rax, rcx
+	cmovl rax, rcx
+	shl rax, 3
+	sub rsp, rax
+
+	; Ensure the stack is 16-byte aligned
+	and rsp, -16
+
+	; Save function address
+	mov rax, r8
+
+	; Copy the arguments (for simplicity, the register arguments are included)
+	mov rsi, rdx ; let rsi point to the source arguments.
+	mov rdi, rsp ; let rdi point to the destination on the stack (for rep movsq).
+	rep movsq
+
+	; Copy the register arguments
+	mov rcx,  qword ptr[rsp   ]
+	mov rdx,  qword ptr[rsp+ 8]
+	mov r8,   qword ptr[rsp+16]
+	mov r9,   qword ptr[rsp+24]
+	movd xmm0, rcx
+	movd xmm1, rdx
+	movd xmm2, r8
+	movd xmm3, r9
+
+	; Call function
+	call rax
+
+	; Restore stack pointer
+	;mov rsp, rbp	; Although mov works too, MSDN says "add RSP,constant or lea RSP,constant[FPReg]" must be used for exception-handling to work reliably. http://msdn.microsoft.com/en-us/library/tawsa7cb.aspx
+	lea rsp, [rbp]
+
+	; Restore some registers and return
+	pop rdi
+	pop rsi
+	pop rbp
+	ret
+DynaCall endp
+
+GetFloatRetval proc
 	; Nothing is actually done here - we just declare the appropriate return type in C++.
 	ret
-read_xmm0_float endp
+GetFloatRetval endp
 
-read_xmm0_double proc
-	option prologue:none, epilogue:none
+GetDoubleRetval proc
 	; See above.
 	ret
-read_xmm0_double endp
+GetDoubleRetval endp
 
 end

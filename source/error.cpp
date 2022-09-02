@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "globaldata.h"
 #include "window.h"
 #include "TextIO.h"
+#include "abi.h"
 
 
 Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
@@ -96,7 +97,7 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 	// stack, which implies no script code can be executing.
 	ASSERT(!g->ThrownToken);
 
-	if (!aLine || !aLine->mLineNumber) // The mLineNumber check is a workaround for BIF_PerformAction.
+	if (!aLine)
 		aLine = mCurrLine;
 
 	ResultToken *token;
@@ -272,14 +273,17 @@ ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultTy
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 	
-	if (g->ExcptMode == EXCPTMODE_LINE_WORKAROUND && mCurrLine)
-		aLine = mCurrLine;
-	
 	if ((g->ExcptMode || mOnError.Count() || aPrototype && aPrototype->HasOwnProps()) && aErrorType != WARN)
 		return ThrowRuntimeException(aErrorText, aExtraInfo, aLine, aErrorType, aPrototype);
 
 	return ShowError(aErrorText, aErrorType, aExtraInfo, aLine);
 }
+
+FResult FError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype)
+{
+	return g_script.RuntimeError(aErrorText, aExtraInfo, FAIL_OR_OK, nullptr, aPrototype) ? FR_ABORTED : FR_FAIL;
+}
+
 
 ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine)
 {
@@ -566,6 +570,12 @@ ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorT
 }
 
 __declspec(noinline)
+FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
+{
+	return FError(aErrorText, aExtraInfo, ErrorPrototype::Value);
+}
+
+__declspec(noinline)
 ResultType ResultToken::UnknownMemberError(ExprTokenType &aObject, int aFlags, LPCTSTR aMember)
 {
 	TCHAR msg[512];
@@ -654,7 +664,54 @@ ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aE
 	else
 		sntprintf(msg, _countof(msg), _T("Parameter #%i invalid."), aIndex + 1);
 #endif
-	return Error(msg, value_as_string, ErrorPrototype::Type);
+	return Error(msg, value_as_string, aExpectedType ? ErrorPrototype::Type : ErrorPrototype::Value);
+}
+
+
+
+ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FResult aResult)
+{
+	if (aResult & FR_OUR_FLAG)
+	{
+		if (aResult & FR_INT_FLAG)
+		{
+			// This is a bit of a hack and should probably be revised.
+			TCHAR buf[12];
+			return aResultToken.Error(ERR_FAILED, _itot(FR_GET_THROWN_INT(aResult), buf, 10));
+		}
+		auto code = HRESULT_CODE(aResult);
+		switch (HRESULT_FACILITY(aResult))
+		{
+		case FR_FACILITY_CONTROL:
+			ASSERT(!code);
+			return aResultToken.SetExitResult(FAIL);
+		case FR_FACILITY_ARG:
+			if (code < aParamCount)
+				return aResultToken.ParamError(code, aParam[code]);
+			else
+				return aResultToken.ValueError(ERR_PARAM_INVALID);
+			break;
+		case FACILITY_WIN32:
+			if (!code)
+				code = GetLastError();
+			return aResultToken.Win32Error(code);
+#ifndef _DEBUG
+		default: // Using a default case may slightly reduce code size.
+#endif
+		case FR_FACILITY_ERR:
+			switch (code)
+			{
+			case HRESULT_CODE(FR_E_OUTOFMEM):
+				return aResultToken.MemoryError();
+			}
+		}
+		ASSERT(aResult == FR_E_FAILED); // Alert for any unhandled error codes in debug mode.
+		return aResultToken.Error(ERR_FAILED);
+	}
+	else // Presumably a HRESULT error value.
+	{
+		return aResultToken.Win32Error(aResult);
+	}
 }
 
 

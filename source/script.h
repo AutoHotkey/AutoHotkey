@@ -27,6 +27,7 @@ GNU General Public License for more details.
 #include "Util.h" // for FileTimeToYYYYMMDD(), strlcpy()
 #include "resources/resource.h"  // For tray icon.
 #include "Debugger.h"
+#include "abi.h"
 
 #include "os_version.h" // For the global OS_Version object
 EXTERN_OSVER; // For the access to the g_os version object without having to include globaldata.h
@@ -269,8 +270,8 @@ void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
 DWORD ProcessExist(LPTSTR aProcess);
 DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly);
 
-bool Util_Shutdown(int nFlag);
-BOOL Util_ShutdownHandler(HWND hwnd, DWORD lParam);
+FResult Shutdown(int nFlag);
+
 void Util_WinKill(HWND hWnd);
 
 enum MainWindowModes {MAIN_MODE_NO_CHANGE, MAIN_MODE_LINES, MAIN_MODE_VARS
@@ -331,7 +332,6 @@ VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 BOOL CALLBACK EnumChildFindSeqNum(HWND aWnd, LPARAM lParam);
 BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam);
 BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam);
-BOOL CALLBACK EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM lParam);
 BOOL CALLBACK EnumChildGetText(HWND aWnd, LPARAM lParam);
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
 bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd);
@@ -642,7 +642,6 @@ enum BuiltInFunctionID {
 	FID_GetKeyName = 0, FID_GetKeyVK = 1, FID_GetKeySC,
 	FID_StrLower = 0, FID_StrUpper, FID_StrTitle,
 	FID_StrGet = 0, FID_StrPut,
-	FID_FileExist = 0, FID_DirExist,
 	FID_WinExist = 0, FID_WinActive,
 	FID_Floor = 0, FID_Ceil,
 	FID_ASin = 0, FID_ACos,
@@ -659,14 +658,10 @@ enum BuiltInFunctionID {
 	FID_WinShow = 0, FID_WinHide, FID_WinMinimize, FID_WinMaximize, FID_WinRestore, FID_WinClose, FID_WinKill,
 	FID_WinActivate = 0, FID_WinActivateBottom,
 	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, FID_ProcessGetName, FID_ProcessGetPath,
-	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange, FID_OnError,
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlFindItem, FID_ControlGetIndex, FID_ControlGetChoice, FID_ControlGetItems, FID_ListViewGetContent, FID_EditGetLineCount, FID_EditGetCurrentLine, FID_EditGetCurrentCol, FID_EditGetLine, FID_EditGetSelectedText, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChooseIndex, FID_ControlChooseString, FID_EditPaste,
 	FID_ControlSend = SCM_NOT_RAW, FID_ControlSendText = SCM_RAW_TEXT,
-	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel, FID_DriveRetract,
-	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
-	FID_EnvGet = 0, FID_EnvSet,
 	FID_PostMessage = 0, FID_SendMessage,
 	FID_RegRead = 0, FID_RegWrite, FID_RegCreateKey, FID_RegDelete, FID_RegDeleteKey,
 	FID_SoundGetVolume = 0, FID_SoundGetMute, FID_SoundGetName, FID_SoundGetInterface, FID_SoundSetVolume, FID_SoundSetMute,
@@ -725,53 +720,9 @@ private:
 	ResultType PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
 	ResultType PerformAssign();
-	ResultType Perform();
 	bool CatchThis(ExprTokenType &aThrown);
-	friend BIF_DECL(BIF_PerformAction);
 
-	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
-	ResultType Download(LPTSTR aURL, LPTSTR aFilespec);
-
-	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
-		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
-	static bool FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec = NULL);
-	ResultType FileDelete(LPTSTR aFilePattern);
-	ResultType FileRecycle(LPTSTR aFilePattern);
-	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
-	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
-	bool FileInstallExtract(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
-#ifndef AUTOHOTKEYSC
-	bool FileInstallCopy(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
-#endif
-	ResultType FileCopyOrMove(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
-
-	typedef BOOL (* FilePatternCallback)(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
-	struct FilePatternStruct
-	{
-		TCHAR path[T_MAX_PATH]; // Directory and naked filename or pattern.
-		TCHAR pattern[MAX_PATH]; // Naked filename or pattern.
-		size_t dir_length, pattern_length;
-		FilePatternCallback aCallback;
-		void *aCallbackData;
-		FileLoopModeType aOperateOnFolders;
-		bool aDoRecurse;
-		int failure_count;
-	};
-	ResultType FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-		, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData);
-	void FilePatternApply(FilePatternStruct &);
-
-	ResultType FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
-		, FileLoopModeType aOperateOnFolders, bool aDoRecurse);
-	ResultType FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
-		, FileLoopModeType aOperateOnFolders, bool aDoRecurse);
-
-	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
-	ResultType IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
-
-	ResultType TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions);
-
-	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
+	static FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
 public:
 	#define SET_S_DEREF_BUF(ptr, size) Line::sDerefBuf = ptr, Line::sDerefBufSize = size
@@ -1134,7 +1085,7 @@ public:
 		return MATCHMODE_INVALID;
 	}
 
-	static ThreadCommands ConvertThreadCommand(LPTSTR aBuf)
+	static ThreadCommands ConvertThreadCommand(LPCTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return THREAD_CMD_INVALID;
 		if (!_tcsicmp(aBuf, _T("Priority"))) return THREAD_CMD_PRIORITY;
@@ -1143,7 +1094,7 @@ public:
 		return THREAD_CMD_INVALID;
 	}
 
-	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOff(LPCTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, or blank.
 	{
 		if (!aBuf || !*aBuf) return NEUTRAL;
@@ -1152,7 +1103,7 @@ public:
 		return aDefault;
 	}
 
-	static ToggleValueType ConvertOnOffAlways(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOffAlways(LPCTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, ALWAYSON, ALWAYSOFF, or blank.
 	{
 		if (ToggleValueType toggle = ConvertOnOff(aBuf))
@@ -1162,16 +1113,15 @@ public:
 		return aDefault;
 	}
 
-	static ToggleValueType Convert10Toggle(LPTSTR aBuf)
+	static ToggleValueType Convert10Toggle(int *aValue)
 	{
-		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (IsNumeric(aBuf, true))
-			switch (ATOI(aBuf))
-			{
-			case 1: return TOGGLED_ON;
-			case 0: return TOGGLED_OFF;
-			case -1: return TOGGLE;
-			}
+		if (!aValue) return NEUTRAL;
+		switch (*aValue)
+		{
+		case 1: return TOGGLED_ON;
+		case 0: return TOGGLED_OFF;
+		case -1: return TOGGLE;
+		}
 		return TOGGLE_INVALID;
 	}
 
@@ -1192,7 +1142,7 @@ public:
 		return SCS_INVALID;
 	}
 
-	static ToggleValueType ConvertBlockInput(LPTSTR aBuf)
+	static ToggleValueType ConvertBlockInput(LPCTSTR aBuf)
 	{
 		if (ToggleValueType toggle = ConvertOnOff(aBuf))
 			return toggle;
@@ -1205,7 +1155,7 @@ public:
 		return TOGGLE_INVALID;
 	}
 
-	static SendModes ConvertSendMode(LPTSTR aBuf, SendModes aValueToReturnIfInvalid)
+	static SendModes ConvertSendMode(LPCTSTR aBuf, SendModes aValueToReturnIfInvalid)
 	{
 		if (!_tcsicmp(aBuf, _T("Play"))) return SM_PLAY;
 		if (!_tcsicmp(aBuf, _T("Event"))) return SM_EVENT;
@@ -1221,7 +1171,7 @@ public:
 		return aValueToReturnIfInvalid;
 	}
 
-	static FileLoopModeType ConvertLoopMode(LPTSTR aBuf)
+	static FileLoopModeType ConvertLoopMode(LPCTSTR aBuf)
 	// Returns the file loop mode, or FILE_LOOP_INVALID if aBuf contains an invalid mode.
 	{
 		for (FileLoopModeType mode = FILE_LOOP_INVALID;;)
@@ -1264,10 +1214,10 @@ public:
 		return SW_SHOWNORMAL;
 	}
 
-	static int ConvertMouseButton(LPTSTR aBuf, bool aAllowWheel = true)
+	static int ConvertMouseButton(LPCTSTR aBuf, bool aAllowWheel = true)
 	// Returns the matching VK, or zero if none.
 	{
-		if (!*aBuf || !_tcsicmp(aBuf, _T("Left")) || !_tcsicmp(aBuf, _T("L")))
+		if (!aBuf || !*aBuf || !_tcsicmp(aBuf, _T("Left")) || !_tcsicmp(aBuf, _T("L")))
 			return VK_LBUTTON; // Some callers rely on this default when !*aBuf.
 		if (!_tcsicmp(aBuf, _T("Right")) || !_tcsicmp(aBuf, _T("R"))) return VK_RBUTTON;
 		if (!_tcsicmp(aBuf, _T("Middle")) || !_tcsicmp(aBuf, _T("M"))) return VK_MBUTTON;
@@ -1284,7 +1234,7 @@ public:
 		return 0;
 	}
 
-	static CoordModeType ConvertCoordMode(LPTSTR aBuf)
+	static CoordModeType ConvertCoordMode(LPCTSTR aBuf)
 	{
 		if (!_tcsicmp(aBuf, _T("Screen")))
 			return COORD_MODE_SCREEN;
@@ -1295,7 +1245,7 @@ public:
 		return COORD_MODE_INVALID;
 	}
 
-	static CoordModeType ConvertCoordModeCmd(LPTSTR aBuf)
+	static CoordModeType ConvertCoordModeCmd(LPCTSTR aBuf)
 	{
 		if (!_tcsicmp(aBuf, _T("Pixel"))) return COORD_MODE_PIXEL;
 		if (!_tcsicmp(aBuf, _T("Mouse"))) return COORD_MODE_MOUSE;
@@ -1310,7 +1260,7 @@ public:
 		return aCP == 0 || aCP == 1200 || IsValidCodePage(aCP);
 	}
 
-	static UINT ConvertFileEncoding(LPTSTR aBuf)
+	static UINT ConvertFileEncoding(LPCTSTR aBuf)
 	// Returns the encoding with possible CP_AHKNOBOM flag, or (UINT)-1 if invalid.
 	{
 		if (!aBuf || !*aBuf)
@@ -1347,12 +1297,6 @@ public:
 	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR VicinityToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false, bool aLineNumber = true);
-
-	static void ToggleSuspendState();
-	static void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause);
-	ResultType ChangePauseState(LPTSTR aChangeTo);
-	ResultType PauseCurrentThread();
-	static ResultType ScriptBlockInput(bool aEnable);
 
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
@@ -1835,7 +1779,7 @@ protected:
 	NativeFunc(LPCTSTR aName) : Func(aName) {}
 
 public:
-	UCHAR *mOutputVars = nullptr; // String of indices indicating which params are output vars (for BIF_PerformAction).
+	UCHAR *mOutputVars = nullptr; // String of indices indicating which params are output vars.
 
 	bool IsBuiltIn() override { return true; }
 
@@ -2942,7 +2886,6 @@ public:
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
 	MsgMonitorList mOnExit, mOnClipboardChange, mOnError; // Event handlers for OnExit(), OnClipboardChange() and OnError().
 	bool mOnClipboardChangeIsRunning;
-	ExitReasons mExitReason;
 
 	ScriptTimer *mFirstTimer, *mLastTimer;  // The first and last script timers in the linked list.
 	UINT mTimerCount, mTimerEnabledCount;
@@ -3042,7 +2985,8 @@ public:
 	void IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound);
 #endif
 	Func *FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
-	static FuncEntry *GetBuiltInFunc(LPTSTR aFuncName);
+	static Func *GetBuiltInFunc(LPTSTR aFuncName);
+	static Func *GetBuiltInMdFunc(LPTSTR aFuncName);
 	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aClassObject = NULL);
 
 	ResultType DefineClass(LPTSTR aBuf);
@@ -3079,8 +3023,8 @@ public:
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);
 
-	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
-	ResultType AddGroup(LPTSTR aGroupName);
+	WinGroup *FindGroup(LPCTSTR aGroupName, bool aCreateIfNotFound = false);
+	ResultType AddGroup(LPCTSTR aGroupName);
 	Label *FindLabel(LPTSTR aLabelName);
 
 	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
@@ -3112,10 +3056,6 @@ public:
 					return mi;
 		return NULL;
 	}
-
-	static ResultType SetCoordMode(LPTSTR aCommand, LPTSTR aMode);
-	static ResultType SetSendMode(LPTSTR aValue);
-	static ResultType SetSendLevel(int aValue, LPTSTR aValueStr);
 
 	// Call this ScriptError to avoid confusion with Line's error-displaying functions.
 	// Use it for load time errors and non-continuable runtime errors:
@@ -3286,10 +3226,7 @@ BIF_DECL(BIF_StrPtr);
 BIF_DECL(BIF_IsLabel);
 BIF_DECL(BIF_IsTypeish);
 BIF_DECL(BIF_IsSet);
-BIF_DECL(BIF_GetKeyState);
-BIF_DECL(BIF_GetKeyName);
 BIF_DECL(BIF_VarSetStrCapacity);
-BIF_DECL(BIF_FileExist);
 BIF_DECL(BIF_WinExistActive);
 BIF_DECL(BIF_Round);
 BIF_DECL(BIF_FloorCeil);
@@ -3308,16 +3245,11 @@ BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_MinMax);
 BIF_DECL(BIF_DateAdd);
 BIF_DECL(BIF_DateDiff);
-BIF_DECL(BIF_Env);
-BIF_DECL(BIF_SysGet);
-BIF_DECL(BIF_SysGetIPAddresses);
 BIF_DECL(BIF_PostSendMessage);
 BIF_DECL(BIF_Hotkey);
 BIF_DECL(BIF_SetTimer);
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_On);
-BIF_DECL(BIF_Persistent);
-BIF_DECL(BIF_InstallHook);
 
 #ifdef ENABLE_REGISTERCALLBACK
 BIF_DECL(BIF_CallbackCreate);
@@ -3382,6 +3314,7 @@ BIF_DECL(BIF_ComObjFlags);
 BIF_DECL(BIF_ComObjQuery);
 
 
+BIF_DECL(BIF_Click);
 BIF_DECL(BIF_Control);
 BIF_DECL(BIF_ControlClick);
 BIF_DECL(BIF_ControlFocus);
@@ -3393,20 +3326,8 @@ BIF_DECL(BIF_ControlGetText);
 BIF_DECL(BIF_ControlMove);
 BIF_DECL(BIF_ControlSend);
 BIF_DECL(BIF_ControlSetText);
-BIF_DECL(BIF_DirSelect);
-BIF_DECL(BIF_Drive);
-BIF_DECL(BIF_DriveGet);
-BIF_DECL(BIF_FileAppend);
-BIF_DECL(BIF_FileGetAttrib);
-BIF_DECL(BIF_FileGetShortcut);
-BIF_DECL(BIF_FileGetSize);
-BIF_DECL(BIF_FileGetTime);
-BIF_DECL(BIF_FileGetVersion);
-BIF_DECL(BIF_FileRead);
-BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_GroupActivate);
 BIF_DECL(BIF_ImageSearch);
-BIF_DECL(BIF_IniRead);
 BIF_DECL(BIF_MouseGetPos);
 BIF_DECL(BIF_PixelGetColor);
 BIF_DECL(BIF_PixelSearch);
@@ -3433,10 +3354,8 @@ BIF_DECL(BIF_WinActivate);
 BIF_DECL(BIF_MenuSelect);
 BIF_DECL(BIF_Process);
 BIF_DECL(BIF_ProcessSetPriority);
-BIF_DECL(BIF_MonitorGet);
 BIF_DECL(BIF_Wait);
 
-BIF_DECL(BIF_PerformAction);
 BIF_DECL(BIF_SetBIV);
 
 
@@ -3467,13 +3386,20 @@ LPTSTR TokenTypeString(ExprTokenType &aToken);
 ResultType MemoryError();
 ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType);
 
+FResult FError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), Object *aPrototype = nullptr);
+FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
+
+void PauseCurrentThread();
+void ToggleSuspendState();
+
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
-ResultType SetWorkingDir(LPTSTR aNewDir);
-void UpdateWorkingDir(LPTSTR aNewDir = NULL);
+FResult SetWorkingDir(LPCTSTR aNewDir);
+void UpdateWorkingDir(LPCTSTR aNewDir = NULL);
 LPTSTR GetWorkingDir();
-int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
+int ConvertJoy(LPCTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, LPTSTR aBuf);
+bool FileCreateDir(LPCTSTR aDirSpec);
 
 ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTokenType &aToken);
 ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0);
@@ -3497,6 +3423,7 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 ResultType SetObjectIntProperty(IObject * aObject, LPTSTR aPropName, __int64 aValue, ResultToken & aResultToken);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
+void ObjectToString(ResultToken & aResultToken, ExprTokenType & aThisToken, IObject * aObject);
 
 
 #endif

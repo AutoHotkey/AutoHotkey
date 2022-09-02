@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "util.h"  // for strlicmp()
 #include "window.h" // for IsWindowHung()
+#include "abi.h"
 
 
 // Added for v1.0.25.  Search on sPrevEventType for more comments:
@@ -132,7 +133,7 @@ void SendUnicodeChar(wchar_t aChar, modLR_type aModifiers)
 
 
 
-void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
+void SendKeys(LPCTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
 // The aKeys string must be modifiable (not constant), since for performance reasons,
 // it's allowed to be temporarily altered by this function.  mThisHotkeyModifiersLR, if non-zero,
 // should be the set of modifiers used to trigger the hotkey that called the subroutine
@@ -265,7 +266,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 				// below isn't comprehensive (e.g. it fails to consider things like {L} and #L).
 				// Although RegExMatch() could be used instead of the below, that would use up one of
 				// the RegEx cache entries, plus it would probably perform worse.  So scan manually.
-				LPTSTR L_pos, brace_pos;
+				LPCTSTR L_pos, brace_pos;
 				for (wait_for_win_key_release = false, brace_pos = aKeys; L_pos = StrChrAny(brace_pos, _T("Ll"));)
 				{
 					// Encountering a #L seems too rare, and the consequences too mild (or nonexistent), to
@@ -426,7 +427,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 	bool do_selective_blockinput = (g_BlockInputMode == TOGGLE_SEND || g_BlockInputMode == TOGGLE_SENDANDMOUSE)
 		&& !sSendMode && !aTargetWindow;
 	if (do_selective_blockinput)
-		Line::ScriptBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
+		OurBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
 
 	vk_type vk;
 	sc_type sc;
@@ -437,7 +438,8 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 	// which ALT key is held down to produce the character.
 	vk_type this_event_modifier_down;
 	size_t key_text_length, key_name_length;
-	TCHAR *end_pos, *space_pos, *next_word, old_char;
+	LPCTSTR end_pos, next_word;
+	TCHAR key_text[1024]; // Make it reasonably large to support any conceivable {Click ...} usage.
 	KeyEventTypes event_type;
 	int repeat_count, click_x, click_y;
 	bool move_offset;
@@ -507,12 +509,16 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 						goto brace_case_end;  // The loop's ++aKeys will now skip over the '}', ignoring it.
 				}
 
-				if (!_tcsnicmp(aKeys, _T("Click"), 5))
+				// Make a modifiable null-terminated copy to simplify comparisons etc.
+				if (key_text_length >= _countof(key_text))
+					goto brace_case_end; // Skip this unreasonably long (probably invalid) item.
+				tmemcpy(key_text, aKeys, key_text_length);
+				key_text[key_text_length] = '\0';
+
+				if (!_tcsnicmp(key_text, _T("Click"), 5))
 				{
-					*end_pos = '\0';  // Temporarily terminate the string here to omit the closing brace from consideration below.
-					ParseClickOptions(omit_leading_whitespace(aKeys + 5), click_x, click_y, vk
+					ParseClickOptions(omit_leading_whitespace(key_text + 5), click_x, click_y, vk
 						, event_type, repeat_count, move_offset);
-					*end_pos = '}';  // Undo temp termination.
 					if (repeat_count < 1) // Allow {Click 100, 100, 0} to do a mouse-move vs. click (but modifiers like ^{Click..} aren't supported in this case.
 						MouseMove(click_x, click_y, placeholder, g.DefaultMouseSpeed, move_offset);
 					else // Use SendKey because it supports modifiers (e.g. ^{Click}) SendKey requires repeat_count>=1.
@@ -520,18 +526,16 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 							, repeat_count, event_type, 0, aTargetWindow, click_x, click_y, move_offset);
 					goto brace_case_end; // This {} item completely handled, so move on to next.
 				}
-				else if (!_tcsnicmp(aKeys, _T("Raw"), 3)) // This is used by auto-replace hotstrings too.
+				else if (!_tcsicmp(key_text, _T("Raw"))) // This is used by auto-replace hotstrings too.
 				{
 					// As documented, there's no way to switch back to non-raw mode afterward since there's no
 					// correct way to support special (non-literal) strings such as {Raw Off} while in raw mode.
 					aSendRaw = SCM_RAW;
 					goto brace_case_end; // This {} item completely handled, so move on to next.
 				}
-				else if (!_tcsnicmp(aKeys, _T("Text"), 4)) // Added in v1.1.27
+				else if (!_tcsicmp(key_text, _T("Text"))) // Added in v1.1.27
 				{
-					if (omit_leading_whitespace(aKeys + 4) == end_pos)
-						aSendRaw = SCM_RAW_TEXT;
-					//else: ignore this {Text something} to reserve for future use.
+					aSendRaw = SCM_RAW_TEXT;
 					goto brace_case_end; // This {} item completely handled, so move on to next.
 				}
 
@@ -539,13 +543,11 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 				event_type = KEYDOWNANDUP;         // Set defaults.
 				repeat_count = 1;                  //
 				key_name_length = key_text_length; //
-				*end_pos = '\0';  // Temporarily terminate the string here to omit the closing brace from consideration below.
 
-				if (space_pos = StrChrAny(aKeys, _T(" \t"))) // Assign. Also, it relies on the fact that {} key names contain no spaces.
+				if (auto space_pos = StrChrAny(key_text, _T(" \t"))) // Assign. Also, it relies on the fact that {} key names contain no spaces.
 				{
-					old_char = *space_pos;
-					*space_pos = '\0';  // Temporarily terminate here so that TextToVK() can properly resolve a single char.
-					key_name_length = space_pos - aKeys; // Override the default value set above.
+					*space_pos = '\0';  // Terminate here so that TextToVK() can properly resolve a single char.
+					key_name_length = space_pos - key_text; // Override the default value set above.
 					next_word = omit_leading_whitespace(space_pos + 1);
 					UINT next_word_length = (UINT)(end_pos - next_word);
 					if (next_word_length > 0)
@@ -578,11 +580,8 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 					}
 				}
 
-				TextToVKandSC(aKeys, vk, sc, &mods_for_next_key, sTargetKeybdLayout);
+				TextToVKandSC(key_text, vk, sc, &mods_for_next_key, sTargetKeybdLayout);
 
-				if (space_pos)  // undo the temporary termination
-					*space_pos = old_char;
-				*end_pos = '}';  // undo the temporary termination
 				if (repeat_count < 1)
 					goto brace_case_end; // Gets rid of one level of indentation. Well worth it.
 
@@ -646,16 +645,16 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 							// Although MSDN says WM_CHAR uses UTF-16, it seems to really do automatic
 							// translation between ANSI and UTF-16; we rely on this for correct results:
 							for (int i = 0; i < repeat_count; ++i)
-								PostMessage(aTargetWindow, WM_CHAR, aKeys[0], 0);
+								PostMessage(aTargetWindow, WM_CHAR, key_text[0], 0);
 						}
 						else
-							SendKeySpecial(aKeys[0], repeat_count, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
+							SendKeySpecial(key_text[0], repeat_count, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
 					}
 				}
 
 				// See comment "else must never change sModifiersLR_persistent" above about why
 				// !aTargetWindow is used below:
-				else if (vk = TextToSpecial(aKeys, key_text_length, event_type
+				else if (vk = TextToSpecial(key_text, key_text_length, event_type
 					, persistent_modifiers_for_this_SendKeys, !aTargetWindow)) // Assign.
 				{
 					if (!aTargetWindow)
@@ -683,19 +682,19 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 					}
 				}
 
-				else if (key_text_length > 4 && !_tcsnicmp(aKeys, _T("ASC "), 4) && !aTargetWindow) // {ASC nnnnn}
+				else if (key_text_length > 4 && !_tcsnicmp(key_text, _T("ASC "), 4) && !aTargetWindow) // {ASC nnnnn}
 				{
 					// Include the trailing space in "ASC " to increase uniqueness (selectivity).
 					// Also, sending the ASC sequence to window doesn't work, so don't even try:
-					SendASC(omit_leading_whitespace(aKeys + 3));
+					SendASC(omit_leading_whitespace(key_text + 3));
 					// Do this only once at the end of the sequence:
 					DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 				}
 
-				else if (key_text_length > 2 && !_tcsnicmp(aKeys, _T("U+"), 2))
+				else if (key_text_length > 2 && !_tcsnicmp(key_text, _T("U+"), 2))
 				{
 					// L24: Send a unicode value as shown by Character Map.
-					UINT u_code = (UINT) _tcstol(aKeys + 2, NULL, 16);
+					UINT u_code = (UINT) _tcstol(key_text + 2, NULL, 16);
 					wchar_t wc1, wc2;
 					if (u_code >= 0x10000)
 					{
@@ -971,7 +970,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 		AttachThreadInput(g_MainThreadID, target_thread, FALSE);
 
 	if (do_selective_blockinput && !blockinput_prev) // Turn it back off only if it was off before we started.
-		Line::ScriptBlockInput(false);
+		OurBlockInput(false);
 
 	// The following MsgSleep(-1) solves unwanted buffering of hotkey activations while SendKeys is in progress
 	// in a non-Critical thread.  Because SLEEP_WITHOUT_INTERRUPTION is used to perform key delays, any incoming
@@ -1766,7 +1765,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		bool we_turned_blockinput_off = g_BlockInput && (aVK == VK_MENU || aVK == VK_LMENU || aVK == VK_RMENU)
 			&& !caller_is_keybd_hook; // Ordered for short-circuit performance.
 		if (we_turned_blockinput_off)
-			Line::ScriptBlockInput(false);
+			OurBlockInput(false);
 
 		ResultType target_layout_has_altgr = caller_is_keybd_hook ? LayoutHasAltGr(GetFocusedKeybdLayout())
 			: sTargetLayoutHasAltGr;
@@ -1830,7 +1829,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		}
 
 		if (we_turned_blockinput_off)  // Already made thread-safe by action higher above.
-			Line::ScriptBlockInput(true);  // Turn BlockInput back on.
+			OurBlockInput(true);  // Turn BlockInput back on.
 	}
 
 	if (aDoKeyDelay) // SM_PLAY also uses DoKeyDelay(): it stores the delay item in the event array.
@@ -1850,6 +1849,23 @@ void KeyEventMenuMask(KeyEventTypes aEventType, DWORD aExtraInfo)
 ///////////////////
 // Mouse related //
 ///////////////////
+
+
+BIF_DECL(BIF_Click)
+{
+	TCHAR args[1024]; // Arbitrary size, significantly larger than anything likely to be valid.
+	*args = '\0';
+	for (int i = 0; i < aParamCount; ++i)
+	{
+		if (TokenToObject(*aParam[i]))
+			_f_throw_param(i);
+		LPTSTR arg = TokenToString(*aParam[i], _f_number_buf);
+		sntprintfcat(args, _countof(args), _T("%s,"), arg);
+	}
+	PerformClick(args);
+}
+
+
 
 ResultType PerformClick(LPTSTR aOptions)
 {
@@ -1944,27 +1960,24 @@ break_both:
 
 
 
-ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, LPTSTR aY1, LPTSTR aX2, LPTSTR aY2
-	, LPTSTR aSpeed, LPTSTR aOffsetMode, LPTSTR aRepeatCount, LPTSTR aDownUp)
+FResult PerformMouse(ActionTypeType aActionType, LPCTSTR aButton, int *aX1, int *aY1, int *aX2, int *aY2
+	, int *aSpeed, LPCTSTR aOffsetMode, int *aRepeatCount, LPCTSTR aDownUp)
 {
 	vk_type vk;
 	if (aActionType == ACT_MOUSEMOVE)
 		vk = 0;
 	else
-		// ConvertMouseButton() treats blank as "Left":
+		// ConvertMouseButton() treats omitted/blank as "Left":
 		if (   !(vk = Line::ConvertMouseButton(aButton, aActionType == ACT_MOUSECLICK))   )
-			vk = VK_LBUTTON; // See below.
-			// v1.0.43: Seems harmless (due to rarity) to treat invalid button names as "Left" (keeping in
-			// mind that due to loadtime validation, invalid buttons are possible only when the button name is
-			// contained in a variable, e.g. MouseClick %ButtonName%.
+			return FR_E_ARG(0); // of MouseClick/MouseClickDrag
 
 	KeyEventTypes event_type = KEYDOWNANDUP;  // Set defaults.
-	int repeat_count = 1;                     //
+	int repeat_count = aRepeatCount ? *aRepeatCount : 1;
+	if (repeat_count < 0)
+		return FR_E_ARG(2); // of MouseClick
 
-	if (aActionType == ACT_MOUSECLICK)
+	if (aDownUp)
 	{
-		if (*aRepeatCount)
-			repeat_count = ATOI(aRepeatCount);
 		switch(*aDownUp)
 		{
 		case 'u':
@@ -1975,20 +1988,32 @@ ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, 
 		case 'D':
 			event_type = KEYDOWN;
 			break;
-		// Otherwise, leave it set to the default.
+		case '\0':
+			break;
+		default:
+			return FR_E_ARG(5); // of MouseClick
 		}
 	}
 
-	PerformMouseCommon(aActionType, vk
-		, *aX1 ? ATOI(aX1) : COORD_UNSPECIFIED  // If no starting coords are specified, mark it as "use the
-		, *aY1 ? ATOI(aY1) : COORD_UNSPECIFIED  // current mouse position":
-		, *aX2 ? ATOI(aX2) : COORD_UNSPECIFIED  // These two are blank except for dragging.
-		, *aY2 ? ATOI(aY2) : COORD_UNSPECIFIED  //
-		, repeat_count, event_type
-		, *aSpeed ? ATOI(aSpeed) : g->DefaultMouseSpeed
-		, ctoupper(*aOffsetMode) == 'R'); // aMoveOffset.
+	bool move_offset = false;
+	if (aOffsetMode && *aOffsetMode)
+	{
+		if (ctoupper(*aOffsetMode) == 'R')
+			move_offset = true;
+		else
+			return FR_E_ARG(aActionType == ACT_MOUSEMOVE ? 3 : 6);
+	}
 
-	return OK; // For caller convenience.
+	PerformMouseCommon(aActionType, vk
+		, aX1 ? *aX1 : COORD_UNSPECIFIED  // If no starting coords are specified, mark it as "use the
+		, aY1 ? *aY1 : COORD_UNSPECIFIED  // current mouse position":
+		, aX2 ? *aX2 : COORD_UNSPECIFIED  // These two are non-null only for MouseClickDrag.
+		, aY2 ? *aY2 : COORD_UNSPECIFIED  //
+		, repeat_count, event_type
+		, aSpeed ? *aSpeed : g->DefaultMouseSpeed
+		, move_offset);
+
+	return OK;
 }
 
 
@@ -2021,7 +2046,7 @@ void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY
 	bool do_selective_blockinput = (g_BlockInputMode == TOGGLE_MOUSE || g_BlockInputMode == TOGGLE_SENDANDMOUSE)
 		&& !sSendMode;
 	if (do_selective_blockinput) // It seems best NOT to use g_BlockMouseMove for this, since often times the user would want keyboard input to be disabled too, until after the mouse event is done.
-		Line::ScriptBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
+		OurBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
 
 	switch (aActionType)
 	{
@@ -2046,7 +2071,7 @@ void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY
 	}
 
 	if (do_selective_blockinput && !blockinput_prev)  // Turn it back off only if it was off before we started.
-		Line::ScriptBlockInput(false);
+		OurBlockInput(false);
 }
 
 
@@ -2849,7 +2874,7 @@ void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend)
 	// state, and message pumping is far more efficient with GetMessage than PeekMessage.
 	// Also note that both registered and hook hotkeys are noticed/caught during journal playback
 	// (confirmed through testing).  However, they are kept buffered until the Send finishes
-	// because ACT_SEND and such are designed to be uninterruptible by other script threads;
+	// because SendKeys() is designed to be uninterruptible by other script threads;
 	// also, it would be undesirable in almost any conceivable case.
 	//
 	// Use a loop rather than a single call to MsgSleep(WAIT_FOR_MESSAGES) because
@@ -4009,7 +4034,7 @@ TCHAR VKtoChar(vk_type aVK, HKL aKeybdLayout)
 
 
 
-sc_type TextToSC(LPTSTR aText, bool *aSpecifiedByNumber)
+sc_type TextToSC(LPCTSTR aText, bool *aSpecifiedByNumber)
 {
 	if (!*aText) return 0;
 	for (int i = 0; i < g_key_to_sc_count; ++i)
@@ -4031,7 +4056,7 @@ sc_type TextToSC(LPTSTR aText, bool *aSpecifiedByNumber)
 
 
 
-vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
+vk_type TextToVK(LPCTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
 	, HKL aKeybdLayout)
 // If pModifiersLR is non-NULL, place the modifiers that are needed to realize the key in there.
 // e.g. M is really +m (shift-m), # is really shift-3.
@@ -4139,7 +4164,7 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 
 
 
-bool TextToVKandSC(LPTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR, HKL aKeybdLayout)
+bool TextToVKandSC(LPCTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR, HKL aKeybdLayout)
 {
 	if (aVK = TextToVK(aText, pModifiersLR, true, true, aKeybdLayout))
 	{
@@ -4438,3 +4463,105 @@ vk_type sc_to_vk(sc_type aSC)
 	}
 	return MapVirtualKey(aSC, MAPVK_VSC_TO_VK_EX);
 }
+
+
+
+#pragma region Top-level Functions
+
+bif_impl void Send(LPCTSTR aKeys)
+{
+	SendKeys(aKeys, SCM_NOT_RAW, g->SendMode);
+}
+
+bif_impl void SendText(LPCTSTR aText)
+{
+	SendKeys(aText, SCM_RAW_TEXT, g->SendMode);
+}
+
+bif_impl void SendInput(LPCTSTR aKeys)
+{
+	SendKeys(aKeys, SCM_NOT_RAW, g->SendMode == SM_INPUT_FALLBACK_TO_PLAY ? SM_INPUT_FALLBACK_TO_PLAY : SM_INPUT);
+}
+
+bif_impl void SendPlay(LPCTSTR aKeys)
+{
+	SendKeys(aKeys, SCM_NOT_RAW, SM_PLAY);
+}
+
+bif_impl void SendEvent(LPCTSTR aKeys)
+{
+	SendKeys(aKeys, SCM_NOT_RAW, SM_EVENT);
+}
+
+bif_impl FResult SetNumLockState(LPCTSTR aState)
+{
+	return SetToggleState(VK_NUMLOCK, g_ForceNumLock, aState);
+}
+
+bif_impl FResult SetCapsLockState(LPCTSTR aState)
+{
+	return SetToggleState(VK_CAPITAL, g_ForceCapsLock, aState);
+}
+
+bif_impl FResult SetScrollLockState(LPCTSTR aState)
+{
+	return SetToggleState(VK_SCROLL, g_ForceScrollLock, aState);
+}
+
+bif_impl FResult MouseClick(LPCTSTR aButton, int *aX, int *aY, int *aClickCount, int *aSpeed, LPCTSTR aDownOrUp, LPCTSTR aRelative)
+{
+	return PerformMouse(ACT_MOUSECLICK, aButton, aX, aY, nullptr, nullptr, aSpeed, aRelative, aClickCount, aDownOrUp);
+}
+
+bif_impl FResult MouseClickDrag(LPCTSTR aButton, int aX1, int aY1, int aX2, int aY2, int *aSpeed, LPCTSTR aRelative)
+{
+	return PerformMouse(ACT_MOUSECLICKDRAG, aButton, &aX1, &aY1, &aX2, &aY2, aSpeed, aRelative, nullptr, nullptr);
+}
+
+bif_impl FResult MouseMove(int aX, int aY, int *aSpeed, LPCTSTR aRelative)
+{
+	return PerformMouse(ACT_MOUSEMOVE, nullptr, &aX, &aY, nullptr, nullptr, aSpeed, aRelative, nullptr, nullptr);
+}
+
+#pragma endregion
+
+
+
+#pragma region BlockInput
+
+void OurBlockInput(bool aEnable)
+{
+	// Always turn input ON/OFF even if g_BlockInput says its already in the right state.  This is because
+	// BlockInput can be externally and undetectably disabled, e.g. if the user presses Ctrl-Alt-Del:
+	BlockInput(aEnable ? TRUE : FALSE);
+	g_BlockInput = aEnable;
+}
+
+bif_impl void ScriptBlockInput(LPCTSTR aMode)
+{
+	switch (auto toggle = Line::ConvertBlockInput(aMode))
+	{
+	case TOGGLED_ON:
+		OurBlockInput(true);
+		break;
+	case TOGGLED_OFF:
+		OurBlockInput(false);
+		break;
+	case TOGGLE_SEND:
+	case TOGGLE_MOUSE:
+	case TOGGLE_SENDANDMOUSE:
+	case TOGGLE_DEFAULT:
+		g_BlockInputMode = toggle;
+		break;
+	case TOGGLE_MOUSEMOVE:
+		g_BlockMouseMove = true;
+		Hotkey::InstallMouseHook();
+		break;
+	case TOGGLE_MOUSEMOVEOFF:
+		g_BlockMouseMove = false; // But the mouse hook is left installed because it might be needed by other things. This approach is similar to that used by the Input command.
+		break;
+	// default (NEUTRAL or TOGGLE_INVALID): do nothing.
+	}
+}
+
+#pragma endregion

@@ -25,6 +25,7 @@
 #include "window.h" // For ControlExist().
 #include "application.h" // For SLEEP_WITHOUT_INTERRUPTION and MsgSleep().
 #include "script_func_impl.h"
+#include "abi.h"
 
 
 ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
@@ -87,18 +88,33 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 
 
 
-BIF_DECL(BIF_SysGetIPAddresses)
+bif_impl void RunAs(LPCTSTR aUser, LPCTSTR aPass, LPCTSTR aDomain)
+{
+	if (!aUser) aUser = _T("");
+	if (!aPass) aPass = _T("");
+	if (!aDomain) aDomain = _T("");
+	StringTCharToWChar(aUser, g_script.mRunAsUser);
+	StringTCharToWChar(aPass, g_script.mRunAsPass);
+	StringTCharToWChar(aDomain, g_script.mRunAsDomain);
+}
+
+
+
+bif_impl FResult SysGetIPAddresses(IObject **aRetVal)
 {
 	// aaa.bbb.ccc.ddd = 15, but allow room for larger IP's in the future.
 	#define IP_ADDRESS_SIZE 32 // The maximum size of any of the strings we return, including terminator.
 
 	auto addresses = Array::Create();
 	if (!addresses)
-		_f_throw_oom;
+		return FR_E_OUTOFMEM;
 
 	WSADATA wsadata;
 	if (WSAStartup(MAKEWORD(1, 1), &wsadata)) // Failed (it returns 0 on success).
-		_f_return(addresses);
+	{
+		*aRetVal = addresses;
+		return OK;
+	}
 
 	char host_name[256];
 	gethostname(host_name, _countof(host_name));
@@ -118,12 +134,13 @@ BIF_DECL(BIF_SysGetIPAddresses)
 		{
 			addresses->Release();
 			WSACleanup();
-			_f_throw_oom;
+			return FR_E_OUTOFMEM;
 		}
 	}
 
 	WSACleanup();
-	_f_return(addresses);
+	*aRetVal = addresses;
+	return OK;
 }
 
 
@@ -922,7 +939,7 @@ control_type_error:
 
 
 
-ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
+bif_impl FResult Download(LPCTSTR aURL, LPCTSTR aFilespec)
 {
 	// v1.0.44.07: Set default to INTERNET_FLAG_RELOAD vs. 0 because the vast majority of usages would want
 	// the file to be retrieved directly rather than from the cache.
@@ -938,8 +955,7 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	if (*aURL == '*') // v1.0.44.07: Provide an option to override flags_for_open_url.
 	{
 		flags_for_open_url = ATOU(++aURL);
-		LPTSTR cp;
-		if (cp = StrChrAny(aURL, _T(" \t"))) // Find first space or tab.
+		if (auto cp = StrChrAny(aURL, _T(" \t"))) // Find first space or tab.
 			aURL = omit_leading_whitespace(cp);
 	}
 
@@ -949,14 +965,14 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	// as the user agent (even if documented) seems like a bad idea because it might contain personal/sensitive info.
 	HINTERNET hInet = InternetOpen(_T("AutoHotkey"), INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY, NULL, NULL, 0);
 	if (!hInet)
-		return Throw();
+		return FR_E_WIN32;
 
 	// Open the required URL
 	HINTERNET hFile = InternetOpenUrl(hInet, aURL, NULL, 0, flags_for_open_url, 0);
 	if (!hFile)
 	{
 		InternetCloseHandle(hInet);
-		return Throw();
+		return FR_E_WIN32;
 	}
 
 	// Open our output file
@@ -965,7 +981,7 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	{
 		InternetCloseHandle(hFile);
 		InternetCloseHandle(hInet);
-		return Throw();
+		return FR_E_FAILED;
 	}
 
 	BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during Download.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
@@ -1004,6 +1020,7 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 			fwrite(bufData, number_of_bytes_read, 1, fptr);
 		}
 	}
+	DWORD last_error = GetLastError();
 	// Close internet session:
 	InternetCloseHandle(hFile);
 	InternetCloseHandle(hInet);
@@ -1011,8 +1028,11 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	fclose(fptr);
 
 	if (!result) // An error occurred during the transfer.
+	{
 		DeleteFile(aFilespec);  // Delete damaged/incomplete file.
-	return ThrowIfTrue(!result);
+		return FR_E_WIN32(last_error);
+	}
+	return OK;
 }
 
 
@@ -1032,25 +1052,18 @@ int CALLBACK FileSelectFolderCallback(HWND hwnd, UINT uMsg, LPARAM lParam, LPARA
 
 
 
-BIF_DECL(BIF_DirSelect)
-// Since other script threads can interrupt this command while it's running, it's important that
-// the command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
-// This is because an interrupting thread usually changes the values to something inappropriate for this thread.
+bif_impl FResult DirSelect(LPCTSTR aRootDir, int *aOptions, LPCTSTR aGreeting, StrRet &aRetVal)
 {
-	_f_param_string_opt(aRootDir, 0);
-	//_f_param_string_opt(aOptions, 1);
-	_f_param_string_opt(aGreeting, 2);
-
 	if (g_nFolderDialogs >= MAX_FOLDERDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		_f_throw(_T("The maximum number of Folder Dialogs has been reached."));
+		return FError(_T("The maximum number of Folder Dialogs has been reached."));
 	}
 
 	LPMALLOC pMalloc;
 	HRESULT hr = SHGetMalloc(&pMalloc);
     if (FAILED(hr))	// Initialize
-		_f_throw_win32(hr);
+		return hr;
 
 	// v1.0.36.03: Support initial folder, which is different than the root folder because the root only
 	// controls the origin point (above which the control cannot navigate).
@@ -1118,7 +1131,7 @@ BIF_DECL(BIF_DirSelect)
 	#define FSF_ALLOW_CREATE 0x01
 	#define FSF_EDITBOX      0x02
 	#define FSF_NONEWDIALOG  0x04
-	DWORD options = (DWORD)ParamIndexToOptionalInt(1, FSF_ALLOW_CREATE);
+	DWORD options = aOptions ? (DWORD)*aOptions : FSF_ALLOW_CREATE;
 	bi.ulFlags =
 		  ((options & FSF_NONEWDIALOG)    ? 0           : BIF_NEWDIALOGSTYLE) // v1.0.48: Added to support BartPE/WinPE.
 		| ((options & FSF_ALLOW_CREATE)   ? 0           : BIF_NONEWFOLDERBUTTON)
@@ -1141,7 +1154,8 @@ BIF_DECL(BIF_DirSelect)
 		// Due to rarity and because there doesn't seem to be any way to detect it,
 		// no exception is thrown when the function fails.  Instead, we just assume
 		// that the user pressed CANCEL (which should not be treated as an error):
-		_f_return_empty;
+		aRetVal.SetEmpty();
+		return OK;
 	}
 
 	*Result = '\0';  // Reuse this var, this time to hold the result of the below:
@@ -1149,23 +1163,17 @@ BIF_DECL(BIF_DirSelect)
 	pMalloc->Free(lpItemIDList);
 	pMalloc->Release();
 
-	_f_return(Result);
+	return aRetVal.Copy(Result) ? OK : FR_E_OUTOFMEM;
 }
 
 
 
-BIF_DECL(BIF_FileGetShortcut) // Credited to Holger <Holger.Kotsch at GMX de>.
+bif_impl FResult FileGetShortcut(LPCTSTR aShortcutFile, StrRet *aTarget, StrRet *aWorkingDir
+	, StrRet *aArgs, StrRet *aDesc, StrRet *aIcon, ResultToken *aIconNum, int *aRunState)
+// Credited to Holger <Holger.Kotsch at GMX de>.
 {
-	_f_param_string(aShortcutFile, 0);
-	Var *output_var[7];
-	for (int i = 0; i < _countof(output_var); ++i)
-		if (output_var[i] = ParamIndexToOutputVar(i+1))
-			output_var[i]->Assign(); // Init to blank.  OutIconNum relies on this.
-
-	bool bSucceeded = false;
-
 	if (!Line::Util_DoesFileExist(aShortcutFile))
-		goto error;
+		return FR_E_FAILED;
 
 	CoInitialize(NULL);
 	IShellLink *psl;
@@ -1187,40 +1195,40 @@ BIF_DECL(BIF_FileGetShortcut) // Credited to Holger <Holger.Kotsch at GMX de>.
 				TCHAR buf[MAX_PATH+1];
 				int icon_index, show_cmd;
 
-				if (output_var[0])
+				if (aTarget)
 				{
 					psl->GetPath(buf, MAX_PATH, NULL, SLGP_UNCPRIORITY);
-					output_var[0]->Assign(buf);
+					aTarget->Copy(buf);
 				}
-				if (output_var[1])
+				if (aWorkingDir)
 				{
 					psl->GetWorkingDirectory(buf, MAX_PATH);
-					output_var[1]->Assign(buf);
+					aWorkingDir->Copy(buf);
 				}
-				if (output_var[2])
+				if (aArgs)
 				{
 					psl->GetArguments(buf, MAX_PATH);
-					output_var[2]->Assign(buf);
+					aArgs->Copy(buf);
 				}
-				if (output_var[3])
+				if (aDesc)
 				{
 					psl->GetDescription(buf, MAX_PATH); // Testing shows that the OS limits it to 260 characters.
-					output_var[3]->Assign(buf);
+					aDesc->Copy(buf);
 				}
-				if (output_var[4] || output_var[5])
+				if (aIcon || aIconNum)
 				{
 					psl->GetIconLocation(buf, MAX_PATH, &icon_index);
-					if (output_var[4])
-						output_var[4]->Assign(buf);
-					if (output_var[5])
+					if (aIcon)
+						aIcon->Copy(buf);
+					if (aIconNum)
 						if (*buf)
-							output_var[5]->Assign(icon_index + (icon_index >= 0 ? 1 : 0));  // Convert from 0-based to 1-based for consistency with the Menu command, etc. but leave negative resource IDs as-is.
+							aIconNum->SetValue(icon_index + (icon_index >= 0 ? 1 : 0));  // Convert from 0-based to 1-based for consistency with the Menu command, etc. but leave negative resource IDs as-is.
 						//else: Leave it blank to indicate that there is none.
 				}
-				if (output_var[6])
+				if (aRunState)
 				{
 					psl->GetShowCmd(&show_cmd);
-					output_var[6]->Assign(show_cmd);
+					*aRunState = show_cmd;
 					// For the above, decided not to translate them to Max/Min/Normal since other
 					// show-state numbers might be supported in the future (or are already).  In other
 					// words, this allows the flexibility to specify some number other than 1/3/7 when
@@ -1228,42 +1236,37 @@ BIF_DECL(BIF_FileGetShortcut) // Credited to Holger <Holger.Kotsch at GMX de>.
 					// to FileCreateShortcut, not here.  But it's done here so that this command is
 					// compatible with that one.
 				}
-				bSucceeded = true;
 			}
 			ppf->Release();
 		}
 		psl->Release();
 	}
 	CoUninitialize();
-
-	if (bSucceeded)
-		_f_return_empty;
-error:
-	_f_throw_win32(hr);
+	return hr;
 }
 
 
 
-ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
-	, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState)
+bif_impl FResult FileCreateShortcut(LPCTSTR aTargetFile, LPCTSTR aShortcutFile, LPCTSTR aWorkingDir, LPCTSTR aArgs
+	, LPCTSTR aDescription, LPCTSTR aIconFile, LPCTSTR aHotkey, int *aIconNumber, int *aRunState)
 {
-	bool bSucceeded = false;
 	CoInitialize(NULL);
 	IShellLink *psl;
+	HRESULT hr;
 
-	if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)&psl)))
+	if (SUCCEEDED(hr = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)&psl)))
 	{
 		psl->SetPath(aTargetFile);
-		if (*aWorkingDir)
+		if (aWorkingDir)
 			psl->SetWorkingDirectory(aWorkingDir);
-		if (*aArgs)
+		if (aArgs)
 			psl->SetArguments(aArgs);
-		if (*aDescription)
+		if (aDescription)
 			psl->SetDescription(aDescription);
-		int icon_index = *aIconNumber ? ATOI(aIconNumber) : 0;
-		if (*aIconFile)
+		int icon_index = aIconNumber ? *aIconNumber : 0;
+		if (aIconFile)
 			psl->SetIconLocation(aIconFile,  icon_index - (icon_index > 0 ? 1 : 0)); // Convert 1-based index to 0-based, but leave negative resource IDs as-is.
-		if (*aHotkey)
+		if (aHotkey)
 		{
 			// If badly formatted, it's not a critical error, just continue.
 			// Currently, only shortcuts with a CTRL+ALT are supported.
@@ -1273,11 +1276,11 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 				// Vk in low 8 bits, mods in high 8:
 				psl->SetHotkey(   (WORD)vk | ((WORD)(HOTKEYF_CONTROL | HOTKEYF_ALT) << 8)   );
 		}
-		if (*aRunState)
-			psl->SetShowCmd(ATOI(aRunState)); // No validation is done since there's a chance other numbers might be valid now or in the future.
+		if (aRunState)
+			psl->SetShowCmd(*aRunState); // No validation is done since there's a chance other numbers might be valid now or in the future.
 
 		IPersistFile *ppf;
-		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile,(LPVOID *)&ppf)))
+		if (SUCCEEDED(hr = psl->QueryInterface(IID_IPersistFile,(LPVOID *)&ppf)))
 		{
 #ifndef UNICODE
 			WCHAR wsz[MAX_PATH];
@@ -1288,32 +1291,28 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 			// MSDN says to pass "The absolute path of the file".  Windows 10 requires it.
 			WCHAR full_path[MAX_PATH];
 			GetFullPathNameW(wsz, _countof(full_path), full_path, NULL);
-			if (SUCCEEDED(ppf->Save(full_path, TRUE)))
-				bSucceeded = true;
+			hr = ppf->Save(full_path, TRUE);
 			ppf->Release();
 		}
 		psl->Release();
 	}
 
 	CoUninitialize();
-	if (bSucceeded)
-		return OK;
-	else
-		return Throw();
+	return hr;
 }
 
 
 
-ResultType Line::FileRecycle(LPTSTR aFilePattern)
+bif_impl FResult FileRecycle(LPCTSTR aFilePattern)
 {
 	if (!aFilePattern || !*aFilePattern)
-		return LineError(ERR_PARAM1_MUST_NOT_BE_BLANK, FAIL_OR_OK);  // Since this is probably not what the user intended.
+		return FR_E_ARG(0);  // Since this is probably not what the user intended.
 
 	SHFILEOPSTRUCT FileOp;
 	TCHAR szFileTemp[_MAX_PATH+2];
 
 	// au3: Get the fullpathname - required for UNDO to work
-	Util_GetFullPathName(aFilePattern, szFileTemp);
+	Line::Util_GetFullPathName(aFilePattern, szFileTemp);
 
 	// au3: We must also make it a double nulled string *sigh*
 	szFileTemp[_tcslen(szFileTemp)+1] = '\0';
@@ -1330,62 +1329,56 @@ ResultType Line::FileRecycle(LPTSTR aFilePattern)
 	FileOp.fFlags = FOF_SILENT | FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING;
 
 	// SHFileOperation() returns 0 on success:
-	return ThrowIfTrue(SHFileOperation(&FileOp));
+	return SHFileOperation(&FileOp) ? FR_E_FAILED : OK;
 }
 
 
 
-ResultType Line::FileRecycleEmpty(LPTSTR aDriveLetter)
+bif_impl FResult FileRecycleEmpty(LPCTSTR szPath)
 {
-	LPCTSTR szPath = *aDriveLetter ? aDriveLetter : NULL;
 	HRESULT hr = SHEmptyRecycleBin(NULL, szPath, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
 	// Throw no error for E_UNEXPECTED, since that is returned in the common case where the
 	// recycle bin is already empty.  Seems more useful and user-friendly to ignore it.
-	if (hr != S_OK && hr != E_UNEXPECTED)
-		return g_script.Win32Error(hr);
-	return OK;
+	return hr != E_UNEXPECTED ? hr : OK;
 }
 
 
 
-BIF_DECL(BIF_FileGetVersion)
+bif_impl FResult FileGetVersion(LPCTSTR aPath, StrRet &aRetVal)
 {
-	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
+	g->LastError = 0; // Set default for successful return or non-Win32 errors.
 
-	if (!*aFilespec)
-		_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);  // Since this is probably not what the user intended.
+	if (!aPath && g->mLoopFile)
+		aPath = g->mLoopFile->cFileName;
+	if (!aPath || !*aPath)
+		return FR_E_ARG(0);
 
 	DWORD dwUnused, dwSize;
-	if (   !(dwSize = GetFileVersionInfoSize(aFilespec, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
-	{
-		aResultToken.SetLastErrorMaybeThrow(true);
-		return;
-	}
+	if (   !(dwSize = GetFileVersionInfoSize(aPath, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
+		return FR_E_WIN32;
 
 	BYTE *pInfo = (BYTE*)malloc(dwSize);  // Allocate the size retrieved by the above.
 	VS_FIXEDFILEINFO *pFFI;
 	UINT uSize;
 
 	// Read the version resource
-	if (!GetFileVersionInfo(aFilespec, 0, dwSize, (LPVOID)pInfo)
+	if (!GetFileVersionInfo(aPath, 0, dwSize, (LPVOID)pInfo)
 	// Locate the fixed information
 		|| !VerQueryValue(pInfo, _T("\\"), (LPVOID *)&pFFI, &uSize))
 	{
 		free(pInfo);
-		aResultToken.SetLastErrorMaybeThrow(true);
-		return;
+		return FR_E_WIN32;
 	}
 
 	// extract the fields you want from pFFI
 	UINT iFileMS = (UINT)pFFI->dwFileVersionMS;
 	UINT iFileLS = (UINT)pFFI->dwFileVersionLS;
-	sntprintf(_f_retval_buf, _f_retval_buf_size, _T("%u.%u.%u.%u")
+	sntprintf(aRetVal.CallerBuf(), aRetVal.CallerBufSize, _T("%u.%u.%u.%u")
 		, (iFileMS >> 16), (iFileMS & 0xFFFF), (iFileLS >> 16), (iFileLS & 0xFFFF));
+	aRetVal.SetStatic(aRetVal.CallerBuf());
 
 	free(pInfo);
-
-	g->LastError = 0;
-	_f_return_p(_f_retval_buf);
+	return OK;
 }
 
 
@@ -1804,9 +1797,9 @@ void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut, DWORD aBufSize)
 
 
 
-bool Util_Shutdown(int nFlag)
+FResult Shutdown(int nFlag)
 // Shutdown or logoff the system.
-// Returns false if the function could not get the rights to shutdown.
+// Returns OK if successful.
 {
 /* 
 flags can be a combination of:
@@ -1821,7 +1814,7 @@ flags can be a combination of:
 
 	// Get a token for this process.
  	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) 
-		return false;						// Don't have the rights
+		return FR_E_WIN32;
  
 	// Get the LUID for the shutdown privilege.
  	LookupPrivilegeValue(NULL, SE_SHUTDOWN_NAME, &tkp.Privileges[0].Luid); 
@@ -1834,27 +1827,13 @@ flags can be a combination of:
  
 	// Cannot test the return value of AdjustTokenPrivileges.
  	if (GetLastError() != ERROR_SUCCESS) 
-		return false;						// Don't have the rights
+		return FR_E_WIN32;
 
 	// ExitWindows
 	if (ExitWindowsEx(nFlag, 0))
-		return true;
+		return OK;
 	else
-		return false;
-
-}
-
-
-
-BOOL Util_ShutdownHandler(HWND hwnd, DWORD lParam)
-{
-	// if the window is me, don't terminate!
-	if (hwnd != g_hWnd)
-		Util_WinKill(hwnd);
-
-	// Continue the enumeration.
-	return TRUE;
-
+		return FR_E_WIN32;
 }
 
 

@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "window.h"
 #include "application.h"
 #include "script_func_impl.h"
+#include "abi.h"
 
 
 
@@ -209,24 +210,73 @@ BIF_DECL(BIF_WinActivate)
 
 
 
-BIF_DECL(BIF_GroupActivate)
+bif_impl FResult GroupAdd(LPCTSTR aGroup, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText)
 {
-	LPTSTR aGroup = ParamIndexToOptionalString(0, _f_number_buf);
+	auto group = g_script.FindGroup(aGroup, true);
+	if (!group)
+		return FR_FAIL; // It already displayed the error for us.
+	return group->AddWindow(aTitle, aText, aExcludeTitle, aExcludeText) ? OK : FR_FAIL;
+}
+
+
+
+bif_impl FResult GroupActivate(LPCTSTR aGroup, LPCTSTR aMode, __int64 *aRetVal)
+{
 	WinGroup *group;
 	if (   !(group = g_script.FindGroup(aGroup, true))   ) // Last parameter -> create-if-not-found.
-		_f_return_FAIL;  // It already displayed the error for us.
+		return FR_FAIL; // It already displayed the error for us.
 	
-	LPTSTR aMode = ParamIndexToOptionalString(1, _f_number_buf);
-	bool reverse = false;
-	if (!_tcsicmp(aMode, _T("R")))
-		reverse = true;
-	else if (*aMode)
-		_f_throw_param(1);
+	TCHAR mode = 0;
+	if (aMode && *aMode)
+	{
+		mode = ctoupper(*aMode);
+		if (mode != 'R' || aMode[1])
+			return FR_E_ARG(1);
+	}
 
 	HWND activated;
-	if (!group->Activate(reverse, activated))
-		_f_return_FAIL;
-	_f_return_i((UINT_PTR)activated);
+	group->Activate(mode == 'R', activated);
+	*aRetVal = (UINT_PTR)activated;
+	return OK;
+}
+
+
+
+bif_impl FResult GroupDeactivate(LPCTSTR aGroup, LPCTSTR aMode)
+{
+	auto group = g_script.FindGroup(aGroup);
+	if (!group)
+		return FR_E_ARG(0);
+	TCHAR mode = 0;
+	if (aMode && *aMode)
+	{
+		mode = ctoupper(*aMode);
+		if (mode != 'R' || aMode[1])
+			return FR_E_ARG(1);
+	}
+	group->Deactivate(mode == 'R');
+	return OK;
+}
+
+
+
+bif_impl FResult GroupClose(LPCTSTR aGroup, LPCTSTR aMode)
+{
+	auto group = g_script.FindGroup(aGroup);
+	if (!group)
+		return FR_E_ARG(0);
+	TCHAR mode = 0;
+	if (aMode && *aMode)
+	{
+		mode = ctoupper(*aMode);
+		if ((mode != 'R' && mode != 'A') || aMode[1])
+			return FR_E_ARG(1);
+	}
+	if (mode == 'A')
+		group->ActUponAll(FID_WinClose, 0);
+	else
+		group->CloseAndGoToNext(mode == 'R');
+	return OK;
 }
 
 
@@ -2081,4 +2131,20 @@ BIF_DECL(BIF_WinExistActive)
 	}
 
 	_f_return_i((size_t)hwnd);
+}
+
+
+
+bif_impl void WinMinimizeAll()
+{
+	PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);
+	DoWinDelay;
+}
+
+
+
+bif_impl void WinMinimizeAllUndo()
+{
+	PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 416, 0);
+	DoWinDelay;
 }

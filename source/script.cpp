@@ -26,7 +26,6 @@ GNU General Public License for more details.
 #define BIFn(name, minp, maxp, bif, ...) {_T(#name), bif, minp, maxp, FID_##name, __VA_ARGS__}
 #define BIFi(name, minp, maxp, bif, id, ...) {_T(#name), bif, minp, maxp, id, __VA_ARGS__}
 #define BIF1(name, minp, maxp, ...) {_T(#name), BIF_##name, minp, maxp, 0, __VA_ARGS__}
-#define BIFA(name, minp, maxp, act) {_T(#name), BIF_PerformAction, minp, maxp, act}
 // The following array defines all built-in functions, their min and max parameter counts,
 // and which real C++ function contains their implementation.  The macros above are used to
 // reduce repetition and implement code-sharing: BIFs which share a C++ function are assigned
@@ -37,7 +36,6 @@ FuncEntry g_BIF[] =
 	BIFn(ACos, 1, 1, BIF_ASinACos),
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
-	BIFA(BlockInput, 1, 1, ACT_BLOCKINPUT),
 #ifdef ENABLE_REGISTERCALLBACK
 	BIF1(CallbackCreate, 1, 3),
 	BIF1(CallbackFree, 1, 1),
@@ -45,7 +43,7 @@ FuncEntry g_BIF[] =
 	BIF1(CaretGetPos, 0, 2, {1, 2}),
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
-	BIFA(Click, 0, 6, ACT_CLICK),
+	BIF1(Click, 0, 6),
 	BIFn(ClipWait, 0, 2, BIF_Wait),
 #ifdef ENABLE_DLLCALL
 	BIFn(ComCall, 2, NA, BIF_DllCall),
@@ -90,81 +88,27 @@ FuncEntry g_BIF[] =
 	BIF1(ControlSetText, 2, 6),
 	BIFn(ControlShow, 1, 5, BIF_Control),
 	BIFn(ControlShowDropDown, 1, 5, BIF_Control),
-	BIFA(CoordMode, 1, 2, ACT_COORDMODE),
 	BIF1(Cos, 1, 1),
-	BIFA(Critical, 0, 1, ACT_CRITICAL),
 	BIF1(DateAdd, 3, 3),
 	BIF1(DateDiff, 3, 3),
 	BIFn(DetectHiddenText, 1, 1, BIF_SetBIV),
 	BIFn(DetectHiddenWindows, 1, 1, BIF_SetBIV),
-	BIFA(DirCopy, 2, 3, ACT_DIRCOPY),
-	BIFA(DirCreate, 1, 1, ACT_DIRCREATE),
-	BIFA(DirDelete, 1, 2, ACT_DIRDELETE),
-	BIFn(DirExist, 1, 1, BIF_FileExist),
-	BIFA(DirMove, 2, 3, ACT_DIRMOVE),
-	BIF1(DirSelect, 0, 3),
 #ifdef ENABLE_DLLCALL
 	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
-	BIFA(Download, 2, 2, ACT_DOWNLOAD),
-	BIFn(DriveEject, 0, 1, BIF_Drive),
-	BIFn(DriveGetCapacity, 1, 1, BIF_DriveGet),
-	BIFn(DriveGetFilesystem, 1, 1, BIF_DriveGet),
-	BIFn(DriveGetLabel, 1, 1, BIF_DriveGet),
-	BIFn(DriveGetList, 0, 1, BIF_DriveGet),
-	BIFn(DriveGetSerial, 1, 1, BIF_DriveGet),
-	BIFn(DriveGetSpaceFree, 1, 1, BIF_DriveGet),
-	BIFn(DriveGetStatus, 1, 1, BIF_DriveGet),
-	BIFn(DriveGetStatusCD, 0, 1, BIF_DriveGet),
-	BIFn(DriveGetType, 1, 1, BIF_DriveGet),
-	BIFn(DriveLock, 1, 1, BIF_Drive),
-	BIFn(DriveRetract, 0, 1, BIF_Drive),
-	BIFn(DriveSetLabel, 1, 2, BIF_Drive),
-	BIFn(DriveUnlock, 1, 1, BIF_Drive),
-	BIFA(Edit, 0, 0, ACT_EDIT),
 	BIFn(EditGetCurrentCol, 1, 5, BIF_ControlGet),
 	BIFn(EditGetCurrentLine, 1, 5, BIF_ControlGet),
 	BIFn(EditGetLine, 2, 6, BIF_ControlGet),
 	BIFn(EditGetLineCount, 1, 5, BIF_ControlGet),
 	BIFn(EditGetSelectedText, 1, 5, BIF_ControlGet),
 	BIFn(EditPaste, 2, 6, BIF_Control),
-	BIFn(EnvGet, 1, 1, BIF_Env),
-	BIFn(EnvSet, 1, 2, BIF_Env),
-	BIFA(Exit, 0, 1, ACT_EXIT),
-	BIFA(ExitApp, 0, 1, ACT_EXITAPP),
 	BIF1(Exp, 1, 1),
-	BIF1(FileAppend, 1, 3),
-	BIFA(FileCopy, 2, 3, ACT_FILECOPY),
-	BIFA(FileCreateShortcut, 2, 9, ACT_FILECREATESHORTCUT),
-	BIFA(FileDelete, 1, 1, ACT_FILEDELETE),
 	BIFn(FileEncoding, 1, 1, BIF_SetBIV),
-	BIFn(FileExist, 1, 1, BIF_FileExist),
-	BIF1(FileGetAttrib, 0, 1),
-	BIF1(FileGetShortcut, 1, 8, {2, 3, 4, 5, 6, 7, 8}),
-	BIF1(FileGetSize, 0, 2),
-	BIF1(FileGetTime, 0, 2),
-	BIF1(FileGetVersion, 0, 1),
-	BIFA(FileInstall, 2, 3, ACT_FILEINSTALL),
-	BIFA(FileMove, 2, 3, ACT_FILEMOVE),
 	BIF1(FileOpen, 2, 3),
-	BIF1(FileRead, 1, 2),
-	BIFA(FileRecycle, 1, 1, ACT_FILERECYCLE),
-	BIFA(FileRecycleEmpty, 0, 1, ACT_FILERECYCLEEMPTY),
-	BIF1(FileSelect, 0, 4),
-	BIFA(FileSetAttrib, 1, 3, ACT_FILESETATTRIB),
-	BIFA(FileSetTime, 0, 4, ACT_FILESETTIME),
 	BIFn(Floor, 1, 1, BIF_FloorCeil),
 	BIF1(Format, 1, NA),
 	BIF1(FormatTime, 0, 2),
-	BIFn(GetKeyName, 1, 1, BIF_GetKeyName),
-	BIFn(GetKeySC, 1, 1, BIF_GetKeyName),
-	BIF1(GetKeyState, 1, 2),
-	BIFn(GetKeyVK, 1, 1, BIF_GetKeyName),
 	BIFn(GetMethod, 1, 3, BIF_GetMethod),
-	BIF1(GroupActivate, 1, 2),
-	BIFA(GroupAdd, 1, 5, ACT_GROUPADD),
-	BIFA(GroupClose, 1, 2, ACT_GROUPCLOSE),
-	BIFA(GroupDeactivate, 1, 2, ACT_GROUPDEACTIVATE),
 	BIF1(GuiCtrlFromHwnd, 1, 1),
 	BIF1(GuiFromHwnd, 1, 2),
 	BIF1(HasBase, 2, 2),
@@ -181,12 +125,7 @@ FuncEntry g_BIF[] =
 	BIF1(IL_Create, 0, 3),
 	BIF1(IL_Destroy, 1, 1),
 	BIF1(ImageSearch, 7, 7, {1, 2}),
-	BIFA(IniDelete, 2, 3, ACT_INIDELETE),
-	BIF1(IniRead, 1, 4),
-	BIFA(IniWrite, 3, 4, ACT_INIWRITE),
 	BIF1(InputBox, 0, 4),
-	BIFi(InstallKeybdHook, 0, 2, BIF_InstallHook, HOOK_KEYBD),
-	BIFi(InstallMouseHook, 0, 2, BIF_InstallHook, HOOK_MOUSE),
 	BIF1(InStr, 2, 5),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
 	BIFi(IsAlpha, 1, 2, BIF_IsTypeish, VAR_TYPE_ALPHA),
@@ -202,11 +141,7 @@ FuncEntry g_BIF[] =
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
 	BIFi(IsXDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_XDIGIT),
-	BIFA(KeyHistory, 0, 1, ACT_KEYHISTORY),
 	BIFn(KeyWait, 1, 2, BIF_Wait),
-	BIFA(ListHotkeys, 0, 0, ACT_LISTHOTKEYS),
-	BIFA(ListLines, 0, 1, ACT_LISTLINES),
-	BIFA(ListVars, 0, 0, ACT_LISTVARS),
 	BIFn(ListViewGetContent, 0, 6, BIF_ControlGet),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
 	BIF1(LoadPicture, 1, 3, {3}),
@@ -217,15 +152,7 @@ FuncEntry g_BIF[] =
 	BIF1(MenuSelect, 0, 11),
 	BIFn(Min, 1, NA, BIF_MinMax),
 	BIF1(Mod, 2, 2),
-	BIFn(MonitorGet, 0, 5, BIF_MonitorGet, {2, 3, 4, 5}),
-	BIFn(MonitorGetCount, 0, 0, BIF_MonitorGet),
-	BIFn(MonitorGetName, 0, 1, BIF_MonitorGet),
-	BIFn(MonitorGetPrimary, 0, 0, BIF_MonitorGet),
-	BIFn(MonitorGetWorkArea, 0, 5, BIF_MonitorGet, {2, 3, 4, 5}),
-	BIFA(MouseClick, 0, 7, ACT_MOUSECLICK),
-	BIFA(MouseClickDrag, 1, 7, ACT_MOUSECLICKDRAG),
 	BIF1(MouseGetPos, 0, 5, {1, 2, 3, 4}),
-	BIFA(MouseMove, 2, 4, ACT_MOUSEMOVE),
 	BIF1(MsgBox, 0, 3),
 	BIF1(NumGet, 2, 3),
 	BIF1(NumPut, 3, NA),
@@ -248,9 +175,6 @@ FuncEntry g_BIF[] =
 	BIFn(OnExit, 1, 2, BIF_On),
 	BIF1(OnMessage, 2, 3),
 	BIF1(Ord, 1, 1),
-	BIFA(OutputDebug, 1, 1, ACT_OUTPUTDEBUG),
-	BIFA(Pause, 0, 1, ACT_PAUSE),
-	BIF1(Persistent, 0, 1),
 	BIF1(PixelGetColor, 2, 3),
 	BIF1(PixelSearch, 7, 8, {1, 2}),
 	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
@@ -269,43 +193,21 @@ FuncEntry g_BIF[] =
 	BIFn(RegExReplace, 2, 6, BIF_RegEx, {4}),
 	BIFn(RegRead, 0, 3, BIF_Reg),
 	BIFn(RegWrite, 0, 4, BIF_Reg),
-	BIFA(Reload, 0, 0, ACT_RELOAD),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
 	BIF1(Run, 1, 4, {4}),
-	BIFA(RunAs, 0, 3, ACT_RUNAS),
 	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
-	BIFA(Send, 1, 1, ACT_SEND),
-	BIFA(SendEvent, 1, 1, ACT_SENDEVENT),
-	BIFA(SendInput, 1, 1, ACT_SENDINPUT),
-	BIFA(SendLevel, 1, 1, ACT_SENDLEVEL),
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
-	BIFA(SendMode, 1, 1, ACT_SENDMODE),
-	BIFA(SendPlay, 1, 1, ACT_SENDPLAY),
-	BIFA(SendText, 1, 1, ACT_SENDTEXT),
-	BIFA(SetCapslockState, 0, 1, ACT_SETCAPSLOCKSTATE),
-	BIFA(SetControlDelay, 1, 1, ACT_SETCONTROLDELAY),
-	BIFA(SetDefaultMouseSpeed, 1, 1, ACT_SETDEFAULTMOUSESPEED),
-	BIFA(SetKeyDelay, 0, 3, ACT_SETKEYDELAY),
-	BIFA(SetMouseDelay, 1, 2, ACT_SETMOUSEDELAY),
-	BIFA(SetNumlockState, 0, 1, ACT_SETNUMLOCKSTATE),
 	BIFn(SetRegView, 1, 1, BIF_SetBIV),
-	BIFA(SetScrollLockState, 0, 1, ACT_SETSCROLLLOCKSTATE),
 	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
 	BIF1(SetTimer, 0, 3),
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
-	BIFA(SetWinDelay, 1, 1, ACT_SETWINDELAY),
-	BIFA(SetWorkingDir, 1, 1, ACT_SETWORKINGDIR),
-	BIFA(Shutdown, 1, 1, ACT_SHUTDOWN),
 	BIF1(Sin, 1, 1),
-	BIFA(Sleep, 1, 1, ACT_SLEEP),
 	BIF1(Sort, 1, 3),
-	BIFA(SoundBeep, 0, 2, ACT_SOUNDBEEP),
 	BIFn(SoundGetInterface, 1, 3, BIF_Sound),
 	BIFn(SoundGetMute, 0, 2, BIF_Sound),
 	BIFn(SoundGetName, 0, 2, BIF_Sound),
 	BIFn(SoundGetVolume, 0, 2, BIF_Sound),
-	BIFA(SoundPlay, 1, 2, ACT_SOUNDPLAY),
 	BIFn(SoundSetMute, 1, 3, BIF_Sound),
 	BIFn(SoundSetVolume, 1, 3, BIF_Sound),
 	BIF1(SplitPath, 1, 6, {2, 3, 4, 5, 6}),
@@ -323,14 +225,9 @@ FuncEntry g_BIF[] =
 	BIFn(StrTitle, 1, 1, BIF_StrCase),
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
-	BIFA(Suspend, 0, 1, ACT_SUSPEND),
-	BIF1(SysGet, 1, 1),
-	BIF1(SysGetIPAddresses, 0, 0),
 	BIF1(Tan, 1, 1),
-	BIFA(Thread, 1, 3, ACT_THREAD),
 	BIF1(ToolTip, 0, 4),
 	BIF1(TraySetIcon, 0, 3),
-	BIFA(TrayTip, 0, 3, ACT_TRAYTIP),
 	BIFn(Trim, 1, 2, BIF_Trim),
 	BIF1(Type, 1, 1),
 	BIF1(VarSetStrCapacity, 1, 2, {1}),
@@ -363,8 +260,6 @@ FuncEntry g_BIF[] =
 	BIFn(WinKill, 0, 5, BIF_WinShow),
 	BIFn(WinMaximize, 0, 4, BIF_WinShow),
 	BIFn(WinMinimize, 0, 4, BIF_WinShow),
-	BIFA(WinMinimizeAll, 0, 0, ACT_WINMINIMIZEALL),
-	BIFA(WinMinimizeAllUndo, 0, 0, ACT_WINMINIMIZEALLUNDO),
 	BIF1(WinMove, 0, 8),
 	BIFn(WinMoveBottom, 0, 4, BIF_WinMoveTopBottom),
 	BIFn(WinMoveTop, 0, 4, BIF_WinMoveTopBottom),
@@ -551,7 +446,7 @@ Script::Script()
 	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
-	, mOnClipboardChangeIsRunning(false), mExitReason(EXIT_NONE)
+	, mOnClipboardChangeIsRunning(false)
 	, mFirstLabel(NULL), mLastLabel(NULL)
 	, mLastHotFunc(nullptr), mUnusedHotFunc(nullptr)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
@@ -1319,6 +1214,11 @@ void Script::ExitIfNotPersistent(ExitReasons aExitReason)
 
 
 
+bif_impl void Edit()
+{
+	g_script.Edit();
+}
+
 ResultType Script::Edit()
 {
 #ifdef AUTOHOTKEYSC
@@ -1363,6 +1263,15 @@ ResultType Script::Edit()
 
 
 
+bif_impl FResult Reload()
+{
+	// If Reload() returns failure, that means a failure to launch the new process at all,
+	// and an error message was displayed or an exception was thrown, so we must return FR_FAIL.
+	// If Reload() returns success but the script doesn't terminate even after some delay,
+	// it can be assumed that the reload didn't work, and the script can take follow-on action.
+	return g_script.Reload(true) ? OK : FR_FAIL;
+}
+
 ResultType Script::Reload(bool aDisplayErrors)
 {
 	// The new instance we're about to start will tell our process to stop, or it will display
@@ -1386,12 +1295,31 @@ ResultType Script::Reload(bool aDisplayErrors)
 
 
 
+bif_impl ResultType Exit(int *aExitCode)
+{
+	// Even if the script isn't persistent, this thread might've interrupted another which should
+	// be allowed to complete normally.  This is especially important in v2 because a persistent
+	// script can become non-persistent by disabling a timer, closing a GUI, etc.  So if there
+	// are any threads below this one, only exit this thread:
+	//if (g_nThreads > 1 || g_script.IsPersistent())
+	// UPDATE: Handle it this way unconditionally so that the thread is properly exited prior to
+	// the script terminating; i.e. any FINALLY statements are executed and __delete is called for
+	// any objects in local variables or on the expression evaluation stack.
+	return EARLY_EXIT;
+}
+
+bif_impl ResultType ExitApp(int *aExitCode)
+{
+	return g_script.ExitApp(EXIT_EXIT, aExitCode ? *aExitCode : 0);
+}
+
+
+
 ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 // Normal exit (if aBuf is NULL), or a way to exit immediately on error (which is mostly
 // for times when it would be unsafe to call MsgBox() due to the possibility that it would
 // make the situation even worse).
 {
-	mExitReason = aExitReason;
 	// Note that currently, mOnExit.Count() can only be non-zero if the script is in a runnable
 	// state (since registering an OnExit function requires that the script calls OnExit()).
 	// If this ever changes, the !mIsReadyToExecute condition should be added below:
@@ -6825,7 +6753,7 @@ BuiltInFunc::BuiltInFunc(FuncEntry &bif) : BuiltInFunc(bif.mName)
 
 
 
-FuncEntry *Script::GetBuiltInFunc(LPTSTR aFuncName)
+Func *Script::GetBuiltInFunc(LPTSTR aFuncName)
 {
 	int left, right, mid, result;
 	for (left = 0, right = _countof(g_BIF) - 1; left <= right;)
@@ -6837,9 +6765,9 @@ FuncEntry *Script::GetBuiltInFunc(LPTSTR aFuncName)
 		else if (result < 0)
 			right = mid - 1;
 		else // Match found.
-			return &g_BIF[mid];
+			return new BuiltInFunc(g_BIF[mid]);
 	}
-	return NULL;
+	return GetBuiltInMdFunc(aFuncName);
 }
 
 
@@ -7143,9 +7071,8 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 
 		if (!(aScope & FINDVAR_NO_BIF))
 		// Built-in functions can be shadowed, so are checked only in this section.
-		if (auto *bif = GetBuiltInFunc(var_name))
+		if (auto *func = GetBuiltInFunc(var_name))
 		{
-			auto *func = new BuiltInFunc(*bif);
 			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL);
 			if (!var)
 			{
@@ -7399,7 +7326,7 @@ VarEntry *Script::GetBuiltInVar(LPCTSTR aVarName)
 
 
 
-WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
+WinGroup *Script::FindGroup(LPCTSTR aGroupName, bool aCreateIfNotFound)
 // Caller must ensure that aGroupName isn't NULL.  But if it's the empty string, NULL is returned.
 // Returns the Group whose name matches aGroupName.  If it doesn't exist, it is created if aCreateIfNotFound==true.
 // Thread-safety: This function is thread-safe (except when called with aCreateIfNotFound==true) even when
@@ -7425,7 +7352,7 @@ WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
 
 
 
-ResultType Script::AddGroup(LPTSTR aGroupName)
+ResultType Script::AddGroup(LPCTSTR aGroupName)
 // Returns OK or FAIL.
 // The caller must already have verified that this isn't a duplicate group.
 // This function is not thread-safe because it adds an entry to the quasi-global list of window groups.
@@ -11699,497 +11626,6 @@ ResultType Line::PerformAssign()
 
 
 
-ResultType Line::Perform()
-// Performs only this line's action.
-// Returns OK or FAIL.
-// The function should not be called to perform any flow-control actions such as
-// Goto, Return, Block-Begin, Block-End, If, Else, etc.
-{
-	TCHAR buf_temp[MAX_REG_ITEM_SIZE]; // For registry and other things.
-	WinGroup *group; // For the group commands.
-	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
-	ToggleValueType toggle;  // For commands that use on/off/neutral.
-
-	// Even though the loading-parser already checked, check again, for now,
-	// at least until testing raises confidence.  UPDATE: Don't do this because
-	// sometimes the number of parameters required at load-time is different from
-	// that at runtime, because params are taken out or added to the param list:
-	//if (nArgs < g_act[mActionType].MinParams) ...
-
-	switch (mActionType)
-	{
-	case ACT_SEND:
-	case ACT_SENDTEXT:
-		SendKeys(ARG1, mActionType == ACT_SENDTEXT ? SCM_RAW_TEXT : SCM_NOT_RAW, g.SendMode);
-		return OK;
-	case ACT_SENDINPUT: // Raw mode is supported via {Raw} in ARG1.
-		SendKeys(ARG1, SCM_NOT_RAW, g.SendMode == SM_INPUT_FALLBACK_TO_PLAY ? SM_INPUT_FALLBACK_TO_PLAY : SM_INPUT);
-		return OK;
-	case ACT_SENDPLAY: // Raw mode is supported via {Raw} in ARG1.
-		SendKeys(ARG1, SCM_NOT_RAW, SM_PLAY);
-		return OK;
-	case ACT_SENDEVENT:
-		SendKeys(ARG1, SCM_NOT_RAW, SM_EVENT);
-		return OK;
-
-	case ACT_CLICK:
-		if (mArgc > 1)
-		{
-			// Join all args so that Click(x,y) is equivalent to Click %x% %y%.  Anything longer than
-			// _countof(buf_temp) is almost certainly invalid, so simply truncate in that case.
-			*buf_temp = '\0';
-			for (int i = 0; i < mArgc; ++i)
-				sntprintfcat(buf_temp, _countof(buf_temp), _T("%s,"), sArgDeref[i]);
-			return PerformClick(buf_temp);
-		}
-		return PerformClick(ARG1);
-	case ACT_MOUSECLICKDRAG:
-		return PerformMouse(mActionType, SEVEN_ARGS);
-	case ACT_MOUSECLICK:
-		return PerformMouse(mActionType, THREE_ARGS, _T(""), _T(""), ARG5, ARG7, ARG4, ARG6);
-	case ACT_MOUSEMOVE:
-		return PerformMouse(mActionType, _T(""), ARG1, ARG2, _T(""), _T(""), ARG3, ARG4);
-
-	case ACT_DOWNLOAD:
-		return Download(TWO_ARGS);
-
-	case ACT_RUNAS:
-		StringTCharToWChar(ARG1, g_script.mRunAsUser);
-		StringTCharToWChar(ARG2, g_script.mRunAsPass);
-		StringTCharToWChar(ARG3, g_script.mRunAsDomain);
-		return OK;
-
-	case ACT_WINMINIMIZEALL:
-		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);
-		DoWinDelay;
-		return OK;
-	case ACT_WINMINIMIZEALLUNDO:
-		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 416, 0);
-		DoWinDelay;
-		return OK;
-
-	case ACT_CRITICAL:
-	{
-		// v1.0.46: When the current thread is critical, have the script check messages less often to
-		// reduce situations where an OnMessage or GUI message must be discarded due to "thread already
-		// running".  Using 16 rather than the default of 5 solves reliability problems in a custom-menu-draw
-		// script and probably many similar scripts -- even when the system is under load (though 16 might not
-		// be enough during an extreme load depending on the exact preemption/timeslice dynamics involved).
-		// DON'T GO TOO HIGH because this setting reduces response time for ALL messages, even those that
-		// don't launch script threads (especially painting/drawing and other screen-update events).
-		// Some hardware has a tickcount granularity of 15 instead of 10, so this covers more variations.
-		DWORD peek_frequency_when_critical_is_on = 16; // Set default.  See below.
-		// v1.0.48: Below supports "Critical 0" as meaning "Off" to improve compatibility with A_IsCritical.
-		// In fact, for performance, only the following are no recognized as turning on Critical:
-		//     - "On"
-		//     - ""
-		//     - Integer other than 0.
-		// Everything else, if considered to be "Off", including "Off", "Any non-blank string that
-		// doesn't start with a non-zero number", and zero itself.
-		g.ThreadIsCritical = !*ARG1 // i.e. a first arg that's omitted or blank is the same as "ON". See comments above.
-			|| !_tcsicmp(ARG1, _T("ON"))
-			|| (peek_frequency_when_critical_is_on = ArgToUInt(1)); // Non-zero integer also turns it on. Relies on short-circuit boolean order.
-		if (g.ThreadIsCritical) // Critical has been turned on. (For simplicity even if it was already on, the following is done.)
-		{
-			g.PeekFrequency = peek_frequency_when_critical_is_on;
-			g.AllowThreadToBeInterrupted = false;
-			// Ensure uninterruptibility never times out.  IsInterruptible() relies on this to avoid the
-			// need to check g->ThreadIsCritical, which in turn allows global_maximize_interruptibility()
-			// and DialogPrep() to avoid resetting g->ThreadIsCritical, which allows it to reliably be
-			// used as the default setting for new threads, even when the auto-execute thread itself
-			// (or the idle thread) needs to be interruptible, such as while displaying a dialog.
-			// In other words, g->ThreadIsCritical only represents the desired setting as set by the
-			// script, and isn't the actual mechanism used to make the thread uninterruptible.
-			g.UninterruptibleDuration = -1;
-		}
-		else // Critical has been turned off.
-		{
-			// Since Critical is being turned off, allow thread to be immediately interrupted regardless of
-			// any "Thread Interrupt" settings.
-			g.PeekFrequency = DEFAULT_PEEK_FREQUENCY;
-			g.AllowThreadToBeInterrupted = true;
-		}
-		// Once ACT_CRITICAL returns, the thread's interruptibility has been explicitly set; so the script
-		// is now in charge of managing this thread's interruptibility.
-		return OK;
-	}
-
-	case ACT_THREAD:
-		switch (ConvertThreadCommand(ARG1))
-		{
-		case THREAD_CMD_PRIORITY:
-			g.Priority = ArgToInt(2);
-			break;
-		case THREAD_CMD_INTERRUPT:
-			// If either one is blank, leave that setting as it was before.
-			if (*ARG2)
-				g_script.mUninterruptibleTime = ArgToInt(2);  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
-			if (*ARG3)
-				g_script.mUninterruptedLineCountMax = ArgToInt(3);  // 32-bit also, to help performance (since huge values seem unnecessary).
-			break;
-		case THREAD_CMD_NOTIMERS:
-			g.AllowTimers = (*ARG2 && ArgToInt64(2) == 0);
-			break;
-		// If invalid command, do nothing since that is always caught at load-time unless the command
-		// is in a variable reference (very rare in this case).
-		}
-		return OK;
-
-	case ACT_GROUPADD: // Adding a WindowSpec *to* a group, not adding a group.
-		if (   !(group = g_script.FindGroup(ARG1, true))   )  // Last parameter -> create-if-not-found.
-			return FAIL;  // It already displayed the error for us.
-		return group->AddWindow(ARG2, ARG3, ARG4, ARG5);
-	
-	case ACT_GROUPDEACTIVATE:
-		if (   !(group = g_script.FindGroup(ARG1))   )
-			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, ARG1);
-		return group->Deactivate(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
-
-	case ACT_GROUPCLOSE:
-		if (   !(group = g_script.FindGroup(ARG1))   )
-			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, ARG1);
-		if (*ARG2 && !_tcsicmp(ARG2, _T("A")))
-			group->ActUponAll(FID_WinClose, 0);  // Note: It will take care of DoWinDelay if needed.
-		else
-			group->CloseAndGoToNext(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
-		return OK;
-
-	case ACT_SOUNDBEEP:
-	{
-		// Negative values are checked to avoid interpreting them as a very long duration.
-		DWORD duration = *ARG2 ? ArgToUInt(2) : 150;
-		if ((int)duration < 0)
-			duration = 150;
-		Beep(*ARG1 ? ArgToUInt(1) : 523, duration);
-		return OK;
-	}
-
-	case ACT_SOUNDPLAY:
-		return SoundPlay(ARG1, *ARG2 && !_tcsicmp(ARG2, _T("Wait")) || !_tcsicmp(ARG2, _T("1")));
-
-	case ACT_FILEDELETE:
-		return FileDelete(ARG1);
-
-	case ACT_FILERECYCLE:
-		return FileRecycle(ARG1);
-
-	case ACT_FILERECYCLEEMPTY:
-		return FileRecycleEmpty(ARG1);
-
-	case ACT_FILEINSTALL:
-		return FileInstall(THREE_ARGS);
-
-	case ACT_FILECOPY:
-	case ACT_FILEMOVE:
-		return FileCopyOrMove(ARG1, ARG2, ArgToInt(3) == 1);
-	case ACT_DIRCOPY:
-		return ThrowIfTrue(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1, false));
-	case ACT_DIRMOVE:
-		if (ctoupper(*ARG3) == 'R')
-		{
-			// Perform a simple rename instead, which prevents the operation from being only partially
-			// complete if the source directory is in use (due to being a working dir for a currently
-			// running process, or containing a file that is being written to).  In other words,
-			// the operation will be "all or none":
-			return ThrowIfTrue(!MoveFile(ARG1, ARG2));
-		}
-		// Otherwise:
-		return ThrowIfTrue(!Util_CopyDir(ARG1, ARG2, ArgToInt(3), true));
-
-	case ACT_DIRCREATE:
-		return SetLastErrorMaybeThrow(!FileCreateDir(ARG1));
-	case ACT_DIRDELETE:
-		return ThrowIfTrue(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
-			|| !Util_RemoveDir(ARG1, ResultToBOOL(ARG2))); // Relies on short-circuit evaluation.
-
-	case ACT_FILESETATTRIB:
-	{
-		FileLoopModeType mode = ConvertLoopMode(ARG3);
-		// The specified ARG, if non-blank, takes precedence over the file-loop's file (if any):
-		#define USE_FILE_LOOP_FILE_IF_ARG_BLANK(arg) \
-			(*arg ? arg : (g.mLoopFile ? g.mLoopFile->file_path : _T("")))
-		return FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
-	}
-	case ACT_FILESETTIME:
-	{
-		FileLoopModeType mode = ConvertLoopMode(ARG4);
-		return FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
-	}
-
-	case ACT_SETWORKINGDIR:
-		if (!SetWorkingDir(ARG1))
-			return g_script.Win32Error();
-		return OK;
-
-	case ACT_FILECREATESHORTCUT:
-		return FileCreateShortcut(NINE_ARGS);
-
-	case ACT_KEYHISTORY:
-		if (*ARG1)
-		{
-			int value = ATOI(ARG1);
-			if (value < 0)
-				value = 0;
-			else if (value > 500)
-				value = 500;
-			// GetHookStatus() only has a limited size buffer in which to transcribe the keystrokes.
-			// 500 events is about what you would expect to fit in a 32 KB buffer (in the unlikely
-			// event that the transcribed events create too much text, the text will be truncated,
-			// so it's not dangerous anyway).
-			if (g_KeybdHook || g_MouseHook)
-				PostThreadMessage(g_HookThreadID, AHK_HOOK_SET_KEYHISTORY, value, 0);
-			else
-				SetKeyHistoryMax(value);
-			return OK;
-		}
-		return ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
-	case ACT_LISTLINES:
-		if (!*ARG1)
-			return ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
-		// Otherwise:
-		if (g.ListLinesIsEnabled)
-		{
-			// Since ExecUntil() just logged this ListLines On/Off in the line history, remove it to avoid
-			// cluttering the line history with distracting lines that the user probably wouldn't want to see.
-			// Might be especially useful in cases where a timer fires frequently (even if such a timer
-			// used "ListLines Off" as its top line, that line itself would appear very frequently in the line
-			// history).  v1.0.48.03: Fixed so that the below executes only when ListLines was previously "On".
-			if (sLogNext > 0)
-				--sLogNext;
-			else
-				sLogNext = LINE_LOG_SIZE - 1;
-			sLog[sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronological order in some cases.
-		}
-		g.ListLinesIsEnabled = ResultToBOOL(ARG1);
-		return OK;
-	case ACT_LISTVARS:
-		return ShowMainWindow(MAIN_MODE_VARS, false); // Pass "unrestricted" when the command is explicitly used in the script.
-	case ACT_LISTHOTKEYS:
-		return ShowMainWindow(MAIN_MODE_HOTKEYS, false); // Pass "unrestricted" when the command is explicitly used in the script.
-	case ACT_TRAYTIP:
-		return TrayTip(THREE_ARGS);
-
-
-//////////////////////////////////////////////////////////////////////////
-
-	case ACT_COORDMODE:
-		return Script::SetCoordMode(ARG1, *ARG2 ? ARG2 : _T("Screen"));
-
-	case ACT_SETDEFAULTMOUSESPEED:
-		g.DefaultMouseSpeed = (UCHAR)ArgToInt(1);
-		// In case it was a deref, force it to be some default value if it's out of range:
-		if (g.DefaultMouseSpeed < 0 || g.DefaultMouseSpeed > MAX_MOUSE_SPEED)
-			g.DefaultMouseSpeed = DEFAULT_MOUSE_SPEED;
-		return OK;
-
-	case ACT_SENDMODE:
-		return Script::SetSendMode(ARG1);
-
-	case ACT_SENDLEVEL:
-		return Script::SetSendLevel(ArgToInt(1), ARG1);
-
-	case ACT_SETKEYDELAY:
-		if (!_tcsicmp(ARG3, _T("Play")))
-		{
-			if (*ARG1)
-				g.KeyDelayPlay = ArgToInt(1);
-			if (*ARG2)
-				g.PressDurationPlay = ArgToInt(2);
-		}
-		else
-		{
-			if (*ARG1)
-				g.KeyDelay = ArgToInt(1);
-			if (*ARG2)
-				g.PressDuration = ArgToInt(2);
-		}
-		return OK;
-	case ACT_SETMOUSEDELAY:
-		if (!_tcsicmp(ARG2, _T("Play")))
-			g.MouseDelayPlay = ArgToInt(1);
-		else
-			g.MouseDelay = ArgToInt(1);
-		return OK;
-	case ACT_SETWINDELAY:
-		g.WinDelay = ArgToInt(1);
-		return OK;
-	case ACT_SETCONTROLDELAY:
-		g.ControlDelay = ArgToInt(1);
-		return OK;
-
-	case ACT_SUSPEND:
-		toggle = Convert10Toggle(ARG1);
-		if (toggle == TOGGLE_INVALID)
-			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, ARG1);
-		if (toggle >= TOGGLE // i.e. TOGGLE or NEUTRAL (omitted)
-			|| ((toggle == TOGGLED_ON) != g_IsSuspended))
-			ToggleSuspendState();
-		return OK;
-
-	case ACT_PAUSE:
-		return ChangePauseState(ARG1);
-
-	case ACT_BLOCKINPUT:
-		switch (toggle = ConvertBlockInput(ARG1))
-		{
-		case TOGGLED_ON:
-			ScriptBlockInput(true);
-			break;
-		case TOGGLED_OFF:
-			ScriptBlockInput(false);
-			break;
-		case TOGGLE_SEND:
-		case TOGGLE_MOUSE:
-		case TOGGLE_SENDANDMOUSE:
-		case TOGGLE_DEFAULT:
-			g_BlockInputMode = toggle;
-			break;
-		case TOGGLE_MOUSEMOVE:
-			g_BlockMouseMove = true;
-			Hotkey::InstallMouseHook();
-			break;
-		case TOGGLE_MOUSEMOVEOFF:
-			g_BlockMouseMove = false; // But the mouse hook is left installed because it might be needed by other things. This approach is similar to that used by the Input command.
-			break;
-		// default (NEUTRAL or TOGGLE_INVALID): do nothing.
-		}
-		return OK;
-
-	////////////////////////////////////////////////////////////////////////////////////////
-	// For these, it seems best not to report an error during runtime if there's
-	// an invalid value (e.g. something other than On/Off/Blank) in a param containing
-	// a dereferenced variable, since settings are global and affect all subroutines,
-	// not just the one that we would otherwise report failure for:
-	case ACT_SETNUMLOCKSTATE:
-		return SetToggleState(VK_NUMLOCK, g_ForceNumLock, ARG1);
-	case ACT_SETCAPSLOCKSTATE:
-		return SetToggleState(VK_CAPITAL, g_ForceCapsLock, ARG1);
-	case ACT_SETSCROLLLOCKSTATE:
-		return SetToggleState(VK_SCROLL, g_ForceScrollLock, ARG1);
-
-	case ACT_EDIT:
-		g_script.Edit();
-		return OK;
-	case ACT_RELOAD:
-		g_script.Reload(true);
-		// Even if the reload failed, it seems best to return OK anyway.  That way,
-		// the script can take some follow-on action, e.g. it can sleep for 1000
-		// after issuing the reload command and then take action under the assumption
-		// that the reload didn't work (since obviously if the process and thread
-		// in which the Sleep is running still exist, it didn't work):
-		return OK;
-
-	case ACT_SLEEP:
-	{
-		// Only support 32-bit values for this command, since it seems unlikely anyone would to have
-		// it sleep more than 24.8 days or so.  It also helps performance on 32-bit hardware because
-		// MsgSleep() is so heavily called and checks the value of the first parameter frequently:
-		int sleep_time = ArgToInt(1); // Keep it signed vs. unsigned for backward compatibility (e.g. scripts that do Sleep -1).
-		MsgSleep(sleep_time);
-		return OK;
-	}
-
-	case ACT_INIWRITE:
-		return IniWrite(FOUR_ARGS);
-	case ACT_INIDELETE:
-		// To preserve maximum compatibility with existing scripts, only send NULL if ARG3
-		// was explicitly omitted.  This is because some older scripts might rely on the
-		// fact that a blank ARG3 does not delete the entire section, but rather does
-		// nothing (that fact is untested):
-		return IniDelete(ARG1, ARG2, mArgc < 3 ? NULL : ARG3);
-
-	case ACT_OUTPUTDEBUG:
-#ifdef CONFIG_DEBUGGER
-		if (!g_Debugger.OutputStdErr(ARG1))
-#endif
-			OutputDebugString(ARG1); // It does not return a value for the purpose of setting ErrorLevel.
-		return OK;
-
-	case ACT_SHUTDOWN:
-		return Util_Shutdown(ArgToInt(1)) ? OK : FAIL; // Range of ARG1 is not validated in case other values are supported in the future.
-
-	case ACT_EXIT:
-		// Even if the script isn't persistent, this thread might've interrupted another which should
-		// be allowed to complete normally.  This is especially important in v2 because a persistent
-		// script can become non-persistent by disabling a timer, closing a GUI, etc.  So if there
-		// are any threads below this one, only exit this thread:
-		//if (g_nThreads > 1 || g_script.IsPersistent())
-		// UPDATE: Handle it this way unconditionally so that the thread is properly exited prior to
-		// the script terminating; i.e. any FINALLY statements are executed and __delete is called for
-		// any objects in local variables or on the expression evaluation stack.
-		return EARLY_EXIT; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
-	case ACT_EXITAPP: // Unconditional exit.
-		// This has been tested and it does yield to the OS the error code indicated in ARG1,
-		// if present (otherwise it returns 0, naturally) as expected:
-		return g_script.ExitApp(EXIT_EXIT, (int)ArgIndexToInt64(0));
-
-	} // switch()
-
-	// Since above didn't return, this line's mActionType isn't handled here,
-	// so caller called it wrong.  ACT_INVALID should be impossible because
-	// Script::AddLine() forbids it.
-
-#ifdef _DEBUG
-	return LineError(_T("DEBUG: Perform(): Unhandled action type."));
-#else
-	return FAIL;
-#endif
-}
-
-
-
-BIF_DECL(BIF_PerformAction)
-{
-	ActionTypeType act = _f_callee_id;
-
-	// An array of args is constructed containing the var or text of each parameter,
-	// which is also placed into sArgDeref[] so ExpandArgs() can be skipped.
-	// This function is intended to be transitional; eventually all ACT functions
-	// should be converted to BIF.
-	ArgStruct arg[MAX_ARGS];
-	
-	TCHAR number_buf[MAX_ARGS * MAX_NUMBER_SIZE]; // Enough for worst case.
-
-	for (int i = 0; i < aParamCount; ++i)
-	{
-		arg[i].is_expression = false;
-		arg[i].postfix = aParam[i]; // For ArgToInt64() etc.
-		arg[i].type = ARG_TYPE_NORMAL;
-		arg[i].text = TokenToString(*aParam[i], number_buf + (i * MAX_NUMBER_SIZE));
-		arg[i].deref = NULL;
-		Line::sArgDeref[i] = arg[i].text;
-		// length won't actually be used.
-		//arg[i].length = (ArgLengthType)_tcslen(arg[i].text);
-	}
-
-	int max_params = aResultToken.func->mParamCount;
-	for (int i = aParamCount; i < max_params; ++i)
-		Line::sArgDeref[i] = _T("");
-	
-	// Since our ArgStructs aren't fully initialized, it isn't safe to call line->ToText().
-	// To avoid that in the event of an error, make g->ExcptMode non-zero so that errors are
-	// displayed via UnhandledException(), which locates the proper Line via line number.
-	auto outer_excptmode = g->ExcptMode;
-	g->ExcptMode |= EXCPTMODE_LINE_WORKAROUND;
-
-	// Construct a Line containing the required context for Perform().
-	Line line(0, 0, act, arg, aParamCount);
-
-	// PERFORM THE ACTION
-	ResultType result = line.Perform();
-
-	if (result == OK) // Can be OK, FAIL or EARLY_EXIT.
-		aResultToken.ReturnPtr(_T(""), 0);
-	else
-		// Pass back the result code (FAIL or EARLY_EXIT).
-		aResultToken.SetExitResult(result);
-
-
-	g->ExcptMode = outer_excptmode;
-}
-
-
-
 ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
 // For #Include, #IncludeAgain and #DllLoad.
 // Based on Line::Deref above, but with a few differences for backward-compatibility:
@@ -12480,7 +11916,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 
 
 
-void Line::ToggleSuspendState()
+void ToggleSuspendState()
 {
 	// If suspension is being turned on:
 	// It seems unnecessary, and possibly undesirable, to purge any pending hotkey msgs from the msg queue.
@@ -12495,7 +11931,20 @@ void Line::ToggleSuspendState()
 
 
 
-void Line::PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
+bif_impl FResult Suspend(int *aMode)
+{
+	auto toggle = Line::Convert10Toggle(aMode);
+	if (toggle == TOGGLE_INVALID)
+		return FR_E_ARG(0);
+	if (toggle >= TOGGLE // i.e. TOGGLE or NEUTRAL (omitted)
+		|| ((toggle == TOGGLED_ON) != g_IsSuspended))
+		ToggleSuspendState();
+	return OK;
+}
+
+
+
+void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
 {
 	if (g <= g_array) // Guard against underflow. This condition can occur when the script thread that called us is the AutoExec section or a callback running in the idle/0 thread.
 		return;
@@ -12509,16 +11958,14 @@ void Line::PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
 }
 
 
-
-ResultType Line::ChangePauseState(LPTSTR aChangeTo)
-// Currently designed to be called only by the Pause command (ACT_PAUSE).
-// Returns OK or FAIL.
+bif_impl FResult Pause(int *aNewState)
 {
-	auto toggle = Convert10Toggle(ARG1);
+	auto toggle = Line::Convert10Toggle(aNewState);
 	switch (toggle)
 	{
 	case NEUTRAL:
-		return PauseCurrentThread();
+		PauseCurrentThread();
+		return OK;
 	case TOGGLE:
 		// Update for v2: "Pause -1" is more useful if it always applies to the thread immediately beneath
 		// the current thread, since pausing the current thread would prevent a hotkey from unpausing itself
@@ -12540,13 +11987,12 @@ ResultType Line::ChangePauseState(LPTSTR aChangeTo)
 		PauseUnderlyingThread(toggle != TOGGLED_OFF); // i.e. pause if ON or fell through from TOGGLE.
 		return OK;
 	default: // TOGGLE_INVALID or some other disallowed value.
-		return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, aChangeTo);
+		return FR_E_ARG(0);
 	}
 }
 
 
-
-ResultType Line::PauseCurrentThread()
+void PauseCurrentThread()
 {
 	// Pause the current subroutine (which by definition isn't paused since it had to be  active
 	// to call us).  It seems best not to attempt to change the Hotkey mRunAgainAfterFinished
@@ -12572,19 +12018,6 @@ ResultType Line::PauseCurrentThread()
 	//    case g_nPausedThreads would not be adjusted and timers would forever be disabled.
 	while (g.IsPaused)
 		MsgSleep(INTERVAL_UNSPECIFIED);
-	return OK;
-}
-
-
-
-ResultType Line::ScriptBlockInput(bool aEnable)
-// Always returns OK for caller convenience.
-{
-	// Always turn input ON/OFF even if g_BlockInput says its already in the right state.  This is because
-	// BlockInput can be externally and undetectably disabled, e.g. if the user presses Ctrl-Alt-Del:
-	BlockInput(aEnable ? TRUE : FALSE);
-	g_BlockInput = aEnable;
-	return OK;  // By design, it never returns FAIL.
 }
 
 

@@ -18,6 +18,7 @@ GNU General Public License for more details.
 #define keyboard_h
 
 #include "defines.h"
+#include "abi.h"
 EXTERN_G;
 
 // The max number of keystrokes to Send prior to taking a break to pump messages:
@@ -206,7 +207,7 @@ struct key_to_sc_type // Map key names to scan codes.
 enum KeyStateTypes {KEYSTATE_LOGICAL, KEYSTATE_PHYSICAL, KEYSTATE_TOGGLE}; // For use with GetKeyJoyState(), etc.
 enum KeyEventTypes {KEYDOWN, KEYUP, KEYDOWNANDUP};
 
-void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow = NULL);
+void SendKeys(LPCTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow = NULL);
 void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModifiersLRPersistent
 	, int aRepeatCount, KeyEventTypes aEventType, modLR_type aKeyAsModifiersLR, HWND aTargetWindow
 	, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED, bool aMoveOffset = false);
@@ -291,8 +292,8 @@ void KeyEventMenuMask(KeyEventTypes aEventType, DWORD aExtraInfo = KEY_IGNORE_AL
 ResultType PerformClick(LPTSTR aOptions);
 void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEventTypes &aEventType
 	, int &aRepeatCount, bool &aMoveOffset);
-ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, LPTSTR aY1, LPTSTR aX2, LPTSTR aY2
-	, LPTSTR aSpeed, LPTSTR aOffsetMode, LPTSTR aRepeatCount = _T(""), LPTSTR aDownUp = _T(""));
+FResult PerformMouse(ActionTypeType aActionType, LPCTSTR aButton, int *aX1, int *aY1, int *aX2, int *aY2
+	, int *aSpeed, LPCTSTR aOffsetMode, int *aRepeatCount, LPCTSTR aDownUp);
 void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY1, int aX2, int aY2
 	, int aRepeatCount, KeyEventTypes aEventType, int aSpeed, bool aMoveOffset);
 
@@ -319,6 +320,7 @@ void SetKeyHistoryMax(int aMax);
 #define KEYEVENT_PHYS(event_type, vk, sc) KeyEvent(event_type, vk, sc, NULL, false, KEY_PHYS_IGNORE)
 
 ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue);
+FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPCTSTR aToggleText);
 
 #define STD_MODS_TO_DISGUISE (MOD_LALT|MOD_RALT|MOD_LWIN|MOD_RWIN)
 void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, HWND aTargetWindow
@@ -346,11 +348,11 @@ ResultType LayoutHasAltGr(HKL aLayout);
 LPTSTR SCtoKeyName(sc_type aSC, LPTSTR aBuf, int aBufSize, bool aUseFallback = true);
 LPTSTR VKtoKeyName(vk_type aVK, LPTSTR aBuf, int aBufSize, bool aUseFallback = true);
 TCHAR VKtoChar(vk_type aVK, HKL aKeybdLayout = NULL);
-sc_type TextToSC(LPTSTR aText, bool *aSpecifiedByNumber = NULL);
-vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR = NULL, bool aExcludeThoseHandledByScanCode = false
+sc_type TextToSC(LPCTSTR aText, bool *aSpecifiedByNumber = NULL);
+vk_type TextToVK(LPCTSTR aText, modLR_type *pModifiersLR = NULL, bool aExcludeThoseHandledByScanCode = false
 	, bool aAllowExplicitVK = true, HKL aKeybdLayout = GetKeyboardLayout(0));
 vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLayout, bool aEnableAZFallback = true);
-bool TextToVKandSC(LPTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR = NULL, HKL aKeybdLayout = GetKeyboardLayout(0));
+bool TextToVKandSC(LPCTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR = NULL, HKL aKeybdLayout = GetKeyboardLayout(0));
 vk_type TextToSpecial(LPTSTR aText, size_t aTextLength, KeyEventTypes &aEventTypem, modLR_type &aModifiersLR
 	, bool aUpdatePersistent);
 
@@ -363,5 +365,7 @@ inline bool IsMouseVK(vk_type aVK)
 	return aVK >= VK_LBUTTON && aVK <= VK_XBUTTON2 && aVK != VK_CANCEL
 		|| aVK >= VK_NEW_MOUSE_FIRST && aVK <= VK_NEW_MOUSE_LAST;
 }
+
+void OurBlockInput(bool aEnable);
 
 #endif

@@ -26,12 +26,16 @@ HWND *WinGroup::sAlreadyVisited = NULL;
 int WinGroup::sAlreadyVisitedCount = 0;
 
 
-ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+ResultType WinGroup::AddWindow(LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText)
 // Caller should ensure that at least one param isn't NULL/blank.
 // This function is not thread-safe because it adds an entry to the list of window specs.
 // In addition, if this function is being called by one thread while another thread is calling IsMember(),
 // the thread-safety notes in IsMember() apply.
 {
+	if (!aTitle) aTitle = _T("");
+	if (!aText) aText = _T("");
+	if (!aExcludeTitle) aExcludeTitle = _T("");
+	if (!aExcludeText) aExcludeText = _T("");
 	// v1.0.41: If a window group can ever be deleted (or its window specs), that might defeat the
 	// thread-safety of WinExist/WinActive.
 	// v1.0.36.05: If all four window parameters are blank, allow it to be added but provide
@@ -95,12 +99,12 @@ void WinGroup::ActUponAll(BuiltInFunctionID aActionType, int aTimeToWaitForClose
 
 
 
-ResultType WinGroup::CloseAndGoToNext(bool aStartWithMostRecent)
+void WinGroup::CloseAndGoToNext(bool aStartWithMostRecent)
 // If the foreground window is a member of this group, close it and activate
 // the next member.
 {
 	if (IsEmpty())
-		return OK;  // OK since this is the expected behavior in this case.
+		return;
 	// Otherwise:
 	// Don't call Update(), let (De)Activate() do that.
 
@@ -138,22 +142,20 @@ ResultType WinGroup::CloseAndGoToNext(bool aStartWithMostRecent)
 	if (mIsModeActivate)
 	{
 		HWND active_window;
-		if (!Activate(aStartWithMostRecent, active_window, win_spec))
-			return FAIL;
-		return active_window ? OK : FAIL;
+		Activate(aStartWithMostRecent, active_window, win_spec);
 	}
-	return Deactivate(aStartWithMostRecent);
+	else
+		Deactivate(aStartWithMostRecent);
 }
 
 
 
-ResultType WinGroup::Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec *aWinSpec)
+void WinGroup::Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec *aWinSpec)
 {
 	aHwnd = NULL; // Set default.
 	if (IsEmpty())
-		return OK;
-	if (!Update(true)) // Update our private member vars.
-		return FAIL;  // It already displayed the error for us.
+		return;
+	Update(true); // Update our private member vars.
 	WindowSpec *win, *win_to_activate_next = aWinSpec;
 	bool group_is_active = false; // Set default.
 	HWND activate_win, active_window = GetForegroundWindow(); // This value is used in more than one place.
@@ -169,7 +171,7 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec
 			group_is_active = true;
 			MarkAsVisited(active_window);
 			aHwnd = active_window;
-			return OK;
+			return;
 		}
 		// else don't mark as visited even if it's a member of the group because
 		// we're about to attempt to activate a different window: the next
@@ -277,15 +279,13 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec
 				break;
 		}
 	}
-	return OK;
 }
 
 
 
-ResultType WinGroup::Deactivate(bool aStartWithMostRecent)
+void WinGroup::Deactivate(bool aStartWithMostRecent)
 {
-	if (!Update(false)) // Update our private member vars.
-		return FAIL;  // It already displayed the error for us.
+	Update(false); // Update our private member vars.
 
 	HWND active_window = GetForegroundWindow();
 	// Since EnumParentFindAnyExcept does not evaluate owned windows but one may have
@@ -347,13 +347,11 @@ ResultType WinGroup::Deactivate(bool aStartWithMostRecent)
 			SetForegroundWindowEx(FindWindow(_T("Shell_TrayWnd"), nullptr));
 		}
 	}
-	// Even if a window wasn't found, we've done our job so return OK:
-	return OK;
 }
 
 
 
-inline ResultType WinGroup::Update(bool aIsModeActivate)
+inline void WinGroup::Update(bool aIsModeActivate)
 {
 	mIsModeActivate = aIsModeActivate;
 	if (sGroupLastUsed != this)
@@ -366,7 +364,6 @@ inline ResultType WinGroup::Update(bool aIsModeActivate)
 		// block of SimpleHeap is usually never fully used, and this array won't even
 		// be allocated for short scripts that don't even use window groups.
 		sAlreadyVisited = SimpleHeap::Alloc<HWND>(MAX_ALREADY_VISITED);
-	return OK;
 }
 
 

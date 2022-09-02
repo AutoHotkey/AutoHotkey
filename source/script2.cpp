@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "window.h" // for IF_USE_FOREGROUND_WINDOW
 #include "application.h" // for MsgSleep()
 #include "script_func_impl.h"
+#include "abi.h"
 
 
 
@@ -27,9 +28,11 @@ GNU General Public License for more details.
 // GUI-related: Tray //
 ///////////////////////
 
-ResultType TrayTipParseOptions(LPTSTR aOptions, NOTIFYICONDATA &nic)
+ResultType TrayTipParseOptions(LPCTSTR aOptions, NOTIFYICONDATA &nic)
 {
-	LPTSTR next_option, option_end;
+	if (!aOptions)
+		return OK;
+	LPCTSTR next_option, option_end;
 	TCHAR option[1+MAX_NUMBER_SIZE];
 	for (next_option = omit_leading_whitespace(aOptions); ; next_option = omit_leading_whitespace(option_end))
 	{
@@ -78,7 +81,7 @@ invalid_option:
 }
 
 
-ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
+bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
 {
 	NOTIFYICONDATA nic = {0};
 	nic.cbSize = sizeof(nic);
@@ -87,8 +90,10 @@ ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
 	nic.uFlags = NIF_INFO;
 	// nic.uTimeout is no longer used because it is valid only on Windows 2000 and Windows XP.
 	if (!TrayTipParseOptions(aOptions, nic))
-		return FAIL;
-	if (*aTitle && !*aText)
+		return FR_FAIL;
+	if (!aTitle) aTitle = _T("");
+	if (!aText) aText = _T("");
+	if (aTitle && !*aText)
 		// As passing an empty string hides the TrayTip (or does nothing on Windows 10),
 		// pass a space to ensure the TrayTip is shown.  Testing showed that Windows 10
 		// will size the notification to fit only the title, as if there was no text.
@@ -613,7 +618,7 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 		return true;
 	case ID_TRAY_SUSPEND:
 	case ID_FILE_SUSPEND:
-		Line::ToggleSuspendState();
+		ToggleSuspendState();
 		return true;
 	case ID_TRAY_PAUSE:
 	case ID_FILE_PAUSE:
@@ -800,6 +805,67 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 		//SendMessage(g_hWndEdit, EM_SETSEL, -1, -1);
 		//SendMessage(g_hWndEdit, EM_SCROLLCARET, 0, 0);
 	}
+	return OK;
+}
+
+
+
+bif_impl void ListLines(BOOL *aMode)
+{
+	if (!aMode)
+	{
+		ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
+		return;
+	}
+	if (g->ListLinesIsEnabled)
+	{
+		// Since ExecUntil() just logged this ListLines On/Off in the line history, remove it to avoid
+		// cluttering the line history with distracting lines that the user probably wouldn't want to see.
+		// Might be especially useful in cases where a timer fires frequently (even if such a timer used
+		// "ListLines 0" as its top line, that line itself would appear very frequently in the line history).
+		if (Line::sLogNext > 0)
+			--Line::sLogNext;
+		else
+			Line::sLogNext = LINE_LOG_SIZE - 1;
+		Line::sLog[Line::sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronological order in some cases.
+	}
+	g->ListLinesIsEnabled = *aMode;
+}
+
+
+
+bif_impl void ListVars()
+{
+	ShowMainWindow(MAIN_MODE_VARS, false); // Pass "unrestricted" when the command is explicitly used in the script.
+}
+
+
+
+bif_impl void ListHotkeys()
+{
+	ShowMainWindow(MAIN_MODE_HOTKEYS, false); // Pass "unrestricted" when the command is explicitly used in the script.
+}
+
+
+
+bif_impl FResult KeyHistory(int *aMaxEvents)
+{
+	if (!aMaxEvents)
+	{
+		ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
+		return OK;
+	}
+	int value = *aMaxEvents;
+	if (value < 0 || value > 500)
+		return FR_E_ARG(0);
+	// GetHookStatus() only has a limited size buffer in which to transcribe the keystrokes.
+	// 500 events is about what you would expect to fit in a 32 KB buffer (in the unlikely
+	// event that the transcribed events create too much text, the text will be truncated,
+	// so it's not dangerous anyway).
+	if (g_KeybdHook || g_MouseHook)
+		PostThreadMessage(g_HookThreadID, AHK_HOOK_SET_KEYHISTORY, value, 0);
+	else
+		SetKeyHistoryMax(value);
 	return OK;
 }
 
@@ -1422,8 +1488,7 @@ BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam)
 ///////////////////////
 
 
-ResultType SetWorkingDir(LPTSTR aNewDir)
-// Throws a script runtime exception on failure, but only if the script has begun runtime execution.
+FResult SetWorkingDir(LPCTSTR aNewDir)
 // This function was added in v1.0.45.01 for the reason described below.
 {
 	// v1.0.45.01: Since A_ScriptDir omits the trailing backslash for roots of drives (such as C:),
@@ -1451,7 +1516,7 @@ ResultType SetWorkingDir(LPTSTR aNewDir)
 	}
 
 	if (!SetCurrentDirectory(aNewDir)) // Caused by nonexistent directory, permission denied, etc.
-		return FAIL;
+		return FR_E_WIN32;
 	// Otherwise, the change to the working directory succeeded.
 
 	// Other than during program startup, this should be the only place where the official
@@ -1465,7 +1530,7 @@ ResultType SetWorkingDir(LPTSTR aNewDir)
 
 
 
-void UpdateWorkingDir(LPTSTR aNewDir)
+void UpdateWorkingDir(LPCTSTR aNewDir)
 // aNewDir is NULL or a path which was just passed to SetCurrentDirectory().
 {
 	TCHAR buf[T_MAX_PATH]; // Windows 10 long path awareness enables working dir to exceed MAX_PATH.
@@ -1495,7 +1560,8 @@ LPTSTR GetWorkingDir()
 // GUI-related: FileSelect //
 /////////////////////////////
 
-BIF_DECL(BIF_FileSelect)
+bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGreeting, LPCTSTR aFilter
+	, ResultToken &aResultToken)
 // Since other script threads can interrupt this command while it's running, it's important that
 // this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
@@ -1503,12 +1569,8 @@ BIF_DECL(BIF_FileSelect)
 	if (g_nFileDialogs >= MAX_FILEDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		_f_throw(_T("The maximum number of File Dialogs has been reached."));
+		return FError(_T("The maximum number of File Dialogs has been reached."));
 	}
-	_f_param_string_opt(aOptions, 0);
-	_f_param_string_opt(aWorkingDir, 1);
-	_f_param_string_opt(aGreeting, 2);
-	_f_param_string_opt(aFilter, 3);
 	
 	LPCTSTR default_file_name = _T("");
 
@@ -1570,7 +1632,7 @@ BIF_DECL(BIF_FileSelect)
 	*pattern = '\0'; // Set default.
 	if (*aFilter)
 	{
-		LPTSTR pattern_start = _tcschr(aFilter, '(');
+		auto pattern_start = _tcschr(aFilter, '(');
 		if (pattern_start)
 		{
 			// Make pattern a separate string because we want to remove any spaces from it.
@@ -1634,7 +1696,7 @@ BIF_DECL(BIF_FileSelect)
 		++aOptions;
 		flags |= FOS_PICKFOLDERS;
 		if (*aFilter)
-			_f_throw_value(ERR_PARAM4_MUST_BE_BLANK);
+			return FValueError(ERR_PARAM4_MUST_BE_BLANK);
 		filter_count = 0;
 		break;
 	case 'M':  // Multi-select.
@@ -1679,7 +1741,7 @@ BIF_DECL(BIF_FileSelect)
 	HRESULT hr = CoCreateInstance(always_use_save_dialog ? CLSID_FileSaveDialog : CLSID_FileOpenDialog,
 		NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd));
 	if (FAILED(hr))
-		_f_throw_win32(hr);
+		return hr;
 
 	pfd->SetOptions(flags);
 	pfd->SetTitle(greeting);
@@ -1735,8 +1797,10 @@ BIF_DECL(BIF_FileSelect)
 			pfod->Release();
 		}
 		pfd->Release();
-		_f_return(files);
+		aResultToken.Return(files);
+		return OK;
 	}
+	
 	aResultToken.SetValue(_T(""), 0); // Set default.
 	IShellItem *psi;
 	if (SUCCEEDED(result) && SUCCEEDED(pfd->GetResult(&psi)))
@@ -1750,9 +1814,8 @@ BIF_DECL(BIF_FileSelect)
 		psi->Release();
 	}
 	//else: User pressed CANCEL vs. OK to dismiss the dialog or there was a problem displaying it.
-		// Currently assuming the user canceled, otherwise this would tell us whether an error
-		// occurred vs. the user canceling: if (result != HRESULT_FROM_WIN32(ERROR_CANCELLED))
 	pfd->Release();
+	return result == HRESULT_FROM_WIN32(ERROR_CANCELLED) ? OK : result;
 }
 
 
@@ -1761,11 +1824,9 @@ BIF_DECL(BIF_FileSelect)
 // Keyboard Functions //
 ////////////////////////
 
-ResultType Line::SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText)
-// Caller must have already validated that the args are correct.
-// Always returns OK, for use as caller's return value.
+FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPCTSTR aToggleText)
 {
-	ToggleValueType toggle = ConvertOnOffAlways(aToggleText, NEUTRAL);
+	ToggleValueType toggle = Line::ConvertOnOffAlways(aToggleText, NEUTRAL);
 	switch (toggle)
 	{
 	case TOGGLED_ON:
@@ -1793,6 +1854,8 @@ ResultType Line::SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR 
 		// so it can be left for a future enhancement:
 		ForceLock = NEUTRAL;
 		break;
+	default:
+		return FR_E_ARG(0);
 	}
 	return OK;
 }
@@ -1964,24 +2027,22 @@ BOOL Line::CheckValidFinallyJump(Line* jumpTarget, bool aSilent)
 ////////////////////
 
 
-BIF_DECL(BIF_Persistent)
+bif_impl void Persistent(BOOL *aNewValue, BOOL *aOldValue)
 {
-	// Need to set a return value explicitly, since the default is effectively StrPtr(""), not "".
 	// Returning the old value might have some use, but if the caller doesn't want its value to change,
 	// something awkward like "Persistent(isPersistent := Persistent())" is needed.  Rather than just
 	// returning the current status, Persistent() makes the script persistent because that's likely to
 	// be its most common use by far, and it's what users familiar with the old #Persistent may expect.
-	_f_set_retval_i(g_persistent);
-	g_persistent = ParamIndexToOptionalBOOL(0, true);
+	*aOldValue = g_persistent;
+	g_persistent = aNewValue ? *aNewValue : TRUE;
 }
 
 
 
-BIF_DECL(BIF_InstallHook)
+static void InstallHook(BOOL *aInstalling, BOOL *aUseForce, HookType which_hook)
 {
-	bool installing = ParamIndexToOptionalBOOL(0, true);
-	bool use_force = ParamIndexToOptionalBOOL(1, false);
-	auto which_hook = (HookType)_f_callee_id;
+	bool installing = aInstalling ? *aInstalling : true;
+	bool use_force = aUseForce ? *aUseForce : false;
 	// When the second parameter is true, unconditionally remove the hook.  If the first parameter is
 	// also true, the hook will be reinstalled fresh.  Otherwise the hook will be left uninstalled,
 	// until something happens to reinstall it, such as Hotkey::ManifestAllHotkeysHotstringsHooks().
@@ -1990,6 +2051,16 @@ BIF_DECL(BIF_InstallHook)
 	Hotkey::RequireHook(which_hook, installing);
 	if (!use_force || installing)
 		Hotkey::ManifestAllHotkeysHotstringsHooks();
+}
+
+bif_impl void InstallKeybdHook(BOOL *aInstalling, BOOL *aUseForce)
+{
+	InstallHook(aInstalling, aUseForce, HOOK_KEYBD);
+}
+
+bif_impl void InstallMouseHook(BOOL *aInstalling, BOOL *aUseForce)
+{
+	InstallHook(aInstalling, aUseForce, HOOK_MOUSE);
 }
 
 
@@ -2247,12 +2318,8 @@ BIF_DECL(BIF_IsSet)
 ////////////////////////
 
 
-BIF_DECL(BIF_GetKeyState)
+bif_impl FResult GetKeyState(LPCTSTR key_name, LPCTSTR mode, ResultToken &aResultToken)
 {
-	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because _f_retval_buf is used for something else below.
-	LPTSTR key_name = ParamIndexToString(0, key_name_buf);
-	// Keep this in sync with GetKeyJoyState().
-	// See GetKeyJoyState() for more comments about the following lines.
 	JoyControls joy;
 	int joystick_id;
 	vk_type vk = TextToVK(key_name);
@@ -2261,47 +2328,50 @@ BIF_DECL(BIF_GetKeyState)
 		if (   !(joy = (JoyControls)ConvertJoy(key_name, &joystick_id))   )
 		{
 			// It is neither a key name nor a joystick button/axis.
-			_f_throw_param(0);
+			return FR_E_ARG(0);
 		}
 		ScriptGetJoyState(joy, joystick_id, aResultToken, _f_retval_buf);
-		return;
+		return OK;
 	}
 	// Since above didn't return: There is a virtual key (not a joystick control).
-	TCHAR mode_buf[MAX_NUMBER_SIZE];
-	LPTSTR mode = ParamIndexToOptionalString(1, mode_buf);
 	KeyStateTypes key_state_type;
-	switch (ctoupper(*mode)) // Second parameter.
+	switch (mode ? ctoupper(*mode) : 'L') // Second parameter.
 	{
 	case 'T': key_state_type = KEYSTATE_TOGGLE; break; // Whether a toggleable key such as CapsLock is currently turned on.
 	case 'P': key_state_type = KEYSTATE_PHYSICAL; break; // Physical state of key.
-	default: key_state_type = KEYSTATE_LOGICAL;
+	case 'L': key_state_type = KEYSTATE_LOGICAL; break;
+	default: return FR_E_ARG(1);
 	}
-	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-	aResultToken.value_int64 = ScriptGetKeyState(vk, key_state_type); // 1 for down and 0 for up.
+	aResultToken.SetValue(ScriptGetKeyState(vk, key_state_type)); // 1 for down and 0 for up.
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_GetKeyName)
+bif_impl int GetKeyVK(LPCTSTR aKeyName)
 {
-	// Get VK and/or SC from the first parameter, which may be a key name, scXXX or vkXX.
-	// Key names are allowed even for GetKeyName() for simplicity and so that it can be
-	// used to normalise a key name; e.g. GetKeyName("Esc") returns "Escape".
-	LPTSTR key = ParamIndexToString(0, _f_number_buf);
 	vk_type vk;
 	sc_type sc;
-	TextToVKandSC(key, vk, sc);
+	TextToVKandSC(aKeyName, vk, sc);
+	return vk;
+}
 
-	switch (_f_callee_id)
-	{
-	case FID_GetKeyVK:
-		_f_return_i(vk ? vk : sc_to_vk(sc));
-	case FID_GetKeySC:
-		_f_return_i(sc ? sc : vk_to_sc(vk));
-	//case FID_GetKeyName:
-	default:
-		_f_return_p(GetKeyName(vk, sc, _f_retval_buf, _f_retval_buf_size, _T("")));
-	}
+
+bif_impl int GetKeySC(LPCTSTR aKeyName)
+{
+	vk_type vk;
+	sc_type sc;
+	TextToVKandSC(aKeyName, vk, sc);
+	return sc;
+}
+
+
+bif_impl void GetKeyName(LPCTSTR aKeyName, StrRet &aRetVal)
+{
+	vk_type vk;
+	sc_type sc;
+	TextToVKandSC(aKeyName, vk, sc);
+	aRetVal.SetStatic(GetKeyName(vk, sc, aRetVal.CallerBuf(), aRetVal.CallerBufSize, _T("")));
 }
 
 
@@ -2514,6 +2584,95 @@ BIF_DECL(BIF_SetTimer)
 	}
 	g_script.UpdateOrCreateTimer(callback, update_period, period, update_priority, priority);
 	_f_return_empty;
+}
+
+
+
+bif_impl void ScriptSleep(int aDelay)
+{
+	MsgSleep(aDelay);
+}
+
+
+
+bif_impl void Critical(LPCTSTR aSetting)
+{
+	// v1.0.46: When the current thread is critical, have the script check messages less often to
+	// reduce situations where an OnMessage or GUI message must be discarded due to "thread already
+	// running".  Using 16 rather than the default of 5 solves reliability problems in a custom-menu-draw
+	// script and probably many similar scripts -- even when the system is under load (though 16 might not
+	// be enough during an extreme load depending on the exact preemption/timeslice dynamics involved).
+	// DON'T GO TOO HIGH because this setting reduces response time for ALL messages, even those that
+	// don't launch script threads (especially painting/drawing and other screen-update events).
+	// Some hardware has a tickcount granularity of 15 instead of 10, so this covers more variations.
+	DWORD peek_frequency_when_critical_is_on = 16; // Set default.  See below.
+	// v1.0.48: Below supports "Critical 0" as meaning "Off" to improve compatibility with A_IsCritical.
+	// In fact, for performance, only the following are no recognized as turning on Critical:
+	//     - "On"
+	//     - ""
+	//     - Integer other than 0.
+	// Everything else is considered to be "Off", including "Off", any non-blank string that
+	// doesn't start with a non-zero number, and zero itself.
+	g->ThreadIsCritical = !aSetting || !*aSetting // i.e. a first arg that's omitted or blank is the same as "ON". See comments above.
+		|| !_tcsicmp(aSetting, _T("On"))
+		|| (peek_frequency_when_critical_is_on = ATOU(aSetting)); // Non-zero integer also turns it on. Relies on short-circuit boolean order.
+	if (g->ThreadIsCritical) // Critical has been turned on. (For simplicity even if it was already on, the following is done.)
+	{
+		g->PeekFrequency = peek_frequency_when_critical_is_on;
+		g->AllowThreadToBeInterrupted = false;
+		// Ensure uninterruptibility never times out.  IsInterruptible() relies on this to avoid the
+		// need to check g->ThreadIsCritical, which in turn allows global_maximize_interruptibility()
+		// and DialogPrep() to avoid resetting g->ThreadIsCritical, which allows it to reliably be
+		// used as the default setting for new threads, even when the auto-execute thread itself
+		// (or the idle thread) needs to be interruptible, such as while displaying a dialog->
+		// In other words, g->ThreadIsCritical only represents the desired setting as set by the
+		// script, and isn't the actual mechanism used to make the thread uninterruptible.
+		g->UninterruptibleDuration = -1;
+	}
+	else // Critical has been turned off.
+	{
+		// Since Critical is being turned off, allow thread to be immediately interrupted regardless of
+		// any "Thread Interrupt" settings.
+		g->PeekFrequency = DEFAULT_PEEK_FREQUENCY;
+		g->AllowThreadToBeInterrupted = true;
+	}
+	// The thread's interruptibility has been explicitly set; so the script is now in charge of
+	// managing this thread's interruptibility.
+}
+
+
+
+bif_impl FResult Thread(LPCTSTR aCommand, int *aValue1, int *aValue2)
+{
+	switch (Line::ConvertThreadCommand(aCommand))
+	{
+	case THREAD_CMD_PRIORITY:
+		if (aValue1)
+			g->Priority = *aValue1;
+		return OK;
+	case THREAD_CMD_INTERRUPT:
+		// If either one is blank, leave that setting as it was before.
+		if (aValue1)
+			g_script.mUninterruptibleTime = *aValue1;  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
+		if (aValue2)
+			g_script.mUninterruptedLineCountMax = *aValue2;  // 32-bit also, to help performance (since huge values seem unnecessary).
+		return OK;
+	case THREAD_CMD_NOTIMERS:
+		g->AllowTimers = (aValue1 && *aValue1 == 0); // Double-negative NoTimers=false -> allow timers.
+		return OK;
+	default:
+		return FR_E_ARG(0);
+	}
+}
+
+
+
+bif_impl void OutputDebug(LPCTSTR aText)
+{
+#ifdef CONFIG_DEBUGGER
+	if (!g_Debugger.OutputStdErr(aText))
+#endif
+		OutputDebugString(aText);
 }
 
 
@@ -3632,7 +3791,7 @@ ResultType ResultToken::Return(LPTSTR aValue, size_t aLength)
 
 
 
-int ConvertJoy(LPTSTR aBuf, int *aJoystickID, bool aAllowOnlyButtons)
+int ConvertJoy(LPCTSTR aBuf, int *aJoystickID, bool aAllowOnlyButtons)
 // The caller TextToKey() currently relies on the fact that when aAllowOnlyButtons==true, a value
 // that can fit in a sc_type (USHORT) is returned, which is true since the joystick buttons
 // are very small numbers (JOYCTRL_1==12).
@@ -3640,7 +3799,7 @@ int ConvertJoy(LPTSTR aBuf, int *aJoystickID, bool aAllowOnlyButtons)
 	if (aJoystickID)
 		*aJoystickID = 0;  // Set default output value for the caller.
 	if (!aBuf || !*aBuf) return JOYCTRL_INVALID;
-	LPTSTR aBuf_orig = aBuf;
+	auto aBuf_orig = aBuf;
 	for (; *aBuf >= '0' && *aBuf <= '9'; ++aBuf); // self-contained loop to find the first non-digit.
 	if (aBuf > aBuf_orig) // The string starts with a number.
 	{

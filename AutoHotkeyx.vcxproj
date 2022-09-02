@@ -205,6 +205,7 @@
     <ClCompile Include="source\ahkversion.cpp" />
     <ClCompile Include="source\application.cpp" />
     <ClCompile Include="source\AutoHotkey.cpp" />
+    <ClCompile Include="source\MdFunc.cpp" />
     <ClCompile Include="source\clipboard.cpp" />
     <ClCompile Include="source\Debugger.cpp">
       <Optimization>MinSpace</Optimization>
@@ -272,8 +273,11 @@
     <ClCompile Include="source\WinGroup.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="source\abi.h" />
     <ClInclude Include="source\ahkversion.h" />
     <ClInclude Include="source\application.h" />
+    <ClInclude Include="source\lib\functions.h" />
+    <ClInclude Include="source\MdFunc.h" />
     <ClInclude Include="source\clipboard.h" />
     <ClInclude Include="source\config.h" />
     <ClInclude Include="source\debug.h" />
@@ -286,6 +290,7 @@
     <ClInclude Include="source\keyboard_mouse.h" />
     <ClInclude Include="source\KuString.h" />
     <ClInclude Include="source\lib_pcre\pcre\pcret.h" />
+    <ClInclude Include="source\MdType.h" />
     <ClInclude Include="source\os_version.h" />
     <ClInclude Include="source\lib_pcre\pcre\pcre.h" />
     <ClInclude Include="source\qmath.h" />
@@ -297,6 +302,7 @@
     <ClInclude Include="source\SimpleHeap.h" />
     <ClInclude Include="source\stdafx.h" />
     <ClInclude Include="source\StringConv.h" />
+    <ClInclude Include="source\StrRet.h" />
     <ClInclude Include="source\TextIO.h" />
     <ClInclude Include="source\util.h" />
     <ClInclude Include="source\var.h" />
@@ -304,7 +310,7 @@
     <ClInclude Include="source\WinGroup.h" />
   </ItemGroup>
   <PropertyGroup>
-    <Masm>ml</Masm>
+    <Masm>ml /safeseh</Masm>
     <Masm Condition="'$(Platform)'=='x64'">ml64</Masm>
   </PropertyGroup>
   <ItemDefinitionGroup>
@@ -324,6 +330,9 @@
     </CustomBuild>
     <CustomBuild Include="source\libx64call\x64stub.asm">
       <ExcludedFromBuild Condition="'$(Platform)'!='x64'">true</ExcludedFromBuild>
+    </CustomBuild>
+    <CustomBuild Include="source\x86call.asm">
+      <ExcludedFromBuild Condition="'$(Platform)'=='x64'">true</ExcludedFromBuild>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>

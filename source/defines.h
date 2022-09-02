@@ -115,7 +115,6 @@ enum ExcptModeType {EXCPTMODE_NONE = 0
 	//, EXCPTMODE_TRY = 1 // Currently unused: Try block present.
 	, EXCPTMODE_CATCH = 2 // Exception will be suppressed or caught.
 	, EXCPTMODE_DELETE = 4 // Unhandled exceptions will display ERR_ABORT_DELETE vs. ERR_ABORT.
-	, EXCPTMODE_LINE_WORKAROUND = 8 // See comments in BIF_PerformAction.
 	, EXCPTMODE_CAUGHT = 0x10 // An exception is already being handled within a CATCH, and is not shadowed by TRY.
 };
 
@@ -604,7 +603,7 @@ enum enum_act {
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_STATIC
 , ACT_HOTKEY_IF // Must be before ACT_FIRST_COMMAND.
-, ACT_EXIT // Used both with BIF_PerformAction and AddLine(), but excluded from the "named" range below so the function is preferred.
+, ACT_EXIT // Used with AddLine(), but excluded from the "named" range below so that the function is preferred.
 , ACT_IF, ACT_FIRST_NAMED_ACTION = ACT_IF
 , ACT_ELSE
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
@@ -617,34 +616,9 @@ enum enum_act {
 , ACT_SWITCH, ACT_CASE // Keep ACT_TRY..ACT_CASE together for ACT_EXPANDS_ITS_OWN_ARGS.
 , ACT_LAST_NAMED_ACTION = ACT_CASE
 // ================================================================================
-// All others are not included in g_act, and are only used with BIF_PerformAction:
+// All others are not included in g_act, and are only used for misc. purposes:
 // ================================================================================
-, ACT_EXITAPP
-, ACT_TRAYTIP
-, ACT_RUNAS, ACT_DOWNLOAD
-, ACT_SEND, ACT_SENDTEXT, ACT_SENDINPUT, ACT_SENDPLAY, ACT_SENDEVENT
-, ACT_SENDMODE, ACT_SENDLEVEL, ACT_COORDMODE, ACT_SETDEFAULTMOUSESPEED
-, ACT_CLICK, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG
-, ACT_SLEEP
-, ACT_CRITICAL, ACT_THREAD
-, ACT_WINMINIMIZEALL, ACT_WINMINIMIZEALLUNDO
-// Keep rarely used actions near the bottom for parsing/performance reasons:
-, ACT_GROUPADD, ACT_GROUPDEACTIVATE, ACT_GROUPCLOSE
-, ACT_SOUNDBEEP, ACT_SOUNDPLAY
-, ACT_FILEDELETE, ACT_FILERECYCLE, ACT_FILERECYCLEEMPTY
-, ACT_FILEINSTALL, ACT_FILECOPY, ACT_FILEMOVE, ACT_DIRCOPY, ACT_DIRMOVE
-, ACT_DIRCREATE, ACT_DIRDELETE
-, ACT_FILESETATTRIB, ACT_FILESETTIME
-, ACT_SETWORKINGDIR, ACT_FILECREATESHORTCUT
-, ACT_INIWRITE, ACT_INIDELETE
-, ACT_OUTPUTDEBUG
-, ACT_SETKEYDELAY, ACT_SETMOUSEDELAY, ACT_SETWINDELAY, ACT_SETCONTROLDELAY
-, ACT_SUSPEND, ACT_PAUSE
-, ACT_BLOCKINPUT
-, ACT_SETNUMLOCKSTATE, ACT_SETSCROLLLOCKSTATE, ACT_SETCAPSLOCKSTATE
-, ACT_KEYHISTORY, ACT_LISTLINES, ACT_LISTVARS, ACT_LISTHOTKEYS
-, ACT_EDIT, ACT_RELOAD
-, ACT_SHUTDOWN
+, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG // Used by PerformMouse().
 };
 
 #define ACT_IS_IF(ActionType) (ActionType == ACT_IF)
@@ -1010,7 +984,7 @@ inline void global_set_defaults(ScriptThreadSettings &g)
 	g.DetectHiddenWindows = false;  // Same as AutoIt2 but unlike AutoIt3; seems like a more intuitive default.
 	g.DetectHiddenText = true;  // Unlike AutoIt, which defaults to false.  This setting performs better.
 	#define DEFAULT_PEEK_FREQUENCY 5
-	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in ACT_CRITICAL.
+	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in Critical().
 	g.AllowTimers = true;
 	g.ThreadIsCritical = false;
 	g.WinDelay = 100;
