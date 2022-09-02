@@ -1743,23 +1743,6 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 		return ScriptError(msg_text);
 	}
 	
-	// Set the working directory so that any #Include directives are relative to the directory
-	// containing this file by default.  Call SetWorkingDir() vs. SetCurrentDirectory() so that it
-	// succeeds even for a root drive like C: that lacks a backslash (see SetWorkingDir() for details).
-	if (source_file_index)
-	{
-		LPTSTR terminate_here = _tcsrchr(full_path, '\\');
-		if (terminate_here > full_path)
-		{
-			*terminate_here = '\0'; // Temporarily terminate it for use with SetWorkingDir().
-			SetWorkingDir(full_path);
-			*terminate_here = '\\'; // Undo the termination.
-		}
-		//else: probably impossible? Just leave the working dir as-is, for simplicity.
-	}
-	else
-		SetWorkingDir(mFileDir);
-
 	// This is done only after the file has been successfully opened in case aIgnoreLoadFailure==true:
 	if (!Line::sSourceFile[source_file_index])
 		Line::sSourceFile[source_file_index] = SimpleHeap::Alloc(full_path);
@@ -1778,6 +1761,23 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 			&& !LoadIncludedFile(mCmdLineInclude, false, false))
 			return FAIL;
 	}
+	
+	// Set the working directory so that any #Include directives are relative to the directory
+	// containing this file by default.  Call SetWorkingDir() vs. SetCurrentDirectory() so that it
+	// succeeds even for a root drive like C: that lacks a backslash (see SetWorkingDir() for details).
+	if (source_file_index)
+	{
+		LPTSTR terminate_here = _tcsrchr(full_path, '\\');
+		if (terminate_here > full_path)
+		{
+			*terminate_here = '\0'; // Temporarily terminate it for use with SetWorkingDir().
+			SetWorkingDir(full_path);
+			*terminate_here = '\\'; // Undo the termination.
+		}
+		//else: probably impossible? Just leave the working dir as-is, for simplicity.
+	}
+	else
+		SetWorkingDir(mFileDir);
 
 #else // Stand-alone mode (there are no include files in this mode since all of them were merged into the main script at the time of compiling).
 
