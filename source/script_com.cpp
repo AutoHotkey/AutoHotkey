@@ -772,11 +772,19 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, TTVArgType *aVarIsArg)
 					if (aVar.punkVal)
 						aVar.punkVal->AddRef();
 				}
-				else if ((aVar.vt & ~VT_TYPEMASK) == VT_ARRAY && (obj->mFlags & ComObject::F_OWNVALUE))
+				else if (obj->mFlags & ComObject::F_OWNVALUE)
 				{
-					// Copy array since both sides will call Destroy().
-					if (FAILED(SafeArrayCopy(aVar.parray, &aVar.parray)))
-						aVar.vt = VT_EMPTY;
+					if ((aVar.vt & ~VT_TYPEMASK) == VT_ARRAY)
+					{
+						// Copy array since both sides will call Destroy().
+						if (FAILED(SafeArrayCopy(aVar.parray, &aVar.parray)))
+							aVar.vt = VT_EMPTY;
+					}
+					else if (aVar.vt == VT_BSTR)
+					{
+						// Copy the string.
+						aVar.bstrVal = SysAllocStringLen(aVar.bstrVal, SysStringLen(aVar.bstrVal));
+					}
 				}
 			}
 			break;
