@@ -839,7 +839,8 @@ void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions)
 	bool include_focused_only = tcscasestr(aOptions, _T("Focused"));  // Same.
 	LPTSTR col_option = tcscasestr(aOptions, _T("Col")); // Also used for mode "Count Col"
 	int requested_col = col_option ? ATOI(col_option + 3) - 1 : -1;
-	if (col_count > -1 && col_option && (requested_col < 0 || requested_col >= col_count)) // Specified column does not exist.
+	if (col_option && (get_count ? col_option[3] && !IS_SPACE_OR_TAB(col_option[3]) // "Col" has a suffix.
+		: (requested_col < 0 || col_count > -1 && requested_col >= col_count))) // Specified column does not exist.
 		_f_throw_value(ERR_PARAM1_INVALID, col_option);
 
 	// IF THE "COUNT" OPTION IS PRESENT, FULLY HANDLE THAT AND RETURN
