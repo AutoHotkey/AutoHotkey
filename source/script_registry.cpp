@@ -200,7 +200,7 @@ void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR
 	if (result != ERROR_SUCCESS)
 		goto finish;
 
-	LPTSTR contents, cp;
+	LPTSTR contents;
 
 	// The way we read is different depending on the type of the key
 	switch (dwType)
@@ -255,31 +255,41 @@ void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR
 				// proper null-terminating characters. Applications should ensure that the string is properly
 				// terminated before using it, otherwise, the application may fail by overwriting a buffer."
 				//
-				// Double-terminate so that the loop can find out the true end of the buffer.
 				// The MSDN docs cited above are a little unclear.  The most likely interpretation is that
 				// dwRes contains the true size retrieved.  For example, if dwRes is 1, the first char
 				// in the buffer is either a NULL or an actual non-NULL character that was originally
-				// stored in the registry incorrectly (i.e. without a terminator).  In either case, do
-				// not change the first character, just leave it as is and add a NULL at the 2nd and
-				// 3rd character positions to ensure that it is double terminated in every case:
-				contents[dwCharLen] = contents[dwCharLen + 1] = '\0';
-
+				// stored in the registry incorrectly (i.e. without a terminator).
+				//
+				// Include all data up to dwCharLen, excluding one null-terminator if present,
+				// but ensure the final value is properly null-terminated outside of dwCharLen.
+				if (!contents[dwCharLen - 1])
+					--dwCharLen;
+				else
+					contents[dwCharLen] = '\0';
 				if (dwType == REG_MULTI_SZ) // Convert NULL-delimiters into newline delimiters.
 				{
-					for (cp = contents;; ++cp)
+					// Translate each null-terminated string within dwCharLen to a newline-terminated string.
+					// There used to be a comment here indicating that terminating the final item with \n
+					// makes parsing easier, but I don't think that's true when using Loop Parse/StrSplit.
+					// In any case, RegRead's documentation indicates that all items will end with `n.
+					// Cases covered here:
+					//  A. item1\0item2\0\0  ; Correctly terminated (one \0 was excluded from dwCharLen above)
+					//  B. item1\0item2\0    ; Incorrectly terminated
+					//  C. item1\0item2      ; Incorrectly unterminated (but it was terminated above)
+					// RegRead distinguishes between A & B/C by only showing a trailing blank line for A,
+					// but doing that here would be contrary to the documentation and probably wouldn't be
+					// useful since B and C are technically invalid.
+					if (!dwCharLen // Value was just \0 on its own (dwCharLen is 0 due to --dwCharLen above).
+						|| contents[dwCharLen - 1]) // Case B or C above.
 					{
-						if (!*cp)
-						{
-							// Unlike AutoIt3, it seems best to have a newline character after the
-							// last item in the list also.  It usually makes parsing easier:
-							*cp = '\n';	// Convert to \n for later storage in the user's variable.
-							if (!*(cp + 1)) // Buffer is double terminated, so this is safe.
-								// Double null terminator marks the end of the used portion of the buffer.
-								break;
-						}
+						++dwCharLen; // Let the null-terminator (guaranteed above) be translated to \n.
+						contents[dwCharLen] = '\0'; // Ensure there's still an actual null-terminator.
 					}
-					// else the buffer is empty (see above notes for explanation).  So don't put any newlines
-					// into it at all, since each newline should correspond to an item in the buffer.
+					// Empty items (signified by \0\0 within the value) are specifically permitted by this loop,
+					// and are known to commonly occur in the PendingRenameOperations value written by MoveFileEx.
+					for (DWORD i = 0; i < dwCharLen; ++i)
+						if (!contents[i])
+							contents[i] = '\n';
 				}
 			}
 			aResultToken.marker_length = _tcslen(contents); // Due to conservative buffer sizes above, length is probably too large by 3. So update to reflect the true length.

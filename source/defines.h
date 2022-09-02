@@ -954,6 +954,7 @@ inline void global_clear_state(ScriptThreadState &g)
 	//g.IsPaused = false;
 	//g.Priority = 0;
 	//g.UninterruptedLineCount = 0;
+	//g.DialogHWND = NULL;
 	//g.DialogOwner = NULL;
 	//g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
 	// Above line is done because allowing it to be permanently changed by the auto-exec section

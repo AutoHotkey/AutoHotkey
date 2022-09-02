@@ -1436,6 +1436,9 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			}
 		if (!varbkp && static_vars)
 			var = static_vars->Find(name);
+		// If a var wasn't found above, make sure not to return a local var of the wrong function or depth.
+		if (!var)
+			aVarScope = FINDVAR_GLOBAL;
 	}
 
 	if (!var && !varbkp)

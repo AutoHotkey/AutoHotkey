@@ -552,7 +552,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					pgui->Escape();
 					continue; // Omit this keystroke from any further processing.
 				default: // VK_TAB
-					if (pcontrol->attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // It has the "WantTab" property.
+					if ((pcontrol->attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // It has the "WantTab" property.
+						&& !(GetWindowLong(pcontrol->hwnd, GWL_STYLE) & ES_READONLY)) // It doesn't have "ReadOnly".
 					{
 						// For flexibility, do this even for single-line edit controls, though in that
 						// case the tab keystroke will produce an "empty box" character.
