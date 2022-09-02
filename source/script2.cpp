@@ -9818,23 +9818,28 @@ bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 		return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0; // Indicate success if it already exists as a dir.
 	}
 
+	// v1.1.35.00: Added forward-slash support for FileCreateDir:
+	TCHAR dirSpec[T_MAX_PATH];
+	if (!GetFullPathName(aDirSpec, _countof(dirSpec), dirSpec, NULL))
+		return false;
+
 	// If it has a backslash, make sure all its parent directories exist before we attempt
 	// to create this directory:
-	LPTSTR last_backslash = _tcsrchr(aDirSpec, '\\');
-	if (last_backslash > aDirSpec // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
+	LPTSTR last_backslash = _tcsrchr(dirSpec, '\\');
+	if (last_backslash > dirSpec // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
 		&& last_backslash[-1] != ':') // v1.1.31.00: Don't attempt FileCreateDir("C:") since that's equivalent to either "C:\" or the working directory (which already exists), or FileCreateDir("\\?\C:") since it always fails.
 	{
 		LPTSTR parent_dir;
 		if (aCanModifyDirSpec)
 		{
-			parent_dir = aDirSpec; // Caller provided a modifiable aDirSpec.
+			parent_dir = dirSpec; // Caller provided a modifiable aDirSpec.
 			*last_backslash = '\0'; // Temporarily terminate for parent directory.
 		}
 		else
 		{
 			// v1.1.31.00: Allocate a modifiable buffer to be used by all calls (supports long paths).
-			parent_dir = (LPTSTR)_alloca((last_backslash - aDirSpec + 1) * sizeof(TCHAR));
-			tcslcpy(parent_dir, aDirSpec, last_backslash - aDirSpec + 1); // Omits the last backslash.
+			parent_dir = (LPTSTR)_alloca((last_backslash - dirSpec + 1) * sizeof(TCHAR));
+			tcslcpy(parent_dir, dirSpec, last_backslash - dirSpec + 1); // Omits the last backslash.
 		}
 		bool exists = FileCreateDir(parent_dir, parent_dir); // Recursively create all needed ancestor directories.
 		if (aCanModifyDirSpec)
@@ -9853,7 +9858,7 @@ bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 	// The above has recursively created all parent directories of aDirSpec if needed.
 	// Now we can create aDirSpec.  Be sure to explicitly set g_ErrorLevel since it's value
 	// is now indeterminate due to action above:
-	return CreateDirectory(aDirSpec, NULL);
+	return CreateDirectory(dirSpec, NULL);
 }
 
 
