@@ -312,6 +312,7 @@ bif_impl FResult DriveGetStatus(LPCTSTR aDrive, StrRet &aRetVal)
 		? ERROR_SUCCESS : GetLastError())
 	{
 	case ERROR_SUCCESS:			aRetVal.SetStatic(_T("Ready")); break;
+	case ERROR_FILE_NOT_FOUND:
 	case ERROR_PATH_NOT_FOUND:	aRetVal.SetStatic(_T("Invalid")); break;
 	case ERROR_NOT_READY:		aRetVal.SetStatic(_T("NotReady")); break;
 	case ERROR_WRITE_PROTECT:	aRetVal.SetStatic(_T("ReadOnly")); break;
