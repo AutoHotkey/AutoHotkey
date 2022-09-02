@@ -1305,21 +1305,31 @@ bif_impl ResultType Exit(int *aExitCode)
 	// UPDATE: Handle it this way unconditionally so that the thread is properly exited prior to
 	// the script terminating; i.e. any FINALLY statements are executed and __delete is called for
 	// any objects in local variables or on the expression evaluation stack.
+	// UPDATE: Also need to make sure that the exit code gets used (commit 40dd95f broke that).
+	// For now it seems best to match the old behaviour of ignoring the exit code if Exit isn't
+	// going to immediately terminate the script.  Avoid checking IsPersistent() here because
+	// conditions can change during stack-unwind due to __delete or FINALLY.  Instead, this is
+	// reset to 0 in ResumeUnderlyingThread().
+	if (g_nThreads <= 1)
+		g_script.mPendingExitCode = aExitCode ? *aExitCode : 0;
 	return EARLY_EXIT;
 }
 
 bif_impl ResultType ExitApp(int *aExitCode)
 {
-	return g_script.ExitApp(EXIT_EXIT, aExitCode ? *aExitCode : 0);
+	g_script.mPendingExitCode = aExitCode ? *aExitCode : 0;
+	return g_script.ExitApp(EXIT_EXIT);
 }
 
 
 
-ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
+ResultType Script::ExitApp(ExitReasons aExitReason)
 // Normal exit (if aBuf is NULL), or a way to exit immediately on error (which is mostly
 // for times when it would be unsafe to call MsgBox() due to the possibility that it would
 // make the situation even worse).
 {
+	int aExitCode = mPendingExitCode; // It's done this way so Exit() can pass an exit code indirectly.
+
 	// Note that currently, mOnExit.Count() can only be non-zero if the script is in a runnable
 	// state (since registering an OnExit function requires that the script calls OnExit()).
 	// If this ever changes, the !mIsReadyToExecute condition should be added below:

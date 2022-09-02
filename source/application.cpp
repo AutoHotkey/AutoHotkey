@@ -1928,10 +1928,15 @@ void ResumeUnderlyingThread()
 	// need it, lends maintainability and peace of mind.
 	g_script.UpdateTrayIcon();
 
-	// If this was the last running thread and the script has nothing keeping it open (hotkeys, Gui,
-	// message monitors, etc.) then it should terminate now:
-	if (!g_OnExitIsRunning)
-		g_script.ExitIfNotPersistent(EXIT_EXIT);
+	if (!g_nThreads)
+	{
+		// If this was the last running thread and the script has nothing keeping it open (hotkeys, Gui,
+		// message monitors, etc.) then it should terminate now:
+		if (!g_OnExitIsRunning)
+			g_script.ExitIfNotPersistent(EXIT_EXIT);
+		// Since above didn't ExitApp(), reset the exit code for when we do eventually ExitApp():
+		g_script.mPendingExitCode = 0;
+	}
 }
 
 
