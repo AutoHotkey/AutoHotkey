@@ -110,6 +110,10 @@ public:
 		{
 			SafeArrayDestroy(mArray);
 		}
+		else if (mVarType == VT_BSTR && (mFlags & F_OWNVALUE))
+		{
+			SysFreeString((BSTR)mValPtr);
+		}
 	}
 };
 

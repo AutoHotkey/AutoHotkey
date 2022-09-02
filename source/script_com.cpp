@@ -97,6 +97,8 @@ BIF_DECL(BIF_ComObj) // Handles both ComObjFromPtr and ComValue.Call.
 			return ComError(hr, aResultToken);
 		if (aParamCount > 2)
 			flags = (USHORT)TokenToInt64(*aParam[2]);
+		if (vt == VT_BSTR && TypeOfToken(*aParam[1]) != SYM_INTEGER)
+			flags |= ComObject::F_OWNVALUE; // BSTR was allocated above, so make sure it will be freed later.
 	}
 	else
 	{
