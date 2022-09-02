@@ -2912,12 +2912,13 @@ bool Script::IsSOLContExpr(LineBuffer &next_buf)
 		// ensures there is no ambiguity).  Note that checking if we're inside a class definition is not
 		// sufficient because multi-line expressions are valid there too (i.e. for var initializers).
 		// This also rules out valid double-derefs such as and%suffix% := 1.
-		if (IS_SPACE_OR_TAB(*cp) && ConvertWordOperator(next_buf, cp - next_buf))
+		if (IS_SPACE_OR_TAB(*cp))
 		{
-			// ISSET doesn't need to be excluded here because it can't be legally followed by a space or tab.
 			// Unlike in v1, there's no check for an operator after AND/OR (such as AND := 1) because they
 			// should never be used as variable names.
-			return true;
+			auto op = ConvertWordOperator(next_buf, cp - next_buf);
+			if (op && op != SYM_ISSET) // IsSet is excluded for property definitions like IsSet => true.
+				return true;
 		}
 		break;
 	default:
