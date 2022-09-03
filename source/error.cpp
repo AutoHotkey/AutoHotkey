@@ -307,7 +307,7 @@ ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR 
 		return OK;
 
 	if (aErrorType == CRITICAL_ERROR && mIsReadyToExecute)
-		// Pass EXIT_DESTROY to ensure the program always exits, regardless of OnExit.
+		// Pass EXIT_CRITICAL to ensure the program always exits, regardless of OnExit.
 		ExitApp(EXIT_CRITICAL);
 
 	// Since above didn't exit, the caller isn't CriticalError(), which ignores
