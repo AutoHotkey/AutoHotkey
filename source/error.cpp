@@ -225,14 +225,21 @@ void Script::PrintErrorStdOut(LPCTSTR aErrorText, int aLength, LPCTSTR aFile)
 	tf.Close();
 }
 
+int FormatStdErr(LPTSTR aBuf, int aBufSize, LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexType aFileIndex, LineNumberType aLineNumber, bool aWarn = false)
+{
+	#define STD_ERROR_FORMAT _T("%s (%d) : ==> %s%s\n")
+	int n = sntprintf(aBuf, aBufSize, STD_ERROR_FORMAT, Line::sSourceFile[aFileIndex], aLineNumber
+		, aWarn ? _T("Warning: ") : _T(""), aErrorText);
+	if (*aExtraInfo)
+		n += sntprintf(aBuf + n, aBufSize - n, _T("     Specifically: %s\n"), aExtraInfo);
+	return n;
+}
+
 // For backward compatibility, this actually prints to stderr, not stdout.
 void Script::PrintErrorStdOut(LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexType aFileIndex, LineNumberType aLineNumber)
 {
 	TCHAR buf[LINE_SIZE * 2];
-#define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
-	int n = sntprintf(buf, _countof(buf), STD_ERROR_FORMAT, Line::sSourceFile[aFileIndex], aLineNumber, aErrorText);
-	if (*aExtraInfo)
-		n += sntprintf(buf + n, _countof(buf) - n, _T("     Specifically: %s\n"), aExtraInfo);
+	auto n = FormatStdErr(buf, _countof(buf), aErrorText, aExtraInfo, aFileIndex, aLineNumber);
 	PrintErrorStdOut(buf, n, _T("**"));
 }
 
@@ -852,21 +859,11 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 	int fileIndex = line ? line->mFileIndex : mCurrFileIndex;
 	FileIndexType lineNumber = line ? line->mLineNumber : mCombinedLineNumber;
 
-	TCHAR buf[MSGBOX_TEXT_SIZE], *cp = buf;
-	int buf_space_remaining = (int)_countof(buf);
-	
-	#define STD_WARNING_FORMAT _T("%s (%d) : ==> Warning: %s\n")
-	cp += sntprintf(cp, buf_space_remaining, STD_WARNING_FORMAT, Line::sSourceFile[fileIndex], lineNumber, aWarningText);
-	buf_space_remaining = (int)(_countof(buf) - (cp - buf));
-
-	if (*aExtraInfo)
-	{
-		cp += sntprintf(cp, buf_space_remaining, _T("     Specifically: %s\n"), aExtraInfo);
-		buf_space_remaining = (int)(_countof(buf) - (cp - buf));
-	}
+	TCHAR buf[MSGBOX_TEXT_SIZE];
+	auto n = FormatStdErr(buf, _countof(buf), aWarningText, aExtraInfo, fileIndex, lineNumber, true);
 
 	if (warnMode == WARNMODE_STDOUT)
-		PrintErrorStdOut(buf);
+		PrintErrorStdOut(buf, n);
 	else
 #ifdef CONFIG_DEBUGGER
 	if (!g_Debugger.OutputStdErr(buf))
