@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "window.h"
 #include "TextIO.h"
 #include "abi.h"
+#include <richedit.h>
 
 
 Line *Line::PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo)
@@ -292,7 +293,367 @@ FResult FError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype)
 }
 
 
-ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine)
+struct ErrorBoxParam
+{
+	LPCTSTR text;
+	ResultType type;
+	LPCTSTR info;
+	Line *line;
+	IObject *obj;
+#ifdef CONFIG_DEBUGGER
+	DbgStack::Entry *stack_top;
+#endif
+};
+
+
+#ifdef CONFIG_DEBUGGER
+void InsertCallStack(HWND re, ErrorBoxParam &error)
+{
+	TCHAR buf[SCRIPT_STACK_BUF_SIZE], *stack = nullptr;
+	if (error.obj && error.obj->IsOfType(Object::sPrototype))
+	{
+		auto obj = static_cast<Object*>(error.obj);
+		ExprTokenType stk;
+		if (obj->GetOwnProp(stk, _T("Stack")) && stk.symbol == SYM_STRING)
+			stack = stk.marker;
+	}
+	else if (error.stack_top)
+	{
+		GetScriptStack(stack = buf, _countof(buf), error.stack_top);
+	}
+
+	CHARFORMAT cfBold;
+	cfBold.cbSize = sizeof(cfBold);
+	cfBold.dwMask = CFM_BOLD | CFM_LINK;
+	cfBold.dwEffects = CFE_BOLD;
+	SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cfBold);
+	SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("Call stack:\n"));
+	cfBold.dwEffects = 0;
+	SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cfBold);
+
+	if (!*stack)
+		return;
+
+	// Prevent insertion of a blank line at the end (a bit pedantic, I know):
+	auto stack_end = _tcschr(stack, '\0');
+	if (stack_end[-1] == '\n')
+		*--stack_end = '\0';
+	if (stack_end > stack && stack_end[-1] == '\r')
+		*--stack_end = '\0';
+	
+	CHARFORMAT cfLink;
+	cfLink.cbSize = sizeof(cfLink);
+	cfLink.dwMask = CFM_LINK | CFM_BOLD;
+	cfLink.dwEffects = CFE_LINK;
+	//cfLink.crTextColor = 0xbb4d00; // Has no effect on Windows 7 or 11 (even with CFM_COLOR).
+
+	CHARRANGE cr;
+	SendMessage(re, EM_EXGETSEL, 0, (LPARAM)&cr); // This will become the start position of the stack text.
+	auto start_pos = cr.cpMin;
+	SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)stack);
+		
+	for (auto cp = stack; ; )
+	{
+		if (auto ext = _tcsstr(cp, _T(".ahk (")))
+		{
+			// Apply CFE_LINK effect (and possibly colour) to the full path.
+			cr.cpMax = cr.cpMin + int(ext - cp) + 4;
+			SendMessage(re, EM_EXSETSEL, 0, (LPARAM)&cr);
+			SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cfLink);
+		}
+		auto cpn = _tcschr(cp, '\n');
+		if (!cpn)
+			break;
+		cr.cpMin += int(cpn - cp);
+		if (cpn == cp || cpn[-1] != '\r') // Count the \n only if \r wasn't already counted, since it seems RichEdit uses just \r internally.
+			++cr.cpMin;
+		cp = cpn + 1;
+	}
+
+	cr.cpMin = cr.cpMax = start_pos - 1; // Remove selection.
+	SendMessage(re, EM_EXSETSEL, 0, (LPARAM)&cr);
+}
+#endif
+
+
+void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
+{
+	TCHAR buf[1024];
+
+	SetWindowText(hwnd, g_script.DefaultDialogTitle());
+
+	SetWindowLongPtr(hwnd, DWLP_USER, (LONG_PTR)&error);
+
+	HWND re = GetDlgItem(hwnd, IDC_ERR_EDIT);
+
+	RECT rc, rcOffset {0,0,7,7};
+	SendMessage(re, EM_GETRECT, 0, (LPARAM)&rc);
+	MapDialogRect(hwnd, &rcOffset);
+	rc.left += rcOffset.right;
+	rc.top += rcOffset.bottom;
+	rc.right -= rcOffset.right;
+	rc.bottom -= rcOffset.bottom;
+	SendMessage(re, EM_SETRECTNP, 0, (LPARAM)&rc);
+
+	PARAFORMAT pf;
+	pf.cbSize = sizeof(pf);
+	pf.dwMask = PFM_TABSTOPS;
+	pf.cTabCount = 1;
+	pf.rgxTabs[0] = 300;
+	SendMessage(re, EM_SETPARAFORMAT, 0, (LPARAM)&pf);
+
+	SETTEXTEX t { ST_SELECTION | ST_UNICODE, CP_UTF16 };
+	SETTEXTEX t_rtf { ST_SELECTION | ST_DEFAULT, CP_UTF8 };
+
+	CHARFORMAT2 cf;
+	cf.cbSize = sizeof(cf);
+
+	cf.dwMask = CFM_SIZE;
+	cf.yHeight = 9*20;
+	SendMessage(re, EM_SETCHARFORMAT, SCF_DEFAULT, (LPARAM)&cf);
+	
+	cf.dwMask = CFM_SIZE | CFM_COLOR;
+	cf.yHeight = 10*20;
+	cf.crTextColor = 0x3399;
+	cf.dwEffects = 0;
+	SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+	
+	sntprintf(buf, _countof(buf), _T("%s: %.500s\n\n")
+		, error.type == CRITICAL_ERROR ? _T("Critical Error")
+			: error.type == WARN ? _T("Warning") : _T("Error")
+		, error.text);
+	SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+	
+	if (error.info && *error.info)
+	{
+		UINT suffix = _tcslen(error.info) > 80 ? 8230 : 0;
+		if (error.line)
+			sntprintf(buf, _countof(buf), _T("Specifically: %.80s%s\n\n"), error.info, &suffix);
+		else
+			sntprintf(buf, _countof(buf), _T("Text:\t%.80s%s\n"), error.info, &suffix);
+		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+	}
+
+	if (error.line)
+	{
+		#define LINES_ABOVE_AND_BELOW 2
+
+		// Determine the range of lines to be shown:
+		Line *line_start = error.line, *line_end = error.line;
+		if (g_AllowMainWindow)
+		{
+			for (int i = 0
+				; i < LINES_ABOVE_AND_BELOW && line_start->mPrevLine != NULL
+				; ++i, line_start = line_start->mPrevLine);
+			for (int i = 0
+				; i < LINES_ABOVE_AND_BELOW && line_end->mNextLine != NULL
+				; ++i, line_end = line_end->mNextLine);
+		}
+		//else show only a single line, to conceal the script's source code.
+
+		int last_file = 0; // Init to zero so path is omitted if it is the main file.
+		for (auto line = line_start; ; line = line->mNextLine)
+		{
+			if (last_file != line->mFileIndex)
+			{
+				last_file = line->mFileIndex;
+				sntprintf(buf, _countof(buf), _T("\t---- %s\n"), Line::sSourceFile[line->mFileIndex]);
+				SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+			}
+			int lead = 0;
+			if (line == error.line)
+			{
+				cf.dwMask = CFM_COLOR | CFM_BACKCOLOR;
+				cf.crTextColor = 0; // Use explicit black to ensure visibility if a high contrast theme is enabled.
+				cf.crBackColor = 0x60ffff;
+				SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+				buf[lead++] = 9654; // ▶
+			}
+			buf[lead++] = '\t';
+			buf[lead] = '\0';
+			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+
+			line->ToText(buf, _countof(buf), true);
+			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+			if (line == line_end)
+				break;
+		}
+	}
+	else
+	{
+		sntprintf(buf, _countof(buf), _T("Line:\t%d\nFile:\t"), g_script.CurrentLine());
+		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)buf);
+		cf.dwMask = CFM_LINK;
+		cf.dwEffects = CFE_LINK; // Mark it as a link.
+		SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)g_script.CurrentFile());
+		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n\n"));
+	}
+
+	LPCTSTR footer;
+	switch (error.type)
+	{
+	case WARN: footer = ERR_WARNING_FOOTER; break;
+	case FAIL_OR_OK: footer = nullptr; break;
+	case CRITICAL_ERROR: footer = UNSTABLE_WILL_EXIT; break;
+	default: footer = (g->ExcptMode & EXCPTMODE_DELETE) ? ERR_ABORT_DELETE
+		: g_script.mIsReadyToExecute ? ERR_ABORT_NO_SPACES
+		: g_script.mIsRestart ? OLD_STILL_IN_EFFECT
+		: WILL_EXIT;
+	}
+	if (footer)
+	{
+		if (error.line)
+			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n"));
+		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)footer);
+	}
+
+#ifdef CONFIG_DEBUGGER
+	ExprTokenType tk;
+	if (   error.stack_top
+		|| error.obj && error.obj->IsOfType(Object::sPrototype)
+			&& static_cast<Object*>(error.obj)->GetOwnProp(tk, _T("Stack"))
+			&& !TokenIsEmptyString(tk)   )
+	{
+		// Stack trace appears to be available, so add a link to show it.
+		CHARRANGE cr;
+		for (int i = footer ? 2 : 1; i; --i)
+			SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)_T("\n"));
+		SendMessage(re, EM_EXGETSEL, 0, (LPARAM)&cr);
+#define SHOW_CALL_STACK_TEXT _T("Show call stack »")
+		SendMessage(re, EM_REPLACESEL, FALSE, (LPARAM)SHOW_CALL_STACK_TEXT);
+		cr.cpMax = -1; // Select to end.
+		SendMessage(re, EM_EXSETSEL, 0, (LPARAM)&cr);
+		cf.dwMask = CFM_LINK;
+		cf.dwEffects = CFE_LINK; // Mark it as a link.
+		SendMessage(re, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+		cr.cpMin = -1; // Deselect (move selection anchor to insertion point).
+		SendMessage(re, EM_EXSETSEL, 0, (LPARAM)&cr);
+	}
+#endif
+
+	SendMessage(re, EM_SETEVENTMASK, 0, ENM_REQUESTRESIZE | ENM_LINK);
+	SendMessage(re, EM_REQUESTRESIZE, 0, 0);
+
+	if (error.type != FAIL_OR_OK)
+	{
+		HWND hide = GetDlgItem(hwnd, error.type == WARN ? IDCANCEL : IDCONTINUE);
+		if (error.type == WARN)
+		{
+			// Hide "Abort" since it it's not applicable to warnings except as an alias of ExitApp,
+			// shift "Continue" to the right for aesthetic purposes and make it the default button
+			// (otherwise the left-most button would become the default).
+			RECT rc;
+			GetClientRect(hide, &rc);
+			MapWindowPoints(hide, hwnd, (LPPOINT)&rc, 1);
+			HWND keep = GetDlgItem(hwnd, IDCONTINUE);
+			MoveWindow(keep, rc.left, rc.top, rc.right, rc.bottom, FALSE);
+			DefDlgProc(hwnd, DM_SETDEFID, IDCONTINUE, 0);
+			SetFocus(keep);
+		}
+		ShowWindow(hide, SW_HIDE);
+	}
+}
+
+
+INT_PTR ErrorBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	switch (msg)
+	{
+	case WM_COMMAND:
+		switch (LOWORD(wParam))
+		{
+		case IDCONTINUE:
+		case IDCANCEL:
+			EndDialog(hwnd, wParam);
+			return TRUE;
+		case ID_FILE_EDITSCRIPT:
+		{
+			auto &error = *(ErrorBoxParam*)GetWindowLongPtr(hwnd, DWLP_USER);
+			if (error.line)
+			{
+				g_script.Edit(Line::sSourceFile[error.line->mFileIndex]);
+				return TRUE;
+			}
+		}
+		default:
+			if (LOWORD(wParam) >= ID_FILE_RELOADSCRIPT)
+			{
+				// Call the handler directly since g_hWnd might be NULL if this is a warning dialog.
+				HandleMenuItem(NULL, LOWORD(wParam), NULL);
+				return TRUE;
+			}
+		}
+		break;
+	case WM_NOTIFY:
+		if (wParam == IDC_ERR_EDIT)
+		{
+			HWND re = ((NMHDR*)lParam)->hwndFrom;
+			switch (((NMHDR*)lParam)->code)
+			{
+			case EN_REQUESTRESIZE: // Received when the RichEdit's content grows beyond its capacity to display all at once.
+			{
+				RECT &rcNew = ((REQRESIZE*)lParam)->rc;
+				RECT rcOld, rcInner;
+				GetWindowRect(re, &rcOld);
+				SendMessage(re, EM_GETRECT, 0, (LPARAM)&rcInner);
+				// Stack traces can get quite "tall" if the paths/lines are mostly short,
+				// so impose a rough limit to ensure the dialog remains usable.
+				int rough_limit = GetSystemMetrics(SM_CYSCREEN) * 3 / 4;
+				if (rcNew.bottom > rough_limit)
+					rcNew.bottom = rough_limit;
+				int delta = rcNew.bottom - (rcInner.bottom - rcInner.top);
+				if (rcNew.bottom == rough_limit)
+					SendMessage(re, EM_SHOWSCROLLBAR, SB_VERT, TRUE);
+				// Enable horizontal scroll bars if necessary.
+				if (rcNew.right > (rcInner.right - rcInner.left)
+					&& !(GetWindowLong(re, GWL_STYLE) & WS_HSCROLL))
+				{
+					SendMessage(re, EM_SHOWSCROLLBAR, SB_HORZ, TRUE);
+					delta += GetSystemMetrics(SM_CYHSCROLL);
+				}
+				// Move the buttons (and the RichEdit, temporarily).
+				ScrollWindow(hwnd, 0, delta, NULL, NULL);
+				// Resize the RichEdit, while also moving it back to the origin.
+				MoveWindow(re, 0, 0, rcOld.right - rcOld.left, rcOld.bottom - rcOld.top + delta, TRUE);
+				// Adjust the dialog's height and vertical position.
+				GetWindowRect(hwnd, &rcOld);
+				MoveWindow(hwnd, rcOld.left, rcOld.top - (delta / 2), rcOld.right - rcOld.left, rcOld.bottom - rcOld.top + delta, TRUE);
+				break;
+			}
+			case EN_LINK: // Received when the user clicks or moves the mouse over text with the CFE_LINK effect.
+				if (((ENLINK*)lParam)->msg == WM_LBUTTONUP)
+				{
+					TEXTRANGE tr { ((ENLINK*)lParam)->chrg };
+					SendMessage(re, EM_EXSETSEL, 0, (LPARAM)&tr.chrg);
+					tr.lpstrText = (LPTSTR)talloca(tr.chrg.cpMax - tr.chrg.cpMin + 1);
+					*tr.lpstrText = '\0';
+					SendMessage(re, EM_GETTEXTRANGE, 0, (LPARAM)&tr);
+					PostMessage(hwnd, WM_NEXTDLGCTL, TRUE, FALSE); // Make it less edit-like by shifting focus away.
+#ifdef CONFIG_DEBUGGER
+					if (!_tcscmp(tr.lpstrText, SHOW_CALL_STACK_TEXT))
+					{
+						auto &error = *(ErrorBoxParam*)GetWindowLongPtr(hwnd, DWLP_USER);
+						InsertCallStack(re, error);
+						return TRUE;
+					}
+#endif
+					g_script.Edit(tr.lpstrText);
+					return TRUE;
+				}
+				break;
+			}
+		}
+		break;
+	case WM_INITDIALOG:
+		InitErrorBox(hwnd, *(ErrorBoxParam *)lParam);
+		return FALSE; // "return FALSE to prevent the system from setting the default keyboard focus"
+	}
+	return FALSE;
+}
+
+
+ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine, IObject *aException)
 {
 	if (!aErrorText)
 		aErrorText = _T("");
@@ -301,66 +662,41 @@ ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR 
 	if (!aLine)
 		aLine = mCurrLine;
 
-	TCHAR buf[MSGBOX_TEXT_SIZE];
-	FormatError(buf, _countof(buf), aErrorType, aErrorText, aExtraInfo, aLine);
-		
-	// It's currently unclear why this would ever be needed, so it's disabled:
-	//mCurrLine = aLine;  // This needs to be set in some cases where the caller didn't.
-		
 #ifdef CONFIG_DEBUGGER
-	g_Debugger.OutputStdErr(buf);
+	if (g_Debugger.HasStdErrHook())
+	{
+		TCHAR buf[LINE_SIZE * 2];
+		FormatStdErr(buf, _countof(buf), aErrorText, aExtraInfo
+			, aLine ? aLine->mFileIndex : mCurrFileIndex
+			, aLine ? aLine->mLineNumber : mCombinedLineNumber
+			, aErrorType == WARN);
+		g_Debugger.OutputStdErr(buf);
+	}
 #endif
-	if (MsgBox(buf, MB_TOPMOST | (aErrorType == FAIL_OR_OK ? MB_YESNO|MB_DEFBUTTON2 : 0)) == IDYES)
+
+	static auto sMod = LoadLibrary(_T("riched20.dll")); // RichEdit20W
+	//static auto sMod = LoadLibrary(_T("msftedit.dll")); // MSFTEDIT_CLASS (RICHEDIT50W)
+	ErrorBoxParam error;
+	error.text = aErrorText;
+	error.type = aErrorType;
+	error.info = aExtraInfo;
+	error.line = aLine;
+	error.obj = aException;
+#ifdef CONFIG_DEBUGGER
+	error.stack_top = (aException || !g_script.mIsReadyToExecute) ? nullptr : g_Debugger.mStack.mTop - 1;
+#endif
+	INT_PTR result = DialogBoxParam(NULL, MAKEINTRESOURCE(IDD_ERRORBOX), NULL, ErrorBoxProc, (LPARAM)&error);
+	if (result == IDCONTINUE && aErrorType == FAIL_OR_OK)
 		return OK;
+	if (result == -1) // May have failed to show the custom dialog box.
+		MsgBox(aErrorText, MB_TOPMOST); // Keep it simple since it will hopefully never be needed.
 
 	if (aErrorType == CRITICAL_ERROR && mIsReadyToExecute)
-		// Pass EXIT_CRITICAL to ensure the program always exits, regardless of OnExit.
-		ExitApp(EXIT_CRITICAL);
+		ExitApp(EXIT_CRITICAL); // Pass EXIT_CRITICAL to ensure the program always exits, regardless of OnExit.
+	if (aErrorType == WARN && result == IDCANCEL && !mIsReadyToExecute) // Let Escape cancel loading the script.
+		ExitApp(EXIT_EXIT);
 
-	// Since above didn't exit, the caller isn't CriticalError(), which ignores
-	// the return value.  Other callers always want FAIL at this point.
-	return FAIL;
-}
-
-
-
-int Script::FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine)
-{
-	TCHAR source_file[MAX_PATH * 2];
-	if (aLine && aLine->mFileIndex)
-		sntprintf(source_file, _countof(source_file), _T(" in #include file \"%s\""), Line::sSourceFile[aLine->mFileIndex]);
-	else
-		*source_file = '\0'; // Don't bother cluttering the display if it's the main script file.
-
-	LPTSTR aBuf_orig = aBuf;
-	// Error message:
-	aBuf += sntprintf(aBuf, aBufSize, _T("%s%s:%s %-1.500s\n\n")  // Keep it to a sane size in case it's huge.
-		, aErrorType == WARN ? _T("Warning") : (aErrorType == CRITICAL_ERROR ? _T("Critical Error") : _T("Error"))
-		, source_file, *source_file ? _T("\n    ") : _T(" "), aErrorText);
-	// Specifically:
-	if (*aExtraInfo)
-		// Use format specifier to make sure really huge strings that get passed our
-		// way, such as a var containing clipboard text, are kept to a reasonable size:
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Specifically: %-1.100s%s\n\n")
-			, aExtraInfo, _tcslen(aExtraInfo) > 100 ? _T("...") : _T(""));
-	// Relevant lines of code:
-	if (aLine)
-		aBuf = aLine->VicinityToText(aBuf, BUF_SPACE_REMAINING);
-	// What now?:
-	LPCTSTR footer;
-	switch (aErrorType)
-	{
-	case WARN: footer = ERR_WARNING_FOOTER; break;
-	case FAIL_OR_OK: footer = ERR_CONTINUE_THREAD_Q; break;
-	case CRITICAL_ERROR: footer = UNSTABLE_WILL_EXIT; break;
-	default: footer = (g->ExcptMode & EXCPTMODE_DELETE) ? ERR_ABORT_DELETE
-		: mIsReadyToExecute ? ERR_ABORT_NO_SPACES
-		: mIsRestart ? OLD_STILL_IN_EFFECT
-		: WILL_EXIT;
-	}
-	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("\n%s"), footer);
-	
-	return (int)(aBuf - aBuf_orig);
+	return FAIL; // Some callers rely on a FAIL result to propagate failure.
 }
 
 
@@ -393,42 +729,7 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 	}
 	else
 	{
-		TCHAR buf[MSGBOX_TEXT_SIZE], *cp = buf;
-		int buf_space_remaining = (int)_countof(buf);
-
-		if (mCombinedLineNumber || mCurrFileIndex)
-		{
-			cp += sntprintf(cp, buf_space_remaining, _T("Error at line %u"), mCombinedLineNumber); // Don't call it "critical" because it's usually a syntax error.
-			buf_space_remaining = (int)(_countof(buf) - (cp - buf));
-		}
-
-		if (mCurrFileIndex)
-		{
-			cp += sntprintf(cp, buf_space_remaining, _T(" in #include file \"%s\""), Line::sSourceFile[mCurrFileIndex]);
-			buf_space_remaining = (int)(_countof(buf) - (cp - buf));
-		}
-		//else don't bother cluttering the display if it's the main script file.
-
-		if (mCombinedLineNumber || mCurrFileIndex)
-		{
-			cp += sntprintf(cp, buf_space_remaining, _T(".\n\n"));
-			buf_space_remaining = (int)(_countof(buf) - (cp - buf));
-		}
-
-		if (*aExtraInfo)
-		{
-			cp += sntprintf(cp, buf_space_remaining, _T("Line Text: %-1.100s%s\nError: ")  // i.e. the word "Error" is omitted as being too noisy when there's no ExtraInfo to put into the dialog.
-				, aExtraInfo // aExtraInfo defaults to "" so this is safe.
-				, _tcslen(aExtraInfo) > 100 ? _T("...") : _T(""));
-			buf_space_remaining = (int)(_countof(buf) - (cp - buf));
-		}
-		sntprintf(cp, buf_space_remaining, _T("%s\n\n%s"), aErrorText, mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT);
-
-		//ShowInEditor();
-#ifdef CONFIG_DEBUGGER
-		if (!g_Debugger.OutputStdErr(buf))
-#endif
-		MsgBox(buf);
+		ShowError(aErrorText, FAIL, aExtraInfo, nullptr);
 	}
 	return FAIL; // See above for why it's better to return FAIL than CRITICAL_ERROR.
 }
@@ -814,7 +1115,7 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 	if (!*message)
 		message = _T("Unhandled exception.");
 
-	if (ShowError(message, aErrorType, extra, aLine) == OK)
+	if (ShowError(message, aErrorType, extra, aLine, TokenToObject(*token)) == OK)
 	{
 		FreeExceptionToken(token);
 		return OK;
@@ -873,7 +1174,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 	// In MsgBox mode, MsgBox is in addition to OutputDebug
 	if (warnMode == WARNMODE_MSGBOX)
 	{
-		g_script.RuntimeError(aWarningText, aExtraInfo, WARN, line);
+		g_script.ShowError(aWarningText, WARN, aExtraInfo, line);
 	}
 }
 

@@ -126,7 +126,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define WILL_EXIT _T("The program will exit.")
 #define UNSTABLE_WILL_EXIT _T("The program is now unstable and will exit.")
 #define OLD_STILL_IN_EFFECT _T("The script was not reloaded; the old version will remain in effect.")
-#define ERR_CONTINUE_THREAD_Q _T("Try to continue anyway?")
 #define ERR_SCRIPT_NOT_FOUND _T("Script file not found.")
 #define ERR_ABORT_DELETE _T("__Delete will now return.")
 #define ERR_WARNING_FOOTER _T("For more details, read the documentation for #Warn.")
@@ -1295,7 +1294,6 @@ public:
 	}
 
 	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
-	LPTSTR VicinityToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false, bool aLineNumber = true);
 
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
@@ -2950,7 +2948,7 @@ public:
 	ResultType AutoExecSection();
 	bool IsPersistent();
 	void ExitIfNotPersistent(ExitReasons aExitReason);
-	ResultType Edit();
+	ResultType Edit(LPCTSTR aFileName = nullptr);
 	ResultType Reload(bool aDisplayErrors);
 	ResultType ExitApp(ExitReasons aExitReason);
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
@@ -3073,8 +3071,7 @@ public:
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = VARREF_LVALUE);
 	ResultType VarUnsetError(Var *aVar);
 
-	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine);
-	int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine);
+	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine, IObject *aException = nullptr);
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUnassignedVar(Var *aVar, Line *aLine);

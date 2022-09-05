@@ -130,6 +130,26 @@ BEGIN
     LTEXT           "Prompt",IDC_INPUTPROMPT,3,2,205,48
 END
 
+#include <richedit.h>
+
+IDD_ERRORBOX DIALOGEX 0, 0, 380, 176
+// WS_VISIBLE is necessary to ensure the dialog is displayed even if the process was started with wShowWindow == SW_HIDE
+// and ShowWindow() hasn't been called yet (i.e. a load-time error/warning is displayed before Script::CreateWindows()).
+STYLE DS_SETFONT | DS_MODALFRAME | DS_SETFOREGROUND | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "Error"
+FONT 8, "Segoe UI", 400, 0, 0x0
+BEGIN
+    DEFPUSHBUTTON   "&Abort",IDCANCEL,319,155,50,14
+    CONTROL         "",IDC_ERR_EDIT,"RichEdit20W",ES_MULTILINE|ES_READONLY|ES_AUTOHSCROLL,0,0,380,148
+    //CONTROL         "",IDC_ERR_EDIT,MSFTEDIT_CLASS,ES_MULTILINE|ES_READONLY|ES_AUTOHSCROLL,0,0,380,148
+    PUSHBUTTON      "&Help",ID_HELP_USERMANUAL,10,155,50,14
+    PUSHBUTTON      "&Edit",ID_FILE_EDITSCRIPT,66,155,50,14
+    PUSHBUTTON      "&Reload",ID_FILE_RELOADSCRIPT,122,155,50,14
+    PUSHBUTTON      "E&xitApp",ID_FILE_EXIT,178,155,50,14
+    PUSHBUTTON      "&Continue",IDCONTINUE,263,155,50,14
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //

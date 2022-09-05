@@ -3329,7 +3329,7 @@ void Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 		}
 	}
 
-	TCHAR stack_buf[2048];
+	TCHAR stack_buf[SCRIPT_STACK_BUF_SIZE];
 	GetScriptStack(stack_buf, _countof(stack_buf), stack_top);
 	SetOwnProp(_T("Stack"), stack_buf);
 #endif

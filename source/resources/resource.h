@@ -39,6 +39,8 @@
 #define ID_VIEW_REFRESH                 65410
 #define ID_HELP_USERMANUAL              65411
 #define ID_HELP_WEBSITE                 65412
+#define IDD_ERRORBOX                    500
+#define IDC_ERR_EDIT                    501
 
 // Next default values for new objects
 // 

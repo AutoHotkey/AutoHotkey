@@ -1219,19 +1219,24 @@ bif_impl void Edit()
 	g_script.Edit();
 }
 
-ResultType Script::Edit()
+ResultType Script::Edit(LPCTSTR aFileName)
 {
 #ifdef AUTOHOTKEYSC
 	return OK; // Do nothing.
 #else
-	if (mKind != ScriptKindFile)
-		return OK;
-	// This is here in case a compiled script ever uses the Edit command.  Since the "Edit This
-	// Script" menu item is not available for compiled scripts, it can't be called from there.
-	TitleMatchModes old_mode = g->TitleMatchMode;
-	g->TitleMatchMode = FIND_ANYWHERE;
-	HWND hwnd = WinExist(*g, mFileName, _T(""), mMainWindowTitle, _T("")); // Exclude our own main window.
-	g->TitleMatchMode = old_mode;
+	HWND hwnd = NULL;
+	if (!aFileName)
+	{
+		if (mKind != ScriptKindFile)
+			return OK;
+		TitleMatchModes old_mode = g->TitleMatchMode;
+		g->TitleMatchMode = FIND_ANYWHERE;
+		hwnd = WinExist(*g, mFileSpec, _T(""), mMainWindowTitle, _T("")); // Exclude our own main window.
+		if (!hwnd)
+			hwnd = WinExist(*g, mFileName, _T(""), mMainWindowTitle, _T("")); // Try again without path.
+		g->TitleMatchMode = old_mode;
+		aFileName = mFileSpec;
+	}
 	if (hwnd)
 	{
 		TCHAR class_name[32];
@@ -1247,7 +1252,7 @@ ResultType Script::Edit()
 		// Enclose in double quotes anything that might contain spaces since the CreateProcess()
 		// method, which is attempted first, is more likely to succeed.  This is because it uses
 		// the command line method of creating the process, with everything all lumped together:
-		sntprintf(buf, _countof(buf), _T("\"%s\""), mFileSpec);
+		sntprintf(buf, _countof(buf), _T("\"%s\""), aFileName);
 		if (!ActionExec(_T("Edit"), buf, mFileDir, false))  // Since this didn't work, try notepad.
 		{
 			// Even though notepad properly handles filenames with spaces in them under WinXP,
@@ -11811,59 +11816,6 @@ LPTSTR Line::LogToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an int t
 	// Must add the return value, not LINE_LOG_FINAL_MESSAGE_LENGTH, in case insufficient room (i.e. in case
 	// outer loop terminated due to lines_to_show being too small).
 	return aBuf + sntprintf(aBuf, BUF_SPACE_REMAINING, LINE_LOG_FINAL_MESSAGE);
-}
-
-
-
-LPTSTR Line::VicinityToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an int to preserve negatives from caller (caller relies on this).
-// aBufSize is an int so that any negative values passed in from caller are not lost.
-// Caller has ensured that aBuf isn't NULL.
-// Translates the current line and the lines above and below it into their text equivalent
-// putting the result into aBuf and returning the position in aBuf of its new string terminator.
-{
-	LPTSTR aBuf_orig = aBuf;
-
-	#define LINES_ABOVE_AND_BELOW 7
-
-	// Determine the correct value for line_start and line_end:
-	int i;
-	Line *line_start, *line_end;
-	for (i = 0, line_start = this
-		; i < LINES_ABOVE_AND_BELOW && line_start->mPrevLine != NULL
-		; ++i, line_start = line_start->mPrevLine);
-
-	for (i = 0, line_end = this
-		; i < LINES_ABOVE_AND_BELOW && line_end->mNextLine != NULL
-		; ++i, line_end = line_end->mNextLine);
-
-	if (!g_AllowMainWindow) // Override the above to show only a single line, to conceal the script's source code.
-	{
-		line_start = this;
-		line_end = this;
-	}
-
-	// Now line_start and line_end are the first and last lines of the range
-	// we want to convert to text, and they're non-NULL.
-	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("\tLine#\n"));
-
-	int space_remaining; // Must be an int to preserve any negative results.
-
-	// Start at the oldest and continue up through the newest:
-	for (Line *line = line_start;;)
-	{
-		if (line == this)
-			tcslcpy(aBuf, _T("--->\t"), BUF_SPACE_REMAINING);
-		else
-			tcslcpy(aBuf, _T("\t"), BUF_SPACE_REMAINING);
-		aBuf += _tcslen(aBuf);
-		space_remaining = BUF_SPACE_REMAINING;  // Resolve macro only once for performance.
-		// Truncate large lines so that the dialog is more readable:
-		aBuf = line->ToText(aBuf, space_remaining < 500 ? space_remaining : 500, false);
-		if (line == line_end)
-			break;
-		line = line->mNextLine;
-	}
-	return aBuf;
 }
 
 
