@@ -1069,7 +1069,10 @@ bif_impl FResult DirSelect(LPCTSTR aRootDir, int *aOptions, LPCTSTR aGreeting, S
 	// controls the origin point (above which the control cannot navigate).
 	LPTSTR initial_folder;
 	TCHAR root_dir[MAX_PATH*2 + 5];  // Up to two paths might be present inside, including an asterisk and spaces between them.
-	tcslcpy(root_dir, aRootDir, _countof(root_dir)); // Make a modifiable copy.
+	if (aRootDir)
+		tcslcpy(root_dir, aRootDir, _countof(root_dir)); // Make a modifiable copy.
+	else
+		*root_dir = '\0';
 	if (initial_folder = _tcschr(root_dir, '*'))
 	{
 		*initial_folder = '\0'; // Terminate so that root_dir becomes an isolated string.
