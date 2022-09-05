@@ -810,7 +810,7 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 
 
 
-bif_impl void ListLines(BOOL *aMode)
+bif_impl void ListLines(int *aMode)
 {
 	if (!aMode)
 	{
@@ -829,7 +829,10 @@ bif_impl void ListLines(BOOL *aMode)
 			Line::sLogNext = LINE_LOG_SIZE - 1;
 		Line::sLog[Line::sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronological order in some cases.
 	}
-	g->ListLinesIsEnabled = *aMode;
+	// aMode is defined as Int32 rather than Bool32 to avoid confusion
+	// (ListLines("") acting as ListLines(false) instead of ListLines())
+	// and reserve string values for potential future use.
+	g->ListLinesIsEnabled = *aMode != 0;
 }
 
 

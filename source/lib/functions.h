@@ -91,7 +91,7 @@ md_func_x(InstallMouseHook, InstallMouseHook, Void, (In_Opt, Bool32, Install), (
 
 md_func(KeyHistory, (In_Opt, Int32, MaxEvents))
 md_func_x(ListHotkeys, ListHotkeys, Void, md_arg_none)
-md_func_x(ListLines, ListLines, Void, (In_Opt, Bool32, Mode))
+md_func_x(ListLines, ListLines, Void, (In_Opt, Int32, Mode))
 md_func_x(ListVars, ListVars, Void, md_arg_none)
 
 
