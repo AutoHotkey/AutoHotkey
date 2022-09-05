@@ -7647,7 +7647,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			if (IsLabelTarget(next_line))
 				break;
 			TCHAR buf[64];
-			sntprintf(buf, _countof(buf), _T("This line will never execute, due to %s preceeding it."), g_act[line->mActionType].Name);
+			sntprintf(buf, _countof(buf), _T("This line will never execute, due to %s preceding it."), g_act[line->mActionType].Name);
 			ScriptWarning(g_Warn_Unreachable, buf, _T(""), next_line);
 		}
 	} // for()
