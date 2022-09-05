@@ -881,21 +881,22 @@ bif_impl FResult FileSetTime(LPCTSTR aYYYYMMDD, LPCTSTR aFilePattern, LPCTSTR aW
 		aFilePattern = g->mLoopFile->file_path; // Default to the current file-loop's file.
 	if (!aFilePattern || !*aFilePattern)
 		return FR_E_ARG(1);
+
 	FileLoopModeType mode = Line::ConvertLoopMode(aMode);
 	if (mode == FILE_LOOP_INVALID)
 		return FR_E_ARG(3);
 	FileLoopModeType aOperateOnFolders = mode & ~FILE_LOOP_RECURSE;
 	bool aDoRecurse = mode & FILE_LOOP_RECURSE;
-	switch (ctoupper(*aWhichTime))
+	
+	FileSetTimeData callbackData;
+	switch (callbackData.WhichTime = aWhichTime ? ctoupper(*aWhichTime) : 0)
 	{
 	case 'M': case 'C': case 'A': case '\0': break;
 	default: return FR_E_ARG(2);
 	}
 
-	FileSetTimeData callbackData;
-	callbackData.WhichTime = *aWhichTime;
 	FILETIME ft;
-	if (*aYYYYMMDD)
+	if (aYYYYMMDD && *aYYYYMMDD)
 	{
 		if (   !YYYYMMDDToFileTime(aYYYYMMDD, ft)  // Convert the arg into the time struct as local (non-UTC) time.
 			|| !LocalFileTimeToFileTime(&ft, &callbackData.Time)   )  // Convert from local to UTC.

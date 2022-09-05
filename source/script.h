@@ -1173,6 +1173,8 @@ public:
 	static FileLoopModeType ConvertLoopMode(LPCTSTR aBuf)
 	// Returns the file loop mode, or FILE_LOOP_INVALID if aBuf contains an invalid mode.
 	{
+		if (!aBuf)
+			return FILE_LOOP_FILES_ONLY;
 		for (FileLoopModeType mode = FILE_LOOP_INVALID;;)
 		{
 			switch (ctoupper(*aBuf++))
