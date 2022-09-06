@@ -556,7 +556,7 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 }
 
 
-INT_PTR ErrorBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK ErrorBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	switch (msg)
 	{
