@@ -954,12 +954,25 @@ ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aE
 	TCHAR msg[512];
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 	LPTSTR actual_type, value_as_string;
+#ifdef CONFIG_DEBUGGER
+	if (!aFunction)
+		aFunction = g_Debugger.WhatThrew();
+#endif
+	if (!aParam || aParam->symbol == SYM_MISSING)
+	{
+#ifdef CONFIG_DEBUGGER
+		sntprintf(msg, _countof(msg), _T("Parameter #%i of %s must not be omitted in this case.")
+			, aIndex + 1, aFunction);
+#else
+		sntprintf(msg, _countof(msg), _T("Parameter #%i must not be omitted in this case.")
+			, aIndex + 1);
+#endif
+		return Error(msg, nullptr, ErrorPrototype::Value);
+	}
 	TokenTypeAndValue(*aParam, actual_type, value_as_string, number_buf);
 	if (!*value_as_string && !aExpectedType)
 		value_as_string = actual_type;
 #ifdef CONFIG_DEBUGGER
-	if (!aFunction)
-		aFunction = g_Debugger.WhatThrew();
 	if (aExpectedType)
 		sntprintf(msg, _countof(msg), _T("Parameter #%i of %s requires a%s %s, but received a%s %s.")
 			, aIndex + 1, aFunction, an(aExpectedType), aExpectedType, an(actual_type), actual_type);
@@ -994,11 +1007,7 @@ ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], in
 			ASSERT(!code);
 			return aResultToken.SetExitResult(FAIL);
 		case FR_FACILITY_ARG:
-			if (code < aParamCount)
-				return aResultToken.ParamError(code, aParam[code]);
-			else
-				return aResultToken.ValueError(ERR_PARAM_INVALID);
-			break;
+			return aResultToken.ParamError(code, code < aParamCount ? aParam[code] : nullptr);
 		case FACILITY_WIN32:
 			if (!code)
 				code = GetLastError();
