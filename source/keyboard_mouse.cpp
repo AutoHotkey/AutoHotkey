@@ -4537,7 +4537,7 @@ void OurBlockInput(bool aEnable)
 	g_BlockInput = aEnable;
 }
 
-bif_impl void ScriptBlockInput(LPCTSTR aMode)
+bif_impl FResult ScriptBlockInput(LPCTSTR aMode)
 {
 	switch (auto toggle = Line::ConvertBlockInput(aMode))
 	{
@@ -4560,7 +4560,8 @@ bif_impl void ScriptBlockInput(LPCTSTR aMode)
 	case TOGGLE_MOUSEMOVEOFF:
 		g_BlockMouseMove = false; // But the mouse hook is left installed because it might be needed by other things. This approach is similar to that used by the Input command.
 		break;
-	// default (NEUTRAL or TOGGLE_INVALID): do nothing.
+	default: // NEUTRAL or TOGGLE_INVALID
+		return FR_E_ARG(0);
 	}
 }
 

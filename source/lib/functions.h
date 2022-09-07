@@ -1,5 +1,5 @@
 
-md_func_x(BlockInput, ScriptBlockInput, Void, (In, String, Mode))
+md_func_x(BlockInput, ScriptBlockInput, FResult, (In, String, Mode))
 
 md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
 md_func_x(Critical, Critical, Void, (In_Opt, String, OnOffNumber))
