@@ -28,11 +28,11 @@ public:
 	}
 
 	// Set value to a copy of the string in memory that can be returned to the caller.
-	LPTSTR Copy(LPCTSTR s, size_t n)
+	bool Copy(LPCTSTR s, size_t n)
 	{
 		ASSERT(!mAllocated && !mValue);
 		if (!n)
-			return nullptr;
+			return true;
 		LPTSTR buf = Alloc(n);
 		if (buf)
 		{
@@ -43,7 +43,7 @@ public:
 	}
 	
 	// Set value to a copy of the string in memory that can be returned to the caller.
-	LPTSTR Copy(LPCTSTR s)
+	bool Copy(LPCTSTR s)
 	{
 		return Copy(s, _tcslen(s));
 	}
