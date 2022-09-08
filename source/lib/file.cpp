@@ -1077,7 +1077,7 @@ bif_impl FResult DirCreate(LPCTSTR aPath)
 	SetLastError(0);
 	auto result = FileCreateDir(aPath);
 	g->LastError = GetLastError();
-	return result;
+	return result ? OK : FR_E_WIN32;
 }
 
 
