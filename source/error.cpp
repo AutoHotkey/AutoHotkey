@@ -535,6 +535,13 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 	SendMessage(re, EM_SETEVENTMASK, 0, ENM_REQUESTRESIZE | ENM_LINK);
 	SendMessage(re, EM_REQUESTRESIZE, 0, 0);
 
+#ifndef AUTOHOTKEYSC
+	if (error.line && error.line->mFileIndex ? *Line::sSourceFile[error.line->mFileIndex] == '*'
+		: g_script.mKind != Script::ScriptKindFile)
+		// Source "file" is an embedded resource or stdin, so can't be edited.
+		EnableWindow(GetDlgItem(hwnd, ID_FILE_EDITSCRIPT), FALSE);
+#endif
+
 	if (error.type != FAIL_OR_OK)
 	{
 		HWND hide = GetDlgItem(hwnd, error.type == WARN ? IDCANCEL : IDCONTINUE);
