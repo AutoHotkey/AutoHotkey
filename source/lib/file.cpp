@@ -1045,6 +1045,8 @@ bif_impl void DirExist(LPCTSTR aFilePattern, StrRet &aRetVal)
 
 bif_impl FResult DirCopy(LPCTSTR aSource, LPCTSTR aDest, int *aOverwrite)
 {
+	if (!*aSource) return FR_E_ARG(0);
+	if (!*aDest) return FR_E_ARG(1);
 	return Line::Util_CopyDir(aSource, aDest, aOverwrite ? *aOverwrite : FALSE, false) ? OK : FR_E_FAILED;
 }
 
@@ -1062,6 +1064,8 @@ bif_impl FResult DirMove(LPCTSTR aSource, LPCTSTR aDest, LPCTSTR aFlag)
 	}
 	if (aFlag && !IsNumeric(aFlag))
 		return FR_E_ARG(2);
+	if (!*aSource) return FR_E_ARG(0);
+	if (!*aDest) return FR_E_ARG(1);
 	if (!Line::Util_CopyDir(aSource, aDest, aFlag ? ATOI(aFlag) : 0, true))
 		return FR_E_FAILED;
 	return OK;

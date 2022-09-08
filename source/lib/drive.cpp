@@ -56,7 +56,7 @@ static FResult DriveSpace(LPCTSTR aPath, __int64 *aRetVal, bool aGetFreeSpace)
 // method here actually takes that into account.
 {
 	if (!*aPath)
-		return FError(ERR_PARAM1_MUST_NOT_BE_BLANK);
+		return FR_E_ARG(0);
 
 	TCHAR buf[MAX_PATH]; // MAX_PATH vs T_MAX_PATH because testing shows it doesn't support long paths even with \\?\.
 	tcslcpy(buf, aPath, _countof(buf));
