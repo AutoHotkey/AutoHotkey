@@ -4563,6 +4563,7 @@ bif_impl FResult ScriptBlockInput(LPCTSTR aMode)
 	default: // NEUTRAL or TOGGLE_INVALID
 		return FR_E_ARG(0);
 	}
+	return OK;
 }
 
 #pragma endregion
