@@ -1633,6 +1633,8 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 
 	TCHAR pattern[1024];
 	*pattern = '\0'; // Set default.
+	if (!aFilter)
+		aFilter = _T(""); // For maintainability.
 	if (*aFilter)
 	{
 		auto pattern_start = _tcschr(aFilter, '(');
@@ -1693,6 +1695,8 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 	// 2) The last item in the list is terminated by a linefeed, which is not as easily used with a
 	//    parsing loop as shown in example in the help file.
 	bool always_use_save_dialog = false; // Set default.
+	if (!aOptions)
+		aOptions = _T("");
 	switch (ctoupper(*aOptions))
 	{
 	case 'D':
