@@ -58,16 +58,19 @@ bool FileCreateDir(LPCTSTR aDirSpec)
 		return false;
 	}
 
-	// Allocate a modifiable buffer to be used by recursive calls (supports long paths).
-	//auto buf = (LPTSTR)_alloca((last_backslash - aDirSpec + 1) * sizeof(TCHAR));
+	// Make a modifiable copy to be used by recursive calls (supports long paths).
+	// Use GetFullPathName() instead of tmemcpy() or similar to normalize the path,
+	// which has at least two benefits:
+	//  1) Indirectly supports forward slash as a path separator.
+	//  2) Relative components such as "x\y\.." would otherwise cause the function
+	//     to report failure due to the order of checks and CreateDirectory calls.
 	TCHAR buf[T_MAX_PATH];
-	auto len = _tcslen(aDirSpec);
-	if (len >= T_MAX_PATH)
+	auto len = GetFullPathName(aDirSpec, _countof(buf), buf, nullptr);
+	if (!len || len >= _countof(buf))
 	{
 		SetLastError(ERROR_BUFFER_OVERFLOW);
 		return false;
 	}
-	tmemcpy(buf, aDirSpec, len + 1);
 
 	return FileCreateDirRecursive(buf);
 }
