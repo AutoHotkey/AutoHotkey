@@ -22,7 +22,8 @@ constexpr FResult FR_E_ARG_ZERO = FR_OUR_FLAG | MAKE_HRESULT(SEVERITY_ERROR, FR_
 #define FR_E_ARG(n) (FR_E_ARG_ZERO | (n))
 constexpr FResult FR_E_ARGS = FR_E_ARG(0xFFFF);
 
-#define FR_THROW_INT(n) ((n) & 0xF0000000 ? FR_E_FAILED : (FR_INT_FLAG | (n))) // Throw an Error where Extra = an int in the range 0..0x0FFFFFFF.
+#define FR_THROW_INT(n) ((n) & 0xF0000000 ? FR_E_FAILED \
+	: ((SEVERITY_ERROR << 31) | FR_OUR_FLAG | FR_INT_FLAG | (n))) // Throw an Error where Extra = an int in the range 0..0x0FFFFFFF.
 #define FR_GET_THROWN_INT(fr) ((fr) & 0x0FFFFFFF)
 
 constexpr int FR_ERR_BASE = FR_OUR_FLAG | MAKE_HRESULT(SEVERITY_ERROR, FR_FACILITY_ERR, 0); // 0xA00E0000
