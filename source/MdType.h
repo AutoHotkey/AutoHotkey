@@ -121,6 +121,9 @@ template<> struct md_retval<MdType::NzIntWin32> { typedef BOOL t; };
 #define md_func(name, ...) \
 	md_func_x(name, name, FResult, __VA_ARGS__)
 
+#define md_func_v(name, ...) \
+	md_func_x(name, name, Void, __VA_ARGS__)
+
 #ifdef __INTELLISENSE__
 #undef md_func_x
 #define md_func_x(...) md_func_decl(__VA_ARGS__)

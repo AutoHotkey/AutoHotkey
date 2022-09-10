@@ -2,12 +2,12 @@
 md_func_x(BlockInput, ScriptBlockInput, FResult, (In, String, Mode))
 
 md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
-md_func_x(Critical, Critical, Void, (In_Opt, String, OnOffNumber))
+md_func_v(Critical, (In_Opt, String, OnOffNumber))
 
 md_func(DirCopy, (In, String, Source), (In, String, Dest), (In_Opt, Int32, Overwrite))
 md_func(DirCreate, (In, String, Path))
 md_func(DirDelete, (In, String, Path), (In_Opt, Bool32, Recurse))
-md_func_x(DirExist, DirExist, Void, (In, String, Pattern), (Ret, String, RetVal))
+md_func_v(DirExist, (In, String, Pattern), (Ret, String, RetVal))
 md_func(DirMove, (In, String, Source), (In, String, Dest), (In_Opt, String, Flag))
 md_func(DirSelect, (In_Opt, String, StartingFolder), (In_Opt, Int32, Options), (In_Opt, String, Prompt), (Ret, String, RetVal))
 
@@ -28,7 +28,7 @@ md_func(DriveRetract, (In_Opt, String, Drive))
 md_func(DriveSetLabel, (In, String, Drive), (In_Opt, String, Label))
 md_func(DriveUnlock, (In, String, Drive))
 
-md_func_x(Edit, Edit, Void, md_arg_none)
+md_func_v(Edit, md_arg_none)
 
 md_func(EnvGet, (In, String, VarName), (Ret, String, RetVal))
 md_func_x(EnvSet, EnvSet, NzIntWin32, (In, String, VarName), (In_Opt, String, Value))
@@ -42,7 +42,7 @@ md_func(FileCreateShortcut, (In, String, Target), (In, String, LinkFile), (In_Op
 	(In_Opt, String, Args), (In_Opt, String, Description), (In_Opt, String, IconFile),
 	(In_Opt, String, ShortcutKey), (In_Opt, Int32, IconNumber), (In_Opt, Int32, RunState))
 md_func(FileDelete, (In, String, Pattern))
-md_func_x(FileExist, FileExist, Void, (In, String, Pattern), (Ret, String, RetVal))
+md_func_v(FileExist, (In, String, Pattern), (Ret, String, RetVal))
 md_func(FileGetAttrib, (In_Opt, String, Path), (Ret, String, RetVal))
 md_func(FileGetShortcut, (In, String, LinkFile), (Out_Opt, String, Target), (Out_Opt, String, WorkingDir),
 	(Out_Opt, String, Args), (Out_Opt, String, Description), (Out_Opt, String, IconFile),
@@ -59,7 +59,7 @@ md_func(FileSelect, (In_Opt, String, Options), (In_Opt, String, RootDirFileName)
 md_func(FileSetAttrib, (In, String, Attributes), (In_Opt, String, Pattern), (In_Opt, String, Mode))
 md_func(FileSetTime, (In_Opt, String, YYYYMMDD), (In_Opt, String, Pattern), (In_Opt, String, WhichTime), (In_Opt, String, Mode))
 
-md_func_x(GetKeyName, GetKeyName, Void, (In, String, KeyName), (Ret, String, RetVal))
+md_func_v(GetKeyName, (In, String, KeyName), (Ret, String, RetVal))
 md_func_x(GetKeySC, GetKeySC, Int32, (In, String, KeyName))
 md_func(GetKeyState, (In, String, KeyName), (In_Opt, String, Mode), (Ret, Variant, RetVal))
 md_func_x(GetKeyVK, GetKeyVK, Int32, (In, String, KeyName))
@@ -73,13 +73,13 @@ md_func(IniDelete, (In, String, Path), (In, String, Section), (In_Opt, String, K
 md_func(IniRead, (In, String, Path), (In_Opt, String, Section), (In_Opt, String, Key), (In_Opt, String, Default), (Ret, String, RetVal))
 md_func(IniWrite, (In, String, Value), (In, String, Path), (In, String, Section), (In_Opt, String, Key))
 
-md_func_x(InstallKeybdHook, InstallKeybdHook, Void, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
-md_func_x(InstallMouseHook, InstallMouseHook, Void, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
+md_func_v(InstallKeybdHook, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
+md_func_v(InstallMouseHook, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 
 md_func(KeyHistory, (In_Opt, Int32, MaxEvents))
-md_func_x(ListHotkeys, ListHotkeys, Void, md_arg_none)
-md_func_x(ListLines, ListLines, Void, (In_Opt, Int32, Mode))
-md_func_x(ListVars, ListVars, Void, md_arg_none)
+md_func_v(ListHotkeys, md_arg_none)
+md_func_v(ListLines, (In_Opt, Int32, Mode))
+md_func_v(ListVars, md_arg_none)
 
 md_func(MonitorGet, (In_Opt, Int32, N), (Out_Opt, Int32, Left), (Out_Opt, Int32, Top), (Out_Opt, Int32, Right), (Out_Opt, Int32, Bottom), (Ret, Int32, RetVal))
 md_func_x(MonitorGetCount, MonitorGetCount, Int32, md_arg_none)
@@ -105,23 +105,23 @@ md_func(MouseMove,
 	(In_Opt, Int32, Speed),
 	(In_Opt, String, Relative))
 
-md_func_x(OutputDebug, OutputDebug, Void, (In, String, Text))
+md_func_v(OutputDebug, (In, String, Text))
 
 md_func(Pause, (In_Opt, Int32, NewState))
 
-md_func_x(Persistent, Persistent, Void, (In_Opt, Bool32, NewValue), (Ret, Bool32, OldValue))
+md_func_v(Persistent, (In_Opt, Bool32, NewValue), (Ret, Bool32, OldValue))
 
 md_func(Reload, md_arg_none)
 
-md_func_x(RunAs, RunAs, Void, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, String, Domain))
+md_func_v(RunAs, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, String, Domain))
 
-md_func_x(Send, Send, Void, (In, String, Keys))
-md_func_x(SendEvent, SendEvent, Void, (In, String, Keys))
-md_func_x(SendInput, SendInput, Void, (In, String, Keys))
+md_func_v(Send, (In, String, Keys))
+md_func_v(SendEvent, (In, String, Keys))
+md_func_v(SendInput, (In, String, Keys))
 md_func(SendLevel, (In, Int32, Level))
 md_func(SendMode, (In, String, Mode))
-md_func_x(SendPlay, SendPlay, Void, (In, String, Keys))
-md_func_x(SendText, SendText, Void, (In, String, Text))
+md_func_v(SendPlay, (In, String, Keys))
+md_func_v(SendText, (In, String, Text))
 
 md_func(SetCapsLockState, (In_Opt, String, State))
 md_func(SetControlDelay, (In, Int32, Delay))
@@ -137,7 +137,7 @@ md_func(Shutdown, (In, Int32, Flags))
 
 md_func_x(Sleep, ScriptSleep, Void, (In, Int32, Delay))
 
-md_func_x(SoundBeep, SoundBeep, Void, (In_Opt, Int32, Duration), (In_Opt, Int32, Frequency))
+md_func_v(SoundBeep, (In_Opt, Int32, Duration), (In_Opt, Int32, Frequency))
 md_func(SoundPlay, (In, String, Path), (In_Opt, String, Wait))
 
 md_func(Suspend, (In_Opt, Int32, Mode))
@@ -149,5 +149,5 @@ md_func(Thread, (In, String, Command), (In_Opt, Int32, Value1), (In_Opt, Int32, 
 
 md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options))
 
-md_func_x(WinMinimizeAll, WinMinimizeAll, Void, md_arg_none)
-md_func_x(WinMinimizeAllUndo, WinMinimizeAllUndo, Void, md_arg_none)
+md_func_v(WinMinimizeAll, md_arg_none)
+md_func_v(WinMinimizeAllUndo, md_arg_none)
