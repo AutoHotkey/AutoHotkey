@@ -2064,6 +2064,7 @@ process_completed_line:
 				// Mustn't use ltrim(hotkey_flag) because that would cause buf.length to become incorrect:
 				hotkey_flag = next_nonspace;
 			}
+			// else don't trim auto-replace hotstrings since literal spaces in both substrings are significant.
 			if (!hotstring_start)
 			{
 				// To use '{' as remap_dest, escape it.
@@ -2277,7 +2278,6 @@ process_completed_line:
 					// Since above didn't goto this is not a remap after all:
 				}
 			}
-			// else don't trim hotstrings since literal spaces in both substrings are significant.
 			
 			auto set_last_hotfunc = [&]()
 			{
