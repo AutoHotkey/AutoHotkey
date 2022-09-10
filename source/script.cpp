@@ -1535,11 +1535,6 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 		mUnresolvedClasses = NULL;
 	}
 
-#ifndef AUTOHOTKEYSC
-	if (mValidateThenExit)
-		return 0; // Tell our caller to do a normal exit.
-#endif
-
 	// Set the working directory to the script's directory.  This must be done after the above
 	// since the working dir may have been changed by the script's use of "#Include C:\Scripts".
 	// LoadIncludedFile() also changes it, but any value other than mFileDir would have been
@@ -1559,6 +1554,11 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 
 	if (!PreparseCommands(mFirstLine))
 		return LOADING_FAILED; // Error was already displayed by the above calls.
+	
+#ifndef AUTOHOTKEYSC
+	if (mValidateThenExit)
+		return 0; // Tell our caller to do a normal exit.
+#endif
 
 	return TRUE; // Must be non-zero.
 }
