@@ -765,7 +765,7 @@ int Object::GetBuiltinID(LPCTSTR aName)
 	switch (toupper(*aName))
 	{
 	case 'H':
-		if (!_tcsicmp(aName, _T("HasKey")))
+		if (!_tcsicmp(aName, _T("HasKey")) || !_tcsicmp(aName, _T("Has")))
 			return FID_ObjHasKey;
 		break;
 	case 'N':

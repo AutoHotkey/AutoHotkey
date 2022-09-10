@@ -8551,7 +8551,6 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		BIF_OBJ_CASE(Length, 		0, 0)
 		BIF_OBJ_CASE(MinIndex, 		0, 0)
 		BIF_OBJ_CASE(MaxIndex, 		0, 0)
-		BIF_OBJ_CASE(HasKey,		1, 1) // key
 		BIF_OBJ_CASE(GetCapacity,	0, 1) // [key]
 		BIF_OBJ_CASE(SetCapacity,	1, 2) // [key,] new_capacity
 		BIF_OBJ_CASE(GetAddress,	1, 1) // key
@@ -8559,6 +8558,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		BIF_OBJ_CASE(Clone,			0, 0)
 		BIF_OBJ_CASE(BindMethod,	1, 10000) // obj, method [, param...]
 #undef BIF_OBJ_CASE
+		else if (!_tcsicmp(suffix, _T("HasKey")) || !_tcsicmp(suffix, _T("Has")))
+		{
+			bif = BIF_ObjHasKey;
+			min_params = 2;
+			max_params = 2;
+		}
 		else if (!_tcsicmp(suffix, _T("AddRef")) || !_tcsicmp(suffix, _T("Release")))
 			bif = BIF_ObjAddRefRelease;
 		else if (!_tcsicmp(suffix, _T("RawSet")))
