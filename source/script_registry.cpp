@@ -84,7 +84,7 @@ bif_impl FResult IniRead(LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey, LPCT
 		}
 		if (!aKey)
 		{
-			aRetVal.SetStatic(aDefault);
+			aRetVal.SetTemp(aDefault);
 			return OK;
 		}
 	}

@@ -594,7 +594,7 @@ bif_impl FResult FileGetAttrib(LPCTSTR aPath, StrRet &aRetVal)
 		return FR_E_WIN32(g->LastError);
 	}
 
-	aRetVal.SetStatic(FileAttribToStr(aRetVal.CallerBuf(), attr));
+	aRetVal.SetTemp(FileAttribToStr(aRetVal.CallerBuf(), attr));
 	return OK;
 }
 
@@ -865,7 +865,7 @@ bif_impl FResult FileGetTime(LPCTSTR aPath, LPCTSTR aWhichTime, StrRet &aRetVal)
 
 	FILETIME local_file_time;
 	FileTimeToLocalFileTime(which_time, &local_file_time);
-	aRetVal.SetStatic(FileTimeToYYYYMMDD(aRetVal.CallerBuf(), local_file_time));
+	aRetVal.SetTemp(FileTimeToYYYYMMDD(aRetVal.CallerBuf(), local_file_time));
 	return OK;
 }
 
@@ -1007,7 +1007,7 @@ bif_impl FResult FileGetSize(LPCTSTR aPath, LPCTSTR aUnits, __int64 *aRetVal)
 static void FileOrDirExist(LPCTSTR aFilePattern, StrRet &aRetVal, DWORD aRequiredAttr)
 {
 	LPTSTR buf = aRetVal.CallerBuf();
-	aRetVal.SetStatic(buf);
+	aRetVal.SetTemp(buf);
 	DWORD attr;
 	if (DoesFilePatternExist(aFilePattern, &attr, aRequiredAttr))
 	{

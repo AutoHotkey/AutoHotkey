@@ -75,10 +75,11 @@ public:
 	// in case the default state is ever interpreted as something other than "".
 	void SetEmpty()
 	{
+		ASSERT(!mValue);
 	}
 
 	// Set the return value.
-	// s must be in static memory or CallerBuf().
+	// s must be in static memory, such as a literal string.
 	void SetStatic(LPCTSTR s)
 	{
 		ASSERT(!mValue);
@@ -86,12 +87,22 @@ public:
 	}
 
 	// Set the return value and length.
-	// s must be in static memory or CallerBuf().
+	// s must be in static memory, such as a literal string.
 	void SetStatic(LPCTSTR s, size_t n)
 	{
 		ASSERT(!mValue);
 		mValue = s;
 		mLength = n;
+	}
+
+	// Set the return value.
+	// s must be in memory that will persist until the caller has an opportunity to
+	// copy it, such as in CallerBuf().
+	// Alias of SetStatic(), used to show that retaining the pointer indefinitely
+	// wouldn't be safe.
+	void SetTemp(LPCTSTR s)
+	{
+		SetStatic(s);
 	}
 
 	// Set the length of the string which has been written into the buffer returned by Alloc().

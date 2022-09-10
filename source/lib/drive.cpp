@@ -244,7 +244,7 @@ bif_impl FResult DriveGetFilesystem(LPCTSTR aDrive, StrRet &aRetVal)
 	LPTSTR file_system = aRetVal.CallerBuf();
 	if (!GetVolumeInformation(aDrive, NULL, 0, NULL, NULL, NULL, file_system, StrRet::CallerBufSize))
 		return FR_E_WIN32;
-	aRetVal.SetStatic(file_system);
+	aRetVal.SetTemp(file_system);
 	return OK;
 }
 
@@ -257,7 +257,7 @@ bif_impl FResult DriveGetLabel(LPCTSTR aDrive, StrRet &aRetVal)
 	LPTSTR volume_name = aRetVal.CallerBuf();
 	if (!GetVolumeInformation(aDrive, volume_name, StrRet::CallerBufSize, NULL, NULL, NULL, NULL, 0))
 		return FR_E_WIN32;
-	aRetVal.SetStatic(volume_name);
+	aRetVal.SetTemp(volume_name);
 	return OK;
 }
 

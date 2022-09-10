@@ -2378,7 +2378,7 @@ bif_impl void GetKeyName(LPCTSTR aKeyName, StrRet &aRetVal)
 	vk_type vk;
 	sc_type sc;
 	TextToVKandSC(aKeyName, vk, sc);
-	aRetVal.SetStatic(GetKeyName(vk, sc, aRetVal.CallerBuf(), aRetVal.CallerBufSize, _T("")));
+	aRetVal.SetTemp(GetKeyName(vk, sc, aRetVal.CallerBuf(), aRetVal.CallerBufSize, _T("")));
 }
 
 

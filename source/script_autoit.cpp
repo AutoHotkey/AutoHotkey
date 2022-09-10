@@ -1378,7 +1378,7 @@ bif_impl FResult FileGetVersion(LPCTSTR aPath, StrRet &aRetVal)
 	UINT iFileLS = (UINT)pFFI->dwFileVersionLS;
 	sntprintf(aRetVal.CallerBuf(), aRetVal.CallerBufSize, _T("%u.%u.%u.%u")
 		, (iFileMS >> 16), (iFileMS & 0xFFFF), (iFileLS >> 16), (iFileLS & 0xFFFF));
-	aRetVal.SetStatic(aRetVal.CallerBuf());
+	aRetVal.SetTemp(aRetVal.CallerBuf());
 
 	free(pInfo);
 	return OK;
