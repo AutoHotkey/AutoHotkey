@@ -93,7 +93,7 @@ bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
 		return FR_FAIL;
 	if (!aTitle) aTitle = _T("");
 	if (!aText) aText = _T("");
-	if (aTitle && !*aText)
+	if (*aTitle && !*aText)
 		// As passing an empty string hides the TrayTip (or does nothing on Windows 10),
 		// pass a space to ensure the TrayTip is shown.  Testing showed that Windows 10
 		// will size the notification to fit only the title, as if there was no text.
