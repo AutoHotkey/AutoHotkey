@@ -40,10 +40,27 @@ MdFuncEntry sMdFunc[]
 
 Func *Script::GetBuiltInMdFunc(LPTSTR aFuncName)
 {
-	for (int i = 0; i < _countof(sMdFunc); ++i)
+#ifdef _DEBUG
+	static bool sChecked = false;
+	if (!sChecked)
 	{
-		auto &f = sMdFunc[i];
-		if (!_tcsicmp(f.name, aFuncName))
+		sChecked = true;
+		for (int i = 1; i < _countof(sMdFunc); ++i)
+			if (_tcsicmp(sMdFunc[i-1].name, sMdFunc[i].name) >= 0)
+				MsgBox(_T("DEBUG: sMdFunc out of order."), 0, sMdFunc[i].name);
+	}
+#endif
+	int left, right, mid, result;
+	for (left = 0, right = _countof(sMdFunc) - 1; left <= right;)
+	{
+		mid = (left + right) / 2;
+		auto &f = sMdFunc[mid];
+		result = _tcsicmp(aFuncName, f.name);
+		if (result > 0)
+			left = mid + 1;
+		else if (result < 0)
+			right = mid - 1;
+		else // Match found.
 		{
 			int ac;
 			for (ac = 0; ac < _countof(f.argtype) && f.argtype[ac] != MdType::Void; ++ac);
