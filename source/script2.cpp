@@ -9800,10 +9800,9 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 
 
 
-// As of 2019-09-29, noinline reduces code size by over 20KB on VC++ 2019.
-// Prior to merging Util_CreateDir with this, it wasn't inlined.
-DECLSPEC_NOINLINE
-bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
+static bool FileCreateDirRecursive(LPTSTR aDirSpec);
+
+bool FileCreateDir(LPCTSTR aDirSpec)
 {
 	if (!aDirSpec || !*aDirSpec)
 	{
@@ -9811,6 +9810,25 @@ bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 		return false;
 	}
 
+	// Make a modifiable copy to be used by recursive calls (supports long paths).
+	// Use GetFullPathName() instead of tmemcpy() or similar to normalize the path,
+	// which has at least two benefits:
+	//  1) Indirectly supports forward slash as a path separator.
+	//  2) Relative components such as "x\y\.." would otherwise cause the function
+	//     to report failure due to the order of checks and CreateDirectory calls.
+	TCHAR buf[T_MAX_PATH];
+	auto len = GetFullPathName(aDirSpec, _countof(buf), buf, nullptr);
+	if (!len || len >= _countof(buf))
+	{
+		SetLastError(ERROR_BUFFER_OVERFLOW);
+		return false;
+	}
+
+	return FileCreateDirRecursive(buf);
+}
+
+static bool FileCreateDirRecursive(LPTSTR aDirSpec)
+{
 	DWORD attr = GetFileAttributes(aDirSpec);
 	if (attr != 0xFFFFFFFF)  // aDirSpec already exists.
 	{
@@ -9822,37 +9840,18 @@ bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 	// to create this directory:
 	LPTSTR last_backslash = _tcsrchr(aDirSpec, '\\');
 	if (last_backslash > aDirSpec // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
-		&& last_backslash[-1] != ':') // v1.1.31.00: Don't attempt FileCreateDir("C:") since that's equivalent to either "C:\" or the working directory (which already exists), or FileCreateDir("\\?\C:") since it always fails.
+		&& last_backslash[-1] != ':' // v1.1.31.00: Don't attempt FileCreateDir("C:") since that's equivalent to either "C:\" or the working directory (which already exists), or FileCreateDir("\\?\C:") since it always fails.
+		&& last_backslash[1]) // Skip the recursive call if it's just a trailing backslash.
 	{
-		LPTSTR parent_dir;
-		if (aCanModifyDirSpec)
-		{
-			parent_dir = aDirSpec; // Caller provided a modifiable aDirSpec.
-			*last_backslash = '\0'; // Temporarily terminate for parent directory.
-		}
-		else
-		{
-			// v1.1.31.00: Allocate a modifiable buffer to be used by all calls (supports long paths).
-			parent_dir = (LPTSTR)_alloca((last_backslash - aDirSpec + 1) * sizeof(TCHAR));
-			tcslcpy(parent_dir, aDirSpec, last_backslash - aDirSpec + 1); // Omits the last backslash.
-		}
-		bool exists = FileCreateDir(parent_dir, parent_dir); // Recursively create all needed ancestor directories.
-		if (aCanModifyDirSpec)
-			*last_backslash = '\\'; // Undo temporary termination.
-
-		// v1.0.44: Fixed ErrorLevel being set to 1 when the specified directory ends in a backslash.  In such cases,
-		// two calls were made to CreateDirectory for the same folder: the first without the backslash and then with
-		// it.  Since the directory already existed on the second call, ErrorLevel was wrongly set to 1 even though
-		// everything succeeded.  So now, when recursion finishes creating all the ancestors of this directory
-		// our own layer here does not call CreateDirectory() when there's a trailing backslash because a previous
-		// layer already did:
-		if (!last_backslash[1] || !exists)
+		*last_backslash = '\0'; // Temporarily terminate for parent directory.
+		auto exists = FileCreateDirRecursive(aDirSpec); // Recursively create all needed ancestor directories.
+		*last_backslash = '\\'; // Undo temporary termination.
+		if (!exists)
 			return exists;
 	}
 
 	// The above has recursively created all parent directories of aDirSpec if needed.
-	// Now we can create aDirSpec.  Be sure to explicitly set g_ErrorLevel since it's value
-	// is now indeterminate due to action above:
+	// Now we can create aDirSpec.
 	return CreateDirectory(aDirSpec, NULL);
 }
 
