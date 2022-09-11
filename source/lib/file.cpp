@@ -930,7 +930,7 @@ BOOL FileSetTimeCallback(LPCTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallb
 
 	BOOL success;
 	FileSetTimeData &a = *(FileSetTimeData *)aCallbackData;
-	switch (ctoupper(a.WhichTime))
+	switch (a.WhichTime) // ctoupper() was already applied by FileSetTime().
 	{
 	case 'C': // File's creation time.
 		success = SetFileTime(hFile, &a.Time, NULL, NULL);
@@ -958,7 +958,7 @@ bif_impl FResult FileGetSize(optl<StrArg> aPath, optl<StrArg> aUnits, __int64 *a
 		return FR_E_ARG(0);
 
 	BOOL got_file_size = false;
-	__int64 size;
+	UINT64 size; // UINT64 vs. __int64 produces slightly smaller code due to how /= is compiled.
 
 	// Try CreateFile() and GetFileSizeEx() first, since they can be more accurate. 
 	// See "Why is the file size reported incorrectly for files that are still being written to?"
@@ -981,7 +981,7 @@ bif_impl FResult FileGetSize(optl<StrArg> aPath, optl<StrArg> aUnits, __int64 *a
 			return FR_E_WIN32(g->LastError);
 		}
 		FindClose(file_search);
-		size = ((__int64)found_file.nFileSizeHigh << 32) | found_file.nFileSizeLow;
+		size = ((UINT64)found_file.nFileSizeHigh << 32) | found_file.nFileSizeLow;
 	}
 
 	switch (aUnits.has_nonempty_value() ? ctoupper(*aUnits.value()) : 'B')
@@ -993,7 +993,7 @@ bif_impl FResult FileGetSize(optl<StrArg> aPath, optl<StrArg> aUnits, __int64 *a
 	}
 
 	g->LastError = 0;
-	*aRetVal = size;
+	*aRetVal = (__int64)size;
 	return OK;
 }
 

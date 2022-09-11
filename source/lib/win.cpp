@@ -229,7 +229,9 @@ bif_impl FResult GroupActivate(StrArg aGroup, optl<StrArg> aMode, __int64 *aRetV
 	TCHAR mode = 0;
 	if (aMode.has_nonempty_value())
 	{
-		mode = ctoupper(*aMode.value());
+		mode = *aMode.value();
+		if (mode == 'r')
+			mode = 'R';
 		if (mode != 'R' || aMode.value()[1])
 			return FR_E_ARG(1);
 	}
@@ -250,7 +252,9 @@ bif_impl FResult GroupDeactivate(StrArg aGroup, optl<StrArg> aMode)
 	TCHAR mode = 0;
 	if (aMode.has_nonempty_value())
 	{
-		mode = ctoupper(*aMode.value());
+		mode = *aMode.value();
+		if (mode == 'r')
+			mode = 'R';
 		if (mode != 'R' || aMode.value()[1])
 			return FR_E_ARG(1);
 	}
