@@ -428,6 +428,20 @@ inline bool IsHex(LPCTSTR aBuf) // 10/17/2006: __forceinline worsens performance
 
 
 
+inline bool IsBin(LPCTSTR aBuf)
+{
+	aBuf = omit_leading_whitespace(aBuf); // i.e. caller doesn't have to have ltrimmed.
+	if (!*aBuf)
+		return false;
+	if (*aBuf == '-' || *aBuf == '+')
+		++aBuf;
+	// The "0b" prefix must be followed by at least one bin digit, otherwise it's not considered bin:
+	#define IS_BIN(buf) (*buf == '0' && (*(buf + 1) == 'b' || *(buf + 1) == 'B') && (*(buf + 2) == '0' || *(buf + 2) == '1'))
+	return IS_BIN(aBuf);
+}
+
+
+
 __int64 istrtoi64(LPCTSTR buf, LPCTSTR *endptr);
 
 inline __int64 istrtoi64(LPTSTR buf, LPTSTR *endptr)
@@ -505,7 +519,7 @@ inline double ATOF(LPCTSTR buf)
 // such as "0xFF" automatically.  So this macro must check for hex because some callers rely on that.
 // Also, it uses _strtoi64() vs. strtol() so that more of a double's capacity can be utilized:
 {
-	return IsHex(buf) ? (double)_tcstoi64(buf, NULL, 16) : _tstof(buf);
+	return IsHex(buf) ? (double)_tcstoi64(buf, NULL, 16) : IsBin(buf) ? (double)_tcstoi64(buf+2, NULL, 2) : _tstof(buf);
 }
 
 int FTOA(double aValue, LPTSTR aBuf, int aBufSize);

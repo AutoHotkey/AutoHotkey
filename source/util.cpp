@@ -348,8 +348,9 @@ SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 
 	// Relies on short circuit boolean order to prevent reading beyond the end of the string:
 	BOOL is_hex = IS_HEX(aBuf); // BOOL vs. bool might squeeze a little more performance out this frequently-called function.
-	if (is_hex)
-		aBuf += 2;  // Skip over the 0x prefix.
+	BOOL is_bin = IS_BIN(aBuf);
+	if (is_hex || is_bin)
+		aBuf += 2;  // Skip over the 0x/0b prefix.
 
 	// Set defaults:
 	BOOL has_decimal_point = false;
@@ -374,7 +375,7 @@ SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 			break; // The number qualifies as pure, so fall through to the logic at the bottom. (It would already have returned elsewhere in the loop if the number is impure).
 		if (c == '.')
 		{
-			if (!aAllowFloat || has_decimal_point || is_hex) // If aAllowFloat==false, a decimal point at the very end of the number is considered non-numeric even if aAllowImpure==true.  Some callers might rely on this.
+			if (!aAllowFloat || has_decimal_point || is_hex || is_bin) // If aAllowFloat==false, a decimal point at the very end of the number is considered non-numeric even if aAllowImpure==true.  Some callers might rely on this.
 				// i.e. if aBuf contains 2 decimal points, it can't be a valid number.
 				// Note that decimal points are allowed in hexadecimal strings, e.g. 0xFF.EE.
 				// But since that format doesn't seem to be supported by VC++'s atof() and probably
@@ -385,7 +386,7 @@ SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 		}
 		else
 		{
-			if (is_hex ? !_istxdigit(c) : (c < '0' || c > '9')) // And since we're here, it's not '.' either.
+			if (is_hex ? !_istxdigit(c) : is_bin ? (c < '0' || c > '1') : (c < '0' || c > '9')) // And since we're here, it's not '.' either.
 			{
 				if (aAllowImpure) // Since aStr starts with a number (as verified above), it is considered a number.
 				{
@@ -937,6 +938,23 @@ template<typename T> T xdigitsTo(LPCTSTR p, LPCTSTR &end)
 }
 
 
+template<typename T> T bdigitsTo(LPCTSTR p, LPCTSTR &end)
+{
+	T i = 0;
+	for (;; ++p)
+	{
+		int c = *p;
+		if (c <= '1' && c >= '0')
+			c -= '0';
+		else
+			break;
+		i = i * 2 + c;
+	}
+	end = p;
+	return i;
+}
+
+
 // istrtoi64(): like _tcstoi64, but allows wrapping overflow consistent with
 // arithmetic expressions.  Some behaviour may be unlike _tcstoi64/strtoll:
 //  - Decimal and hexadecimal are always supported; caller cannot specify base.
@@ -963,6 +981,11 @@ __int64 istrtoi64(LPCTSTR buf, LPCTSTR *endptr)
 	{
 		p += 2;
 		i = xdigitsTo<UINT64>(p, end);
+	}
+	else if (IS_BIN(p))
+	{
+		p += 2;
+		i = bdigitsTo<UINT64>(p, end);
 	}
 	else
 	{
@@ -996,6 +1019,11 @@ __int64 nstrtoi64(LPCTSTR buf)
 	{
 		p += 2;
 		i = xdigitsTo<UINT64>(p, p);
+	}
+	else if (IS_BIN(p))
+	{
+		p += 2;
+		i = bdigitsTo<UINT64>(p, p);
 	}
 	else // Decimal.
 	{

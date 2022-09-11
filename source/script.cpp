@@ -5456,7 +5456,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 		{
 			// Behaviour here should match the similar section in ExpressionToPostfix().
 			istrtoi64(op_begin, &op_end);
-			if (!IS_HEX(op_begin)) // This check is probably only needed on VC++ 2015 and later, where _tcstod allows hex.
+			if (!IS_HEX(op_begin) && !IS_BIN(op_begin)) // This hex check is probably only needed on VC++ 2015 and later, where _tcstod allows hex.
 			{
 				LPTSTR d_end;
 				_tcstod(op_begin, &d_end);
@@ -8368,7 +8368,7 @@ unquoted_literal:
 						// elsewhere in the code, such as in IsNumeric().
 						LPTSTR i_end, d_end;
 						__int64 i = istrtoi64(cp, &i_end);
-						if (!IsHex(cp))
+						if (!IsHex(cp) && !IsBin(cp))
 						{
 							double d = _tcstod(cp, &d_end);
 							if (d_end > i_end && _tcschr(EXPR_OPERAND_TERMINATORS, *d_end))
