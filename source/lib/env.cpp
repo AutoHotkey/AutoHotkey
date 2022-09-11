@@ -25,7 +25,7 @@ GNU General Public License for more details.
 #pragma region Environment Variables
 
 
-bif_impl FResult EnvGet(LPCTSTR aEnvVarName, StrRet &aRetVal)
+bif_impl FResult EnvGet(StrArg aEnvVarName, StrRet &aRetVal)
 {
 	// According to MSDN, 32767 is exactly large enough to handle the largest variable plus its zero terminator.
 	// Update: In practice, at least on Windows 7, the limit only applies to the ANSI functions.
@@ -65,7 +65,7 @@ bif_impl FResult EnvGet(LPCTSTR aEnvVarName, StrRet &aRetVal)
 }
 
 
-bif_impl BOOL EnvSet(LPCTSTR aName, LPCTSTR aValue)
+bif_impl BOOL EnvSet(StrArg aName, optl<StrArg> aValue)
 {
 	// MSDN: "If [the 2nd] parameter is NULL, the variable is deleted from the current process's environment."
 	// No checking is currently done to ensure that aValue isn't longer than 32K, since testing shows that
@@ -74,7 +74,7 @@ bif_impl BOOL EnvSet(LPCTSTR aName, LPCTSTR aValue)
 	// Note: It seems that env variable names can contain spaces and other symbols, so it's best not to
 	// validate aEnvVarName the same way we validate script variables (i.e. just let the return value
 	// determine whether there's an error).
-	return SetEnvironmentVariable(aName, aValue);
+	return SetEnvironmentVariable(aName, aValue.value_or_null());
 }
 
 

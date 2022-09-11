@@ -81,7 +81,7 @@ invalid_option:
 }
 
 
-bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
+bif_impl FResult TrayTip(optl<StrArg> aText, optl<StrArg> aTitle, optl<StrArg> aOptions)
 {
 	NOTIFYICONDATA nic = {0};
 	nic.cbSize = sizeof(nic);
@@ -89,15 +89,8 @@ bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
 	nic.hWnd = g_hWnd;
 	nic.uFlags = NIF_INFO;
 	// nic.uTimeout is no longer used because it is valid only on Windows 2000 and Windows XP.
-	if (!TrayTipParseOptions(aOptions, nic))
+	if (!TrayTipParseOptions(aOptions.value_or_null(), nic))
 		return FR_FAIL;
-	if (!aTitle) aTitle = _T("");
-	if (!aText) aText = _T("");
-	if (*aTitle && !*aText)
-		// As passing an empty string hides the TrayTip (or does nothing on Windows 10),
-		// pass a space to ensure the TrayTip is shown.  Testing showed that Windows 10
-		// will size the notification to fit only the title, as if there was no text.
-		aText = _T(" ");
 	if (nic.dwInfoFlags & NIIF_USER)
 	{
 		// Windows 10 toast notifications display the small tray icon stretched to the
@@ -111,8 +104,16 @@ bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
 		else
 			nic.hBalloonIcon = g_script.mCustomIconSmall ? g_script.mCustomIconSmall : g_IconSmall;
 	}
-	tcslcpy(nic.szInfoTitle, aTitle, _countof(nic.szInfoTitle)); // Empty title omits the title line entirely.
-	tcslcpy(nic.szInfo, aText, _countof(nic.szInfo));	// Empty text removes the balloon.
+	if (aTitle.has_value())
+		tcslcpy(nic.szInfoTitle, aTitle.value(), _countof(nic.szInfoTitle));
+	else
+		*nic.szInfoTitle = '\0'; // Empty title omits the title line entirely.
+	if (aText.has_nonempty_value())
+		tcslcpy(nic.szInfo, aText.value(), _countof(nic.szInfo));
+	else if (aTitle.has_nonempty_value()) // Text was omitted or empty, but Title was specified.
+		*nic.szInfo = ' ', nic.szInfo[1] = '\0'; // Pass a non-empty string to ensure the notification is shown.
+	else // Both parameters were omitted or empty.
+		*nic.szInfo = '\0'; // Empty text removes the notification (or tries to).
 	if (!Shell_NotifyIcon(NIM_MODIFY, &nic) && (nic.dwInfoFlags & NIIF_USER))
 	{
 		// Passing NIIF_USER without NIIF_LARGE_ICON on Windows 10.0.19018 caused failure,
@@ -1563,8 +1564,8 @@ LPTSTR GetWorkingDir()
 // GUI-related: FileSelect //
 /////////////////////////////
 
-bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGreeting, LPCTSTR aFilter
-	, ResultToken &aResultToken)
+bif_impl FResult FileSelect(optl<StrArg> aOptions, optl<StrArg> aWorkingDir, optl<StrArg> aGreeting
+	, optl<StrArg> aFilter, ResultToken &aResultToken)
 // Since other script threads can interrupt this command while it's running, it's important that
 // this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
@@ -1578,7 +1579,7 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 	LPCTSTR default_file_name = _T("");
 
 	TCHAR working_dir[MAX_PATH]; // Using T_MAX_PATH vs. MAX_PATH did not help on Windows 10.0.16299 (see below).
-	if (!aWorkingDir || !*aWorkingDir)
+	if (aWorkingDir.is_blank_or_omitted())
 		*working_dir = '\0';
 	else
 	{
@@ -1587,10 +1588,10 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 		// does not support long paths.  Surprisingly, although Windows 10 long path awareness
 		// does not allow us to pass a long path for working_dir, it does affect whether the long
 		// path is used in the address bar and returned filenames.
-		if (_tcslen(aWorkingDir) >= MAX_PATH)
-			GetShortPathName(aWorkingDir, working_dir, _countof(working_dir));
+		if (_tcslen(aWorkingDir.value()) >= MAX_PATH)
+			GetShortPathName(aWorkingDir.value(), working_dir, _countof(working_dir));
 		else
-			tcslcpy(working_dir, aWorkingDir, _countof(working_dir));
+			tcslcpy(working_dir, aWorkingDir.value(), _countof(working_dir));
 		// v1.0.43.10: Support CLSIDs such as:
 		//   My Computer  ::{20d04fe0-3aea-1069-a2d8-08002b30309d}
 		//   My Documents ::{450d8fba-ad25-11d0-98a8-0800361b1103}
@@ -1633,11 +1634,9 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 
 	TCHAR pattern[1024];
 	*pattern = '\0'; // Set default.
-	if (!aFilter)
-		aFilter = _T(""); // For maintainability.
-	if (*aFilter)
+	if (aFilter.has_nonempty_value())
 	{
-		auto pattern_start = _tcschr(aFilter, '(');
+		auto pattern_start = _tcschr(aFilter.value(), '(');
 		if (pattern_start)
 		{
 			// Make pattern a separate string because we want to remove any spaces from it.
@@ -1650,11 +1649,11 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 				*pattern_end = '\0';  // If parentheses are empty, this will set pattern to be the empty string.
 		}
 		else // No open-paren, so assume the entire string is the filter.
-			tcslcpy(pattern, aFilter, _countof(pattern));
+			tcslcpy(pattern, aFilter.value(), _countof(pattern));
 	}
 	UINT filter_count = 0;
 	COMDLG_FILTERSPEC filters[2];
-	if (*pattern)
+	if (*pattern) // aFilter was not omitted or blank.
 	{
 		// Remove any spaces present in the pattern, such as a space after every semicolon
 		// that separates the allowed file extensions.  The API docs specify that there
@@ -1668,7 +1667,7 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 		// pattern like "*.cpp; *.h" will work correctly (possibly due to how leading spaces work
 		// with the file system).
 		//StrReplace(pattern, _T(" "), _T(""), SCS_SENSITIVE);
-		filters[0].pszName = aFilter;
+		filters[0].pszName = aFilter.value();
 		filters[0].pszSpec = pattern;
 		++filter_count;
 	}
@@ -1695,37 +1694,36 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 	// 2) The last item in the list is terminated by a linefeed, which is not as easily used with a
 	//    parsing loop as shown in example in the help file.
 	bool always_use_save_dialog = false; // Set default.
-	if (!aOptions)
-		aOptions = _T("");
-	switch (ctoupper(*aOptions))
+	auto options_str = aOptions.value_or_empty();
+	switch (ctoupper(*options_str))
 	{
 	case 'D':
-		++aOptions;
+		++options_str;
 		flags |= FOS_PICKFOLDERS;
-		if (*aFilter)
+		if (*pattern)
 			return FValueError(ERR_PARAM4_MUST_BE_BLANK);
 		filter_count = 0;
 		break;
 	case 'M':  // Multi-select.
-		++aOptions;
+		++options_str;
 		flags |= FOS_ALLOWMULTISELECT;
 		break;
 	case 'S': // Have a "Save" button rather than an "Open" button.
-		++aOptions;
+		++options_str;
 		always_use_save_dialog = true;
 		break;
 	}
 
 	TCHAR greeting[1024];
-	if (aGreeting && *aGreeting)
-		tcslcpy(greeting, aGreeting, _countof(greeting));
+	if (aGreeting.has_nonempty_value())
+		tcslcpy(greeting, aGreeting.value(), _countof(greeting));
 	else
 		// Use a more specific title so that the dialogs of different scripts can be distinguished
 		// from one another, which may help script automation in rare cases:
 		sntprintf(greeting, _countof(greeting), _T("Select %s - %s")
 			, (flags & FOS_PICKFOLDERS) ? _T("Folder") : _T("File"), g_script.DefaultDialogTitle());
 
-	int options = ATOI(aOptions);
+	int options = ATOI(options_str);
 	if (options & 0x20)
 		flags |= FOS_NODEREFERENCELINKS;
 	if (options & 0x10)
@@ -1831,9 +1829,9 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 // Keyboard Functions //
 ////////////////////////
 
-FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPCTSTR aToggleText)
+FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, optl<StrArg> aToggleText)
 {
-	ToggleValueType toggle = Line::ConvertOnOffAlways(aToggleText, NEUTRAL);
+	ToggleValueType toggle = Line::ConvertOnOffAlways(aToggleText.value_or_null(), NEUTRAL);
 	switch (toggle)
 	{
 	case TOGGLED_ON:
@@ -2325,7 +2323,7 @@ BIF_DECL(BIF_IsSet)
 ////////////////////////
 
 
-bif_impl FResult GetKeyState(LPCTSTR key_name, LPCTSTR mode, ResultToken &aResultToken)
+bif_impl FResult GetKeyState(StrArg key_name, optl<StrArg> aMode, ResultToken &aResultToken)
 {
 	JoyControls joy;
 	int joystick_id;
@@ -2342,7 +2340,7 @@ bif_impl FResult GetKeyState(LPCTSTR key_name, LPCTSTR mode, ResultToken &aResul
 	}
 	// Since above didn't return: There is a virtual key (not a joystick control).
 	KeyStateTypes key_state_type;
-	switch (mode ? ctoupper(*mode) : 'L') // Second parameter.
+	switch (aMode.has_value() ? ctoupper(*aMode.value()) : 'L') // Second parameter.
 	{
 	case 'T': key_state_type = KEYSTATE_TOGGLE; break; // Whether a toggleable key such as CapsLock is currently turned on.
 	case 'P': key_state_type = KEYSTATE_PHYSICAL; break; // Physical state of key.
@@ -2355,7 +2353,7 @@ bif_impl FResult GetKeyState(LPCTSTR key_name, LPCTSTR mode, ResultToken &aResul
 
 
 
-bif_impl int GetKeyVK(LPCTSTR aKeyName)
+bif_impl int GetKeyVK(StrArg aKeyName)
 {
 	vk_type vk;
 	sc_type sc;
@@ -2364,7 +2362,7 @@ bif_impl int GetKeyVK(LPCTSTR aKeyName)
 }
 
 
-bif_impl int GetKeySC(LPCTSTR aKeyName)
+bif_impl int GetKeySC(StrArg aKeyName)
 {
 	vk_type vk;
 	sc_type sc;
@@ -2373,7 +2371,7 @@ bif_impl int GetKeySC(LPCTSTR aKeyName)
 }
 
 
-bif_impl void GetKeyName(LPCTSTR aKeyName, StrRet &aRetVal)
+bif_impl void GetKeyName(StrArg aKeyName, StrRet &aRetVal)
 {
 	vk_type vk;
 	sc_type sc;
@@ -2602,7 +2600,7 @@ bif_impl void ScriptSleep(int aDelay)
 
 
 
-bif_impl void Critical(LPCTSTR aSetting)
+bif_impl void Critical(optl<StrArg> aSetting)
 {
 	// v1.0.46: When the current thread is critical, have the script check messages less often to
 	// reduce situations where an OnMessage or GUI message must be discarded due to "thread already
@@ -2620,9 +2618,9 @@ bif_impl void Critical(LPCTSTR aSetting)
 	//     - Integer other than 0.
 	// Everything else is considered to be "Off", including "Off", any non-blank string that
 	// doesn't start with a non-zero number, and zero itself.
-	g->ThreadIsCritical = !aSetting || !*aSetting // i.e. a first arg that's omitted or blank is the same as "ON". See comments above.
-		|| !_tcsicmp(aSetting, _T("On"))
-		|| (peek_frequency_when_critical_is_on = ATOU(aSetting)); // Non-zero integer also turns it on. Relies on short-circuit boolean order.
+	g->ThreadIsCritical = aSetting.is_blank_or_omitted() // i.e. omitted or blank is the same as "ON". See comments above.
+		|| !_tcsicmp(aSetting.value(), _T("On"))
+		|| (peek_frequency_when_critical_is_on = ATOU(aSetting.value())); // Non-zero integer also turns it on. Relies on short-circuit boolean order.
 	if (g->ThreadIsCritical) // Critical has been turned on. (For simplicity even if it was already on, the following is done.)
 	{
 		g->PeekFrequency = peek_frequency_when_critical_is_on;
@@ -2649,7 +2647,7 @@ bif_impl void Critical(LPCTSTR aSetting)
 
 
 
-bif_impl FResult Thread(LPCTSTR aCommand, int *aValue1, int *aValue2)
+bif_impl FResult Thread(StrArg aCommand, int *aValue1, int *aValue2)
 {
 	switch (Line::ConvertThreadCommand(aCommand))
 	{
@@ -2674,7 +2672,7 @@ bif_impl FResult Thread(LPCTSTR aCommand, int *aValue1, int *aValue2)
 
 
 
-bif_impl void OutputDebug(LPCTSTR aText)
+bif_impl void OutputDebug(StrArg aText)
 {
 #ifdef CONFIG_DEBUGGER
 	if (!g_Debugger.OutputStdErr(aText))

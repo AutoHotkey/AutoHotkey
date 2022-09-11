@@ -88,14 +88,11 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 
 
 
-bif_impl void RunAs(LPCTSTR aUser, LPCTSTR aPass, LPCTSTR aDomain)
+bif_impl void RunAs(optl<StrArg> aUser, optl<StrArg> aPass, optl<StrArg> aDomain)
 {
-	if (!aUser) aUser = _T("");
-	if (!aPass) aPass = _T("");
-	if (!aDomain) aDomain = _T("");
-	StringTCharToWChar(aUser, g_script.mRunAsUser);
-	StringTCharToWChar(aPass, g_script.mRunAsPass);
-	StringTCharToWChar(aDomain, g_script.mRunAsDomain);
+	StringTCharToWChar(aUser.value_or_empty(), g_script.mRunAsUser);
+	StringTCharToWChar(aPass.value_or_empty(), g_script.mRunAsPass);
+	StringTCharToWChar(aDomain.value_or_empty(), g_script.mRunAsDomain);
 }
 
 
@@ -939,7 +936,7 @@ control_type_error:
 
 
 
-bif_impl FResult Download(LPCTSTR aURL, LPCTSTR aFilespec)
+bif_impl FResult Download(StrArg aURL, StrArg aFilespec)
 {
 	// v1.0.44.07: Set default to INTERNET_FLAG_RELOAD vs. 0 because the vast majority of usages would want
 	// the file to be retrieved directly rather than from the cache.
@@ -1052,7 +1049,7 @@ int CALLBACK FileSelectFolderCallback(HWND hwnd, UINT uMsg, LPARAM lParam, LPARA
 
 
 
-bif_impl FResult DirSelect(LPCTSTR aRootDir, int *aOptions, LPCTSTR aGreeting, StrRet &aRetVal)
+bif_impl FResult DirSelect(optl<StrArg> aRootDir, int *aOptions, optl<StrArg> aGreeting, StrRet &aRetVal)
 {
 	if (g_nFolderDialogs >= MAX_FOLDERDIALOGS)
 	{
@@ -1069,8 +1066,8 @@ bif_impl FResult DirSelect(LPCTSTR aRootDir, int *aOptions, LPCTSTR aGreeting, S
 	// controls the origin point (above which the control cannot navigate).
 	LPTSTR initial_folder;
 	TCHAR root_dir[MAX_PATH*2 + 5];  // Up to two paths might be present inside, including an asterisk and spaces between them.
-	if (aRootDir)
-		tcslcpy(root_dir, aRootDir, _countof(root_dir)); // Make a modifiable copy.
+	if (aRootDir.has_value())
+		tcslcpy(root_dir, aRootDir.value(), _countof(root_dir)); // Make a modifiable copy.
 	else
 		*root_dir = '\0';
 	if (initial_folder = _tcschr(root_dir, '*'))
@@ -1124,8 +1121,8 @@ bif_impl FResult DirSelect(LPCTSTR aRootDir, int *aOptions, LPCTSTR aGreeting, S
 	bi.iImage = iImage;
 	bi.hwndOwner = THREAD_DIALOG_OWNER; // Can be NULL, which is used rather than main window since no need to have main window forced into the background by this.
 	TCHAR greeting[1024];
-	if (aGreeting && *aGreeting)
-		tcslcpy(greeting, aGreeting, _countof(greeting));
+	if (aGreeting.has_nonempty_value())
+		tcslcpy(greeting, aGreeting.value(), _countof(greeting));
 	else
 		sntprintf(greeting, _countof(greeting), _T("Select Folder - %s"), g_script.DefaultDialogTitle());
 	bi.lpszTitle = greeting;
@@ -1171,7 +1168,7 @@ bif_impl FResult DirSelect(LPCTSTR aRootDir, int *aOptions, LPCTSTR aGreeting, S
 
 
 
-bif_impl FResult FileGetShortcut(LPCTSTR aShortcutFile, StrRet *aTarget, StrRet *aWorkingDir
+bif_impl FResult FileGetShortcut(StrArg aShortcutFile, StrRet *aTarget, StrRet *aWorkingDir
 	, StrRet *aArgs, StrRet *aDesc, StrRet *aIcon, ResultToken *aIconNum, int *aRunState)
 // Credited to Holger <Holger.Kotsch at GMX de>.
 {
@@ -1250,8 +1247,9 @@ bif_impl FResult FileGetShortcut(LPCTSTR aShortcutFile, StrRet *aTarget, StrRet 
 
 
 
-bif_impl FResult FileCreateShortcut(LPCTSTR aTargetFile, LPCTSTR aShortcutFile, LPCTSTR aWorkingDir, LPCTSTR aArgs
-	, LPCTSTR aDescription, LPCTSTR aIconFile, LPCTSTR aHotkey, int *aIconNumber, int *aRunState)
+bif_impl FResult FileCreateShortcut(StrArg aTargetFile, StrArg aShortcutFile, optl<StrArg> aWorkingDir
+	, optl<StrArg> aArgs, optl<StrArg> aDescription, optl<StrArg> aIconFile, optl<StrArg> aHotkey
+	, int *aIconNumber, int *aRunState)
 {
 	CoInitialize(NULL);
 	IShellLink *psl;
@@ -1260,21 +1258,21 @@ bif_impl FResult FileCreateShortcut(LPCTSTR aTargetFile, LPCTSTR aShortcutFile, 
 	if (SUCCEEDED(hr = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)&psl)))
 	{
 		psl->SetPath(aTargetFile);
-		if (aWorkingDir)
-			psl->SetWorkingDirectory(aWorkingDir);
-		if (aArgs)
-			psl->SetArguments(aArgs);
-		if (aDescription)
-			psl->SetDescription(aDescription);
+		if (aWorkingDir.has_value())
+			psl->SetWorkingDirectory(aWorkingDir.value());
+		if (aArgs.has_value())
+			psl->SetArguments(aArgs.value());
+		if (aDescription.has_value())
+			psl->SetDescription(aDescription.value());
 		int icon_index = aIconNumber ? *aIconNumber : 0;
-		if (aIconFile)
-			psl->SetIconLocation(aIconFile,  icon_index - (icon_index > 0 ? 1 : 0)); // Convert 1-based index to 0-based, but leave negative resource IDs as-is.
-		if (aHotkey)
+		if (aIconFile.has_value())
+			psl->SetIconLocation(aIconFile.value(), icon_index - (icon_index > 0 ? 1 : 0)); // Convert 1-based index to 0-based, but leave negative resource IDs as-is.
+		if (aHotkey.has_value())
 		{
 			// If badly formatted, it's not a critical error, just continue.
 			// Currently, only shortcuts with a CTRL+ALT are supported.
 			// AutoIt3 note: Make sure that CTRL+ALT is selected (otherwise invalid)
-			vk_type vk = TextToVK(aHotkey);
+			vk_type vk = TextToVK(aHotkey.value());
 			if (vk)
 				// Vk in low 8 bits, mods in high 8:
 				psl->SetHotkey(   (WORD)vk | ((WORD)(HOTKEYF_CONTROL | HOTKEYF_ALT) << 8)   );
@@ -1306,7 +1304,7 @@ bif_impl FResult FileCreateShortcut(LPCTSTR aTargetFile, LPCTSTR aShortcutFile, 
 
 
 
-bif_impl FResult FileRecycle(LPCTSTR aFilePattern)
+bif_impl FResult FileRecycle(StrArg aFilePattern)
 {
 	if (!aFilePattern || !*aFilePattern)
 		return FR_E_ARG(0);  // Since this is probably not what the user intended.
@@ -1337,9 +1335,9 @@ bif_impl FResult FileRecycle(LPCTSTR aFilePattern)
 
 
 
-bif_impl FResult FileRecycleEmpty(LPCTSTR szPath)
+bif_impl FResult FileRecycleEmpty(optl<StrArg> szPath)
 {
-	HRESULT hr = SHEmptyRecycleBin(NULL, szPath, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+	HRESULT hr = SHEmptyRecycleBin(NULL, szPath.value_or_null(), SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
 	// Throw no error for E_UNEXPECTED, since that is returned in the common case where the
 	// recycle bin is already empty.  Seems more useful and user-friendly to ignore it.
 	return hr != E_UNEXPECTED ? hr : OK;
@@ -1347,17 +1345,16 @@ bif_impl FResult FileRecycleEmpty(LPCTSTR szPath)
 
 
 
-bif_impl FResult FileGetVersion(LPCTSTR aPath, StrRet &aRetVal)
+bif_impl FResult FileGetVersion(optl<StrArg> aPath, StrRet &aRetVal)
 {
 	g->LastError = 0; // Set default for successful return or non-Win32 errors.
 
-	if (!aPath && g->mLoopFile)
-		aPath = g->mLoopFile->file_path; // Default to the current file-loop's file.
-	if (!aPath || !*aPath)
+	auto path = aPath.has_value() ? aPath.value() : g->mLoopFile ? g->mLoopFile->file_path : _T("");
+	if (!*path)
 		return FR_E_ARG(0);
 
 	DWORD dwUnused, dwSize;
-	if (   !(dwSize = GetFileVersionInfoSize(aPath, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
+	if (   !(dwSize = GetFileVersionInfoSize(path, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
 		return FR_E_WIN32;
 
 	BYTE *pInfo = (BYTE*)malloc(dwSize);  // Allocate the size retrieved by the above.
@@ -1365,7 +1362,7 @@ bif_impl FResult FileGetVersion(LPCTSTR aPath, StrRet &aRetVal)
 	UINT uSize;
 
 	// Read the version resource
-	if (!GetFileVersionInfo(aPath, 0, dwSize, (LPVOID)pInfo)
+	if (!GetFileVersionInfo(path, 0, dwSize, (LPVOID)pInfo)
 	// Locate the fixed information
 		|| !VerQueryValue(pInfo, _T("\\"), (LPVOID *)&pFFI, &uSize))
 	{

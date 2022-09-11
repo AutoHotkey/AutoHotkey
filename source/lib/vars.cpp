@@ -21,9 +21,9 @@ GNU General Public License for more details.
 
 
 
-bif_impl FResult CoordMode(LPCTSTR aCommand, LPCTSTR aMode)
+bif_impl FResult CoordMode(StrArg aCommand, optl<StrArg> aMode)
 {
-	CoordModeType mode = aMode ? Line::ConvertCoordMode(aMode) : COORD_MODE_SCREEN;
+	CoordModeType mode = aMode.has_value() ? Line::ConvertCoordMode(aMode.value()) : COORD_MODE_SCREEN;
 	CoordModeType shift = Line::ConvertCoordModeCmd(aCommand);
 	if (shift == COORD_MODE_INVALID)
 		return FR_E_ARG(0);
@@ -34,7 +34,7 @@ bif_impl FResult CoordMode(LPCTSTR aCommand, LPCTSTR aMode)
 }
 
 
-bif_impl FResult SendMode(LPCTSTR aMode)
+bif_impl FResult SendMode(StrArg aMode)
 {
 	auto new_mode = Line::ConvertSendMode(aMode, SM_INVALID);
 	if (new_mode == SM_INVALID)
@@ -62,13 +62,13 @@ bif_impl FResult SetDefaultMouseSpeed(int aSpeed)
 }
 
 
-bif_impl FResult SetKeyDelay(int *aDelay, int *aDuration, LPCTSTR aMode)
+bif_impl FResult SetKeyDelay(int *aDelay, int *aDuration, optl<StrArg> aMode)
 {
 	if (aDelay && *aDelay < -1)
 		return FR_E_ARG(0);
 	if (aDuration && *aDuration < -1)
 		return FR_E_ARG(1);
-	if (aMode && !_tcsicmp(aMode, _T("Play")))
+	if (aMode.has_value() && !_tcsicmp(aMode.value(), _T("Play")))
 	{
 		if (aDelay)
 			g->KeyDelayPlay = *aDelay;
@@ -77,7 +77,7 @@ bif_impl FResult SetKeyDelay(int *aDelay, int *aDuration, LPCTSTR aMode)
 	}
 	else
 	{
-		if (aMode && *aMode)
+		if (aMode.has_nonempty_value()) // Anything other than "Play" or "" is invalid.
 			return FR_E_ARG(2);
 		if (aDelay)
 			g->KeyDelay = *aDelay;
@@ -88,13 +88,13 @@ bif_impl FResult SetKeyDelay(int *aDelay, int *aDuration, LPCTSTR aMode)
 }
 
 
-bif_impl FResult SetMouseDelay(int aDelay, LPCTSTR aMode)
+bif_impl FResult SetMouseDelay(int aDelay, optl<StrArg> aMode)
 {
 	if (aDelay < -1)
 		return FR_E_ARG(0);
-	if (aMode && !_tcsicmp(aMode, _T("Play")))
+	if (aMode.has_value() && !_tcsicmp(aMode.value(), _T("Play")))
 		g->MouseDelayPlay = aDelay;
-	else if (aMode && *aMode)
+	else if (aMode.has_nonempty_value()) // Anything other than "Play" or "" is invalid.
 		return FR_E_ARG(1);
 	else
 		g->MouseDelay = aDelay;

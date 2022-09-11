@@ -210,27 +210,27 @@ BIF_DECL(BIF_WinActivate)
 
 
 
-bif_impl FResult GroupAdd(LPCTSTR aGroup, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText)
+bif_impl FResult GroupAdd(StrArg aGroup, optl<StrArg> aTitle, optl<StrArg> aText, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText)
 {
 	auto group = g_script.FindGroup(aGroup, true);
 	if (!group)
 		return FR_FAIL; // It already displayed the error for us.
-	return group->AddWindow(aTitle, aText, aExcludeTitle, aExcludeText) ? OK : FR_FAIL;
+	return group->AddWindow(aTitle.value_or_null(), aText.value_or_null(), aExcludeTitle.value_or_null(), aExcludeText.value_or_null()) ? OK : FR_FAIL;
 }
 
 
 
-bif_impl FResult GroupActivate(LPCTSTR aGroup, LPCTSTR aMode, __int64 *aRetVal)
+bif_impl FResult GroupActivate(StrArg aGroup, optl<StrArg> aMode, __int64 *aRetVal)
 {
 	WinGroup *group;
 	if (   !(group = g_script.FindGroup(aGroup, true))   ) // Last parameter -> create-if-not-found.
 		return FR_FAIL; // It already displayed the error for us.
 	
 	TCHAR mode = 0;
-	if (aMode && *aMode)
+	if (aMode.has_nonempty_value())
 	{
-		mode = ctoupper(*aMode);
-		if (mode != 'R' || aMode[1])
+		mode = ctoupper(*aMode.value());
+		if (mode != 'R' || aMode.value()[1])
 			return FR_E_ARG(1);
 	}
 
@@ -242,16 +242,16 @@ bif_impl FResult GroupActivate(LPCTSTR aGroup, LPCTSTR aMode, __int64 *aRetVal)
 
 
 
-bif_impl FResult GroupDeactivate(LPCTSTR aGroup, LPCTSTR aMode)
+bif_impl FResult GroupDeactivate(StrArg aGroup, optl<StrArg> aMode)
 {
 	auto group = g_script.FindGroup(aGroup);
 	if (!group)
 		return FR_E_ARG(0);
 	TCHAR mode = 0;
-	if (aMode && *aMode)
+	if (aMode.has_nonempty_value())
 	{
-		mode = ctoupper(*aMode);
-		if (mode != 'R' || aMode[1])
+		mode = ctoupper(*aMode.value());
+		if (mode != 'R' || aMode.value()[1])
 			return FR_E_ARG(1);
 	}
 	group->Deactivate(mode == 'R');
@@ -260,16 +260,16 @@ bif_impl FResult GroupDeactivate(LPCTSTR aGroup, LPCTSTR aMode)
 
 
 
-bif_impl FResult GroupClose(LPCTSTR aGroup, LPCTSTR aMode)
+bif_impl FResult GroupClose(StrArg aGroup, optl<StrArg> aMode)
 {
 	auto group = g_script.FindGroup(aGroup);
 	if (!group)
 		return FR_E_ARG(0);
 	TCHAR mode = 0;
-	if (aMode && *aMode)
+	if (aMode.has_nonempty_value())
 	{
-		mode = ctoupper(*aMode);
-		if ((mode != 'R' && mode != 'A') || aMode[1])
+		mode = ctoupper(*aMode.value());
+		if ((mode != 'R' && mode != 'A') || aMode.value()[1])
 			return FR_E_ARG(1);
 	}
 	if (mode == 'A')

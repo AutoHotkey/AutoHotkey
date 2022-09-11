@@ -536,7 +536,7 @@ control_fail:
 
 
 
-bif_impl FResult SoundPlay(LPCTSTR aFilespec, LPCTSTR aWait)
+bif_impl FResult SoundPlay(StrArg aFilespec, optl<StrArg> aWait)
 {
 	auto cp = omit_leading_whitespace(aFilespec);
 	if (*cp == '*')
@@ -565,7 +565,7 @@ bif_impl FResult SoundPlay(LPCTSTR aFilespec, LPCTSTR aWait)
 	if (mciSendString(_T("play ") SOUNDPLAY_ALIAS, NULL, 0, NULL)) // Failure.
 		return FR_E_FAILED;
 	// Otherwise, the sound is now playing.
-	if (  !(aWait && (aWait[0] == '1' && !aWait[1] || !_tcsicmp(aWait, _T("Wait"))))  )
+	if (  !(aWait.has_value() && (aWait.value()[0] == '1' && !aWait.value()[1] || !_tcsicmp(aWait.value(), _T("Wait")))))
 		return OK;
 	// Otherwise, caller wants us to wait until the file is done playing.  To allow our app to remain
 	// responsive during this time, use a loop that checks our message queue:

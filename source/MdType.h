@@ -48,7 +48,7 @@ enum class MdType : UINT8
 template<MdType T> struct md_argtype;
 template<> struct md_argtype<MdType::Int32> { typedef int t; };
 template<> struct md_argtype<MdType::Int64> { typedef __int64 t; };
-template<> struct md_argtype<MdType::String> { typedef LPCTSTR t; };
+template<> struct md_argtype<MdType::String> { typedef StrArg t; };
 template<> struct md_argtype<MdType::Void> { typedef void t; };
 template<> struct md_argtype<MdType::Variant> { typedef ExprTokenType &t; };
 template<> struct md_argtype<MdType::Bool32> { typedef BOOL t; };
@@ -63,7 +63,7 @@ template<> struct md_optout<MdType::String> { typedef StrRet *t; };
 template<> struct md_optout<MdType::Variant> { typedef ResultToken *t; };
 
 template<MdType T> struct md_optional { typedef typename md_argtype<T>::t* t; };
-template<> struct md_optional<MdType::String> { typedef LPCTSTR t; };
+template<> struct md_optional<MdType::String> { typedef optl<StrArg> t; };
 
 template<MdType T> struct md_retval { typedef typename md_argtype<T>::t t; };
 template<> struct md_retval<MdType::FResult> { typedef FResult t; };
