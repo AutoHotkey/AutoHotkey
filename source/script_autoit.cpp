@@ -1352,7 +1352,7 @@ bif_impl FResult FileGetVersion(LPCTSTR aPath, StrRet &aRetVal)
 	g->LastError = 0; // Set default for successful return or non-Win32 errors.
 
 	if (!aPath && g->mLoopFile)
-		aPath = g->mLoopFile->cFileName;
+		aPath = g->mLoopFile->file_path; // Default to the current file-loop's file.
 	if (!aPath || !*aPath)
 		return FR_E_ARG(0);
 

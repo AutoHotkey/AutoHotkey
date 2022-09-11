@@ -583,7 +583,7 @@ bif_impl FResult FileGetAttrib(LPCTSTR aPath, StrRet &aRetVal)
 	g->LastError = 0; // Set default for successful return or non-Win32 errors.
 
 	if (!aPath && g->mLoopFile)
-		aPath = g->mLoopFile->cFileName;
+		aPath = g->mLoopFile->file_path; // Default to the current file-loop's file.
 	if (!aPath || !*aPath)
 		return FR_E_ARG(0);
 
@@ -839,7 +839,7 @@ bif_impl FResult FileGetTime(LPCTSTR aPath, LPCTSTR aWhichTime, StrRet &aRetVal)
 	g->LastError = 0; // Set default for successful return or non-Win32 errors.
 
 	if (!aPath && g->mLoopFile)
-		aPath = g->mLoopFile->cFileName;
+		aPath = g->mLoopFile->file_path; // Default to the current file-loop's file.
 	if (!aPath || !*aPath)
 		return FR_E_ARG(0);
 
@@ -958,7 +958,7 @@ bif_impl FResult FileGetSize(LPCTSTR aPath, LPCTSTR aUnits, __int64 *aRetVal)
 	g->LastError = 0; // Set default for successful return or non-Win32 errors.
 
 	if (!aPath && g->mLoopFile)
-		aPath = g->mLoopFile->cFileName;
+		aPath = g->mLoopFile->file_path; // Default to the current file-loop's file.
 	if (!aPath || !*aPath)
 		return FR_E_ARG(0);
 
