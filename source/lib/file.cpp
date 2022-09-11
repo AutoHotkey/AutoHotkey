@@ -1053,20 +1053,25 @@ bif_impl FResult DirMove(StrArg aSource, StrArg aDest, optl<StrArg> aFlag)
 {
 	if (!*aSource) return FR_E_ARG(0);
 	if (!*aDest) return FR_E_ARG(1);
-	if (aFlag.has_value() && ctoupper(*aFlag.value()) == 'R')
-	{
-		// Perform a simple rename instead, which prevents the operation from being only partially
-		// complete if the source directory is in use (due to being a working dir for a currently
-		// running process, or containing a file that is being written to).  In other words,
-		// the operation will be "all or none":
-		return MoveFile(aSource, aDest) ? OK : FR_E_WIN32;
-	}
 	int flag = 0;
-	if (aFlag.has_value())
+	auto flag_str = aFlag.value_or_null();
+	if (flag_str && *flag_str)
 	{
-		if (!IsNumeric(aFlag.value()))
+		// The documentation says "Specify one of the following single characters",
+		// so specifically allow only the values "0", "1", "2", "R" and "r".
+		if (flag_str[1])
 			return FR_E_ARG(2);
-		flag = ATOI(aFlag.value());
+		if (*flag_str == 'R' || *flag_str == 'r')
+		{
+			// Perform a simple rename instead, which prevents the operation from being only partially
+			// complete if the source directory is in use (due to being a working dir for a currently
+			// running process, or containing a file that is being written to).  In other words,
+			// the operation will be "all or none":
+			return MoveFile(aSource, aDest) ? OK : FR_E_WIN32;
+		}
+		if (*flag_str < '0' || *flag_str > '2')
+			return FR_E_ARG(2);
+		flag = *flag_str - '0';
 	}
 	if (!Line::Util_CopyDir(aSource, aDest, flag, true))
 		return FR_E_FAILED;
