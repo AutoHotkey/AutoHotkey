@@ -9534,61 +9534,75 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 	TCHAR file_buf[65535];
 	*file_buf = '\0'; // Set default.
 
-	TCHAR working_dir[MAX_PATH]; // Using T_MAX_PATH vs. MAX_PATH did not help on Windows 10.0.16299 (see below).
-	if (!aWorkingDir || !*aWorkingDir)
-		*working_dir = '\0';
-	else
+	LPCTSTR initial_dir = NULL;
+	if (aWorkingDir && *aWorkingDir)
 	{
-		// Compress the path if possible to support longer paths.  Without this, any path longer
-		// than MAX_PATH would be ignored, presumably because the dialog, as part of the shell,
-		// does not support long paths.  Surprisingly, although Windows 10 long path awareness
-		// does not allow us to pass a long path for working_dir, it does affect whether the long
-		// path is used in the address bar and returned filenames.
-		if (_tcslen(aWorkingDir) >= MAX_PATH)
-			GetShortPathName(aWorkingDir, working_dir, _countof(working_dir));
-		else
-			tcslcpy(working_dir, aWorkingDir, _countof(working_dir));
+		LPCTSTR dir_and_name = aWorkingDir;
+		size_t dir_and_name_length = _tcslen(dir_and_name);
+		LPCTSTR last_backslash = _tcsrchr(dir_and_name, '\\');
 		// v1.0.43.10: Support CLSIDs such as:
 		//   My Computer  ::{20d04fe0-3aea-1069-a2d8-08002b30309d}
 		//   My Documents ::{450d8fba-ad25-11d0-98a8-0800361b1103}
 		// Also support optional subdirectory appended to the CLSID.
 		// Neither SetCurrentDirectory() nor GetFileAttributes() directly supports CLSIDs, so rely on other means
 		// to detect whether a CLSID ends in a directory vs. filename.
-		bool is_directory, is_clsid;
-		if (is_clsid = !_tcsncmp(working_dir, _T("::{"), 3))
+		bool is_directory = false; // Whether the entire dir_and_name is a directory, lacking a default filename.
+		if (last_backslash && !last_backslash[1])
+			is_directory = true; // The entire string is the directory; keep the slash to ensure "C:\" uses the root, not the working directory ("C:").
+		else if (!_tcsncmp(dir_and_name, _T("::{"), 3))
 		{
-			LPTSTR end_brace;
-			if (end_brace = _tcschr(working_dir, '}'))
-				is_directory = !end_brace[1] // First '}' is also the last char in string, so it's naked CLSID (so assume directory).
-					|| working_dir[_tcslen(working_dir) - 1] == '\\'; // Or path ends in backslash.
-			else // Badly formatted clsid.
-				is_directory = true; // Arbitrary default due to rarity.
+			// Do a rough check to determine whether this is likely to be a naked CLSID (examples above),
+			// in which case it should be treated as a directory with no default filename.  This should be
+			// more efficient than the previous approach of scanning for the first '}'.
+			// Interpretation of at least one partially invalid case differs from the previous method:
+			// 1) If the default filename ends with '}' and '}' is missing from the CLSID,
+			//     Old: the entire string is ignored because it looks like a CLSID, but is invalid.
+			//     New: there isn't a '}' at the right position, so the default filename is used.
+			// All other differences probably only affect invalid CLSIDs, with the old method being more
+			// likely to ignore the entire string, while the new method prefers to split at "\" if present.
+			is_directory = dir_and_name_length == 40 && dir_and_name[39] == '}' && !last_backslash;
 		}
-		else // Not a CLSID.
+		else // Not a CLSID and not explicitly a directory (no trailing backslash).
 		{
-			DWORD attr = GetFileAttributes(working_dir);
+			DWORD attr = GetFileAttributes(dir_and_name);
 			is_directory = (attr != 0xFFFFFFFF) && (attr & FILE_ATTRIBUTE_DIRECTORY);
 		}
-		if (!is_directory)
+		size_t initial_dir_length = 0;
+		if (is_directory)
+		{
+			// Use the entire dir_and_name as the initial directory.
+			initial_dir = dir_and_name;
+			initial_dir_length = dir_and_name_length;
+		}
+		else
 		{
 			// Above condition indicates it's either an existing file that's not a folder, or a nonexistent
 			// folder/filename.  In either case, it seems best to assume it's a file because the user may want
 			// to provide a default SAVE filename, and it would be normal for such a file not to already exist.
-			LPTSTR last_backslash;
-			if (last_backslash = _tcsrchr(working_dir, '\\'))
+			if (!last_backslash)
+			{
+				// Use the entire dir_and_name as the default filename.
+				tcslcpy(file_buf, dir_and_name, _countof(file_buf));
+			}
+			else
 			{
 				tcslcpy(file_buf, last_backslash + 1, _countof(file_buf)); // Set the default filename.
-				*last_backslash = '\0'; // Make the working directory just the file's path.
+				// Set the initial directory.
+				initial_dir = dir_and_name;
+				initial_dir_length = last_backslash - dir_and_name;
 			}
-			else // The entire working_dir string is the default file (unless this is a clsid).
-				if (!is_clsid)
-				{
-					tcslcpy(file_buf, working_dir, _countof(file_buf));
-					*working_dir = '\0';  // This signals it to use the default directory.
-				}
-				//else leave working_dir set to the entire clsid string in case it's somehow valid.
 		}
-		// else it is a directory, so just leave working_dir set as it was initially.
+		if (initial_dir && initial_dir[initial_dir_length]) // Null termination required.
+		{
+			if (initial_dir_length < T_MAX_PATH) // Avoid stack overflow in case of bad data; anything longer wouldn't work anyway.
+			{
+				LPTSTR buf = (LPTSTR)_alloca(sizeof(TCHAR) * (initial_dir_length + 1));
+				initial_dir = tmemcpy(buf, initial_dir, initial_dir_length);
+				buf[initial_dir_length] = '\0';
+			}
+			else
+				initial_dir = NULL;
+		}
 	}
 
 	TCHAR greeting[1024];
@@ -9646,7 +9660,7 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 	ofn.lpstrFile = file_buf;
 	ofn.nMaxFile = _countof(file_buf) - 1; // -1 to be extra safe.
 	// Specifying NULL will make it default to the last used directory (at least in Win2k):
-	ofn.lpstrInitialDir = *working_dir ? working_dir : NULL;
+	ofn.lpstrInitialDir = initial_dir;
 
 	// Note that the OFN_NOCHANGEDIR flag is ineffective in some cases, so we'll use a custom
 	// workaround instead.  MSDN: "Windows NT 4.0/2000/XP: This flag is ineffective for GetOpenFileName."
