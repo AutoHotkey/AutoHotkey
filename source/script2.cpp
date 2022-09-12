@@ -9820,7 +9820,8 @@ bool FileCreateDir(LPCTSTR aDirSpec)
 	auto len = GetFullPathName(aDirSpec, _countof(buf), buf, nullptr);
 	if (!len || len >= _countof(buf))
 	{
-		SetLastError(ERROR_BUFFER_OVERFLOW);
+		if (len)
+			SetLastError(ERROR_BUFFER_OVERFLOW);
 		return false;
 	}
 
