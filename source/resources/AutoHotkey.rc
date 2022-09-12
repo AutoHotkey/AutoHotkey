@@ -190,6 +190,7 @@ BEGIN
             VALUE "FileVersion", AHK_VERSION
             VALUE "InternalName", ""
             VALUE "LegalCopyright", ""
+            VALUE "CompanyName", ""
             VALUE "OriginalFilename", ""
             VALUE "ProductName", ""
             VALUE "ProductVersion", AHK_VERSION
@@ -198,6 +199,7 @@ BEGIN
             VALUE "FileVersion", AHK_VERSION
             VALUE "InternalName", "AutoHotkey"
             VALUE "LegalCopyright", "Copyright (C) 2003-2013"
+            VALUE "CompanyName", "The AutoHotkey Foundation"
             VALUE "OriginalFilename", "AutoHotkey.exe"
             VALUE "ProductName", "AutoHotkey"
             VALUE "ProductVersion", AHK_VERSION
