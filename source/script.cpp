@@ -120,7 +120,6 @@ FuncEntry g_BIF[] =
 	BIFn(HotIfWinNotActive, 0, 2, BIF_Hotkey),
 	BIFn(HotIfWinNotExist, 0, 2, BIF_Hotkey),
 	BIFn(Hotkey, 1, 3, BIF_Hotkey),
-	BIF1(Hotstring, 1, 3),
 	BIF1(IL_Add, 2, 4),
 	BIF1(IL_Create, 0, 3),
 	BIF1(IL_Destroy, 1, 1),

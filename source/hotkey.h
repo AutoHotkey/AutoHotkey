@@ -372,16 +372,16 @@ public:
 	static void SuspendAll(bool aSuspend);
 	ResultType PerformInNewThreadMadeByCaller();
 	void DoReplace(LPARAM alParam);
-	static Hotstring *FindHotstring(LPTSTR aHotstring, bool aCaseSensitive, bool aDetectWhenInsideWord, HotkeyCriterion *aHotCriterion);
-	static ResultType AddHotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR aHotstring
-		, LPTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend = FALSE);
-	static void ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
+	static Hotstring *FindHotstring(LPCTSTR aHotstring, bool aCaseSensitive, bool aDetectWhenInsideWord, HotkeyCriterion *aHotCriterion);
+	static ResultType AddHotstring(LPCTSTR aName, IObjectPtr aCallback, LPCTSTR aOptions, LPCTSTR aHotstring
+		, LPCTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend = FALSE);
+	static void ParseOptions(LPCTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 		, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
 		, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction, bool &aSuspendExempt);
-	void ParseOptions(LPTSTR aOptions);
+	void ParseOptions(LPCTSTR aOptions);
 
 	// Constructor & destructor:
-	Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
+	Hotstring(LPCTSTR aName, IObjectPtr aCallback, LPCTSTR aOptions, LPCTSTR aHotstring, LPCTSTR aReplacement
 		, bool aHasContinuationSection, UCHAR aSuspend);
 	~Hotstring() {}  // Note that mReplacement is sometimes malloc'd, sometimes from SimpleHeap, and sometimes the empty string.
 

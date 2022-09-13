@@ -65,6 +65,7 @@ template<> struct md_optout<MdType::Variant> { typedef ResultToken *t; };
 template<MdType T> struct md_optional { typedef typename md_argtype<T>::t* t; };
 template<> struct md_optional<MdType::String> { typedef optl<StrArg> t; };
 template<> struct md_optional<MdType::Int32> { typedef optl<int> t; };
+template<> struct md_optional<MdType::Variant> { typedef ExprTokenType *t; };
 
 template<MdType T> struct md_retval { typedef typename md_argtype<T>::t t; };
 template<> struct md_retval<MdType::FResult> { typedef FResult t; };

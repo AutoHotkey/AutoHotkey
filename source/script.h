@@ -1124,7 +1124,7 @@ public:
 		return TOGGLE_INVALID;
 	}
 
-	static ToggleValueType ConvertOnOffToggle(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOffToggle(LPCTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, TOGGLE, or blank.
 	{
 		if (ToggleValueType toggle = ConvertOnOff(aBuf))
@@ -3275,8 +3275,6 @@ BIF_DECL(BIF_LoadPicture);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 BIF_DECL(BIF_VerCompare);
-
-BIF_DECL(BIF_Hotstring);
 
 BIF_DECL(BIF_Type);
 BIF_DECL(BIF_IsObject);

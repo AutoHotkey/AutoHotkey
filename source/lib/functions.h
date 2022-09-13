@@ -69,6 +69,8 @@ md_func(GroupAdd, (In, String, GroupName), (In_Opt, String, WinTitle), (In_Opt, 
 md_func(GroupClose, (In, String, GroupName), (In_Opt, String, Mode))
 md_func(GroupDeactivate, (In, String, GroupName), (In_Opt, String, Mode))
 
+md_func_x(Hotstring, BIF_Hotstring, FResult, (In, String, String), (In_Opt, Variant, Replacement), (In_Opt, String, OnOffToggle), (Ret, Variant, RetVal))
+
 md_func(IniDelete, (In, String, Path), (In, String, Section), (In_Opt, String, Key))
 md_func(IniRead, (In, String, Path), (In_Opt, String, Section), (In_Opt, String, Key), (In_Opt, String, Default), (Ret, String, RetVal))
 md_func(IniWrite, (In, String, Value), (In, String, Path), (In, String, Section), (In_Opt, String, Key))
