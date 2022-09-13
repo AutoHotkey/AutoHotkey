@@ -589,7 +589,11 @@ bif_impl FResult SoundPlay(StrArg aFilespec, optl<StrArg> aWait)
 
 
 
-bif_impl void SoundBeep(int *aFrequency, int *aDuration)
+bif_impl void SoundBeep(optl<int> aFrequency, optl<int> aDuration)
 {
-	Beep(aFrequency ? *aFrequency : 523, aDuration && *aDuration >= 0 ? *aDuration : 150);
+	// Negative values are checked to avoid interpreting them as a very long duration.
+	int duration = aDuration.value_or(150);
+	if (duration < 0)
+		duration = 150;
+	Beep(aFrequency.value_or(523), duration);
 }

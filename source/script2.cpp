@@ -811,9 +811,9 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 
 
 
-bif_impl void ListLines(int *aMode)
+bif_impl void ListLines(optl<int> aMode)
 {
-	if (!aMode)
+	if (!aMode.has_value())
 	{
 		ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
 		return;
@@ -852,9 +852,9 @@ bif_impl void ListHotkeys()
 
 
 
-bif_impl FResult KeyHistory(int *aMaxEvents)
+bif_impl FResult KeyHistory(optl<int> aMaxEvents)
 {
-	if (!aMaxEvents)
+	if (!aMaxEvents.has_value())
 	{
 		ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
 		return OK;
@@ -2647,23 +2647,23 @@ bif_impl void Critical(optl<StrArg> aSetting)
 
 
 
-bif_impl FResult Thread(StrArg aCommand, int *aValue1, int *aValue2)
+bif_impl FResult Thread(StrArg aCommand, optl<int> aValue1, optl<int> aValue2)
 {
 	switch (Line::ConvertThreadCommand(aCommand))
 	{
 	case THREAD_CMD_PRIORITY:
-		if (aValue1)
+		if (aValue1.has_value())
 			g->Priority = *aValue1;
 		return OK;
 	case THREAD_CMD_INTERRUPT:
 		// If either one is blank, leave that setting as it was before.
-		if (aValue1)
+		if (aValue1.has_value())
 			g_script.mUninterruptibleTime = *aValue1;  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
-		if (aValue2)
+		if (aValue2.has_value())
 			g_script.mUninterruptedLineCountMax = *aValue2;  // 32-bit also, to help performance (since huge values seem unnecessary).
 		return OK;
 	case THREAD_CMD_NOTIMERS:
-		g->AllowTimers = (aValue1 && *aValue1 == 0); // Double-negative NoTimers=false -> allow timers.
+		g->AllowTimers = (aValue1.has_value() && *aValue1 == 0); // Double-negative NoTimers=false -> allow timers.
 		return OK;
 	default:
 		return FR_E_ARG(0);

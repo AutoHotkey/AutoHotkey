@@ -292,8 +292,9 @@ void KeyEventMenuMask(KeyEventTypes aEventType, DWORD aExtraInfo = KEY_IGNORE_AL
 ResultType PerformClick(LPTSTR aOptions);
 void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEventTypes &aEventType
 	, int &aRepeatCount, bool &aMoveOffset);
-FResult PerformMouse(ActionTypeType aActionType, optl<StrArg> aButton, int *aX1, int *aY1, int *aX2, int *aY2
-	, int *aSpeed, optl<StrArg> aOffsetMode, int *aRepeatCount, optl<StrArg> aDownUp);
+FResult PerformMouse(ActionTypeType aActionType, optl<StrArg> aButton
+	, optl<int> aX1, optl<int> aY1, optl<int> aX2, optl<int> aY2
+	, optl<int> aSpeed, optl<StrArg> aOffsetMode, optl<int> aRepeatCount, optl<StrArg> aDownUp);
 void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY1, int aX2, int aY2
 	, int aRepeatCount, KeyEventTypes aEventType, int aSpeed, bool aMoveOffset);
 

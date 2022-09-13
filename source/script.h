@@ -1112,9 +1112,9 @@ public:
 		return aDefault;
 	}
 
-	static ToggleValueType Convert10Toggle(int *aValue)
+	static ToggleValueType Convert10Toggle(optl<int> aValue)
 	{
-		if (!aValue) return NEUTRAL;
+		if (!aValue.has_value()) return NEUTRAL;
 		switch (*aValue)
 		{
 		case 1: return TOGGLED_ON;

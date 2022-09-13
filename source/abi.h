@@ -38,8 +38,11 @@ template<typename T> class optl
 	const T *_value;
 public:
 	optl(T &v) : _value {&v} {}
+	optl(nullptr_t) : _value {nullptr} {}
 	bool has_value() { return _value != nullptr; }
+	T operator* () { return *_value; }
 	T value() { return *_value; }
+	T value_or(T aDefault) { return _value ? *_value : aDefault; }
 };
 
 template<> class optl<StrArg>

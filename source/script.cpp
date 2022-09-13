@@ -1300,7 +1300,7 @@ ResultType Script::Reload(bool aDisplayErrors)
 
 
 
-bif_impl ResultType Exit(int *aExitCode)
+bif_impl ResultType Exit(optl<int> aExitCode)
 {
 	// Even if the script isn't persistent, this thread might've interrupted another which should
 	// be allowed to complete normally.  This is especially important in v2 because a persistent
@@ -1316,13 +1316,13 @@ bif_impl ResultType Exit(int *aExitCode)
 	// conditions can change during stack-unwind due to __delete or FINALLY.  Instead, this is
 	// reset to 0 in ResumeUnderlyingThread().
 	if (g_nThreads <= 1)
-		g_script.mPendingExitCode = aExitCode ? *aExitCode : 0;
+		g_script.mPendingExitCode = aExitCode.has_value() ? *aExitCode : 0;
 	return EARLY_EXIT;
 }
 
-bif_impl ResultType ExitApp(int *aExitCode)
+bif_impl ResultType ExitApp(optl<int> aExitCode)
 {
-	g_script.mPendingExitCode = aExitCode ? *aExitCode : 0;
+	g_script.mPendingExitCode = aExitCode.has_value() ? *aExitCode : 0;
 	return g_script.ExitApp(EXIT_EXIT);
 }
 
@@ -11897,7 +11897,7 @@ void ToggleSuspendState()
 
 
 
-bif_impl FResult Suspend(int *aMode)
+bif_impl FResult Suspend(optl<int> aMode)
 {
 	auto toggle = Line::Convert10Toggle(aMode);
 	if (toggle == TOGGLE_INVALID)
@@ -11924,7 +11924,7 @@ void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
 }
 
 
-bif_impl FResult Pause(int *aNewState)
+bif_impl FResult Pause(optl<int> aNewState)
 {
 	auto toggle = Line::Convert10Toggle(aNewState);
 	switch (toggle)

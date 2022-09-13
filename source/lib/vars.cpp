@@ -62,26 +62,26 @@ bif_impl FResult SetDefaultMouseSpeed(int aSpeed)
 }
 
 
-bif_impl FResult SetKeyDelay(int *aDelay, int *aDuration, optl<StrArg> aMode)
+bif_impl FResult SetKeyDelay(optl<int> aDelay, optl<int> aDuration, optl<StrArg> aMode)
 {
-	if (aDelay && *aDelay < -1)
+	if (aDelay.has_value() && *aDelay < -1)
 		return FR_E_ARG(0);
-	if (aDuration && *aDuration < -1)
+	if (aDuration.has_value() && *aDuration < -1)
 		return FR_E_ARG(1);
 	if (aMode.has_value() && !_tcsicmp(aMode.value(), _T("Play")))
 	{
-		if (aDelay)
+		if (aDelay.has_value())
 			g->KeyDelayPlay = *aDelay;
-		if (aDuration)
+		if (aDuration.has_value())
 			g->PressDurationPlay = *aDuration;
 	}
 	else
 	{
 		if (aMode.has_nonempty_value()) // Anything other than "Play" or "" is invalid.
 			return FR_E_ARG(2);
-		if (aDelay)
+		if (aDelay.has_value())
 			g->KeyDelay = *aDelay;
-		if (aDuration)
+		if (aDuration.has_value())
 			g->PressDuration = *aDuration;
 	}
 	return OK;

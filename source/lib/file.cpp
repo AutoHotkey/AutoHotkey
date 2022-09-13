@@ -539,10 +539,10 @@ static bool FileInstallCopy(LPCTSTR aSource, LPCTSTR aDest, bool aOverwrite)
 }
 #endif
 
-bif_impl FResult FileInstall(StrArg aSource, StrArg aDest, int *aFlag)
+bif_impl FResult FileInstall(StrArg aSource, StrArg aDest, optl<int> aFlag)
 {
 	bool success;
-	bool allow_overwrite = (aFlag && *aFlag == 1);
+	bool allow_overwrite = (aFlag.has_value() && *aFlag == 1);
 #ifndef AUTOHOTKEYSC
 	if (g_script.mKind != Script::ScriptKindResource)
 		success = FileInstallCopy(aSource, aDest, allow_overwrite);
@@ -554,23 +554,23 @@ bif_impl FResult FileInstall(StrArg aSource, StrArg aDest, int *aFlag)
 
 
 
-static FResult FileCopyOrMove(LPCTSTR aSource, LPCTSTR aDest, int *aFlag, bool aMove)
+static FResult FileCopyOrMove(LPCTSTR aSource, LPCTSTR aDest, optl<int> aFlag, bool aMove)
 {
 	if (!*aSource) // v2: Empty Source is likely to be a mistake.
 		return FR_E_ARG(0);
 	if (!*aDest) // Fix for v1.1.34.03: Previous behaviour was a Critical Error.
 		return FR_E_ARG(1);
-	int error_count = Line::Util_CopyFile(aSource, aDest, aFlag && *aFlag == 1, aMove
+	int error_count = Line::Util_CopyFile(aSource, aDest, aFlag.has_value() && *aFlag == 1, aMove
 		, g->LastError);
 	return error_count ? FR_THROW_INT(error_count) : OK;
 }
 
-bif_impl FResult FileCopy(StrArg aSource, StrArg aDest, int *aFlag)
+bif_impl FResult FileCopy(StrArg aSource, StrArg aDest, optl<int> aFlag)
 {
 	return FileCopyOrMove(aSource, aDest, aFlag, false);
 }
 
-bif_impl FResult FileMove(StrArg aSource, StrArg aDest, int *aFlag)
+bif_impl FResult FileMove(StrArg aSource, StrArg aDest, optl<int> aFlag)
 {
 	return FileCopyOrMove(aSource, aDest, aFlag, true);
 }
@@ -1041,11 +1041,11 @@ bif_impl void DirExist(StrArg aFilePattern, StrRet &aRetVal)
 }
 
 
-bif_impl FResult DirCopy(StrArg aSource, StrArg aDest, int *aOverwrite)
+bif_impl FResult DirCopy(StrArg aSource, StrArg aDest, optl<int> aOverwrite)
 {
 	if (!*aSource) return FR_E_ARG(0);
 	if (!*aDest) return FR_E_ARG(1);
-	return Line::Util_CopyDir(aSource, aDest, aOverwrite ? *aOverwrite : FALSE, false) ? OK : FR_E_FAILED;
+	return Line::Util_CopyDir(aSource, aDest, aOverwrite.value_or(FALSE), false) ? OK : FR_E_FAILED;
 }
 
 

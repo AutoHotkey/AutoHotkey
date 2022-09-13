@@ -160,10 +160,10 @@ bif_impl int MonitorGetPrimary()
 }
 
 
-static FResult MonitorGet(int *aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal, bool aWorkArea)
+static FResult MonitorGet(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal, bool aWorkArea)
 {
 	MonitorInfoPackage mip = {0};
-	EnumForMonitorGet(mip, aIndex ? *aIndex : 0);
+	EnumForMonitorGet(mip, aIndex.value_or(0));
 	if (!mip.count) // Might be virtually impossible.
 		return FR_E_WIN32;
 	if (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count)
@@ -179,22 +179,22 @@ static FResult MonitorGet(int *aIndex, int *aLeft, int *aTop, int *aRight, int *
 }
 
 
-bif_impl FResult MonitorGet(int *aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal)
+bif_impl FResult MonitorGet(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal)
 {
 	return MonitorGet(aIndex, aLeft, aTop, aRight, aBottom, aRetVal, false);
 }
 
 
-bif_impl FResult MonitorGetWorkArea(int *aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal)
+bif_impl FResult MonitorGetWorkArea(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal)
 {
 	return MonitorGet(aIndex, aLeft, aTop, aRight, aBottom, aRetVal, true);
 }
 
 
-bif_impl FResult MonitorGetName(int *aIndex, StrRet &aRetVal)
+bif_impl FResult MonitorGetName(optl<int> aIndex, StrRet &aRetVal)
 {
 	MonitorInfoPackage mip = {0};
-	EnumForMonitorGet(mip, aIndex ? *aIndex : 0);
+	EnumForMonitorGet(mip, aIndex.value_or(0));
 	if (!mip.count) // Might be virtually impossible.
 		return FR_E_WIN32;
 	if (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count)

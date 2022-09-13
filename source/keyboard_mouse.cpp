@@ -1960,8 +1960,9 @@ break_both:
 
 
 
-FResult PerformMouse(ActionTypeType aActionType, optl<StrArg> aButton, int *aX1, int *aY1, int *aX2, int *aY2
-	, int *aSpeed, optl<StrArg> aOffsetMode, int *aRepeatCount, optl<StrArg> aDownUp)
+FResult PerformMouse(ActionTypeType aActionType, optl<StrArg> aButton
+	, optl<int> aX1, optl<int> aY1, optl<int> aX2, optl<int> aY2
+	, optl<int> aSpeed, optl<StrArg> aOffsetMode, optl<int> aRepeatCount, optl<StrArg> aDownUp)
 {
 	vk_type vk;
 	if (aActionType == ACT_MOUSEMOVE)
@@ -1972,7 +1973,7 @@ FResult PerformMouse(ActionTypeType aActionType, optl<StrArg> aButton, int *aX1,
 			return FR_E_ARG(0); // of MouseClick/MouseClickDrag
 
 	KeyEventTypes event_type = KEYDOWNANDUP;  // Set defaults.
-	int repeat_count = aRepeatCount ? *aRepeatCount : 1;
+	int repeat_count = aRepeatCount.has_value() ? *aRepeatCount : 1;
 	if (repeat_count < 0)
 		return FR_E_ARG(2); // of MouseClick
 
@@ -2005,12 +2006,12 @@ FResult PerformMouse(ActionTypeType aActionType, optl<StrArg> aButton, int *aX1,
 	}
 
 	PerformMouseCommon(aActionType, vk
-		, aX1 ? *aX1 : COORD_UNSPECIFIED  // If no starting coords are specified, mark it as "use the
-		, aY1 ? *aY1 : COORD_UNSPECIFIED  // current mouse position":
-		, aX2 ? *aX2 : COORD_UNSPECIFIED  // These two are non-null only for MouseClickDrag.
-		, aY2 ? *aY2 : COORD_UNSPECIFIED  //
+		, aX1.value_or(COORD_UNSPECIFIED)  // If no starting coords are specified, mark it as "use the
+		, aY1.value_or(COORD_UNSPECIFIED)  // current mouse position":
+		, aX2.value_or(COORD_UNSPECIFIED)  // These two are non-null only for MouseClickDrag.
+		, aY2.value_or(COORD_UNSPECIFIED)  //
 		, repeat_count, event_type
-		, aSpeed ? *aSpeed : g->DefaultMouseSpeed
+		, aSpeed.value_or(g->DefaultMouseSpeed)
 		, move_offset);
 
 	return OK;
@@ -4508,19 +4509,19 @@ bif_impl FResult SetScrollLockState(optl<StrArg> aState)
 	return SetToggleState(VK_SCROLL, g_ForceScrollLock, aState);
 }
 
-bif_impl FResult MouseClick(optl<StrArg> aButton, int *aX, int *aY, int *aClickCount, int *aSpeed, optl<StrArg> aDownOrUp, optl<StrArg> aRelative)
+bif_impl FResult MouseClick(optl<StrArg> aButton, optl<int> aX, optl<int> aY, optl<int> aClickCount, optl<int> aSpeed, optl<StrArg> aDownOrUp, optl<StrArg> aRelative)
 {
 	return PerformMouse(ACT_MOUSECLICK, aButton, aX, aY, nullptr, nullptr, aSpeed, aRelative, aClickCount, aDownOrUp);
 }
 
-bif_impl FResult MouseClickDrag(optl<StrArg> aButton, int aX1, int aY1, int aX2, int aY2, int *aSpeed, optl<StrArg> aRelative)
+bif_impl FResult MouseClickDrag(optl<StrArg> aButton, int aX1, int aY1, int aX2, int aY2, optl<int> aSpeed, optl<StrArg> aRelative)
 {
-	return PerformMouse(ACT_MOUSECLICKDRAG, aButton, &aX1, &aY1, &aX2, &aY2, aSpeed, aRelative, nullptr, nullptr);
+	return PerformMouse(ACT_MOUSECLICKDRAG, aButton, aX1, aY1, aX2, aY2, aSpeed, aRelative, nullptr, nullptr);
 }
 
-bif_impl FResult MouseMove(int aX, int aY, int *aSpeed, optl<StrArg> aRelative)
+bif_impl FResult MouseMove(int aX, int aY, optl<int> aSpeed, optl<StrArg> aRelative)
 {
-	return PerformMouse(ACT_MOUSEMOVE, nullptr, &aX, &aY, nullptr, nullptr, aSpeed, aRelative, nullptr, nullptr);
+	return PerformMouse(ACT_MOUSEMOVE, nullptr, aX, aY, nullptr, nullptr, aSpeed, aRelative, nullptr, nullptr);
 }
 
 #pragma endregion

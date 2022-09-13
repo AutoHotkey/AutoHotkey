@@ -1049,7 +1049,7 @@ int CALLBACK FileSelectFolderCallback(HWND hwnd, UINT uMsg, LPARAM lParam, LPARA
 
 
 
-bif_impl FResult DirSelect(optl<StrArg> aRootDir, int *aOptions, optl<StrArg> aGreeting, StrRet &aRetVal)
+bif_impl FResult DirSelect(optl<StrArg> aRootDir, optl<int> aOptions, optl<StrArg> aGreeting, StrRet &aRetVal)
 {
 	if (g_nFolderDialogs >= MAX_FOLDERDIALOGS)
 	{
@@ -1131,7 +1131,7 @@ bif_impl FResult DirSelect(optl<StrArg> aRootDir, int *aOptions, optl<StrArg> aG
 	#define FSF_ALLOW_CREATE 0x01
 	#define FSF_EDITBOX      0x02
 	#define FSF_NONEWDIALOG  0x04
-	DWORD options = aOptions ? (DWORD)*aOptions : FSF_ALLOW_CREATE;
+	auto options = (DWORD)aOptions.value_or(FSF_ALLOW_CREATE);
 	bi.ulFlags =
 		  ((options & FSF_NONEWDIALOG)    ? 0           : BIF_NEWDIALOGSTYLE) // v1.0.48: Added to support BartPE/WinPE.
 		| ((options & FSF_ALLOW_CREATE)   ? 0           : BIF_NONEWFOLDERBUTTON)
@@ -1249,7 +1249,7 @@ bif_impl FResult FileGetShortcut(StrArg aShortcutFile, StrRet *aTarget, StrRet *
 
 bif_impl FResult FileCreateShortcut(StrArg aTargetFile, StrArg aShortcutFile, optl<StrArg> aWorkingDir
 	, optl<StrArg> aArgs, optl<StrArg> aDescription, optl<StrArg> aIconFile, optl<StrArg> aHotkey
-	, int *aIconNumber, int *aRunState)
+	, optl<int> aIconNumber, optl<int> aRunState)
 {
 	CoInitialize(NULL);
 	IShellLink *psl;
@@ -1264,7 +1264,7 @@ bif_impl FResult FileCreateShortcut(StrArg aTargetFile, StrArg aShortcutFile, op
 			psl->SetArguments(aArgs.value());
 		if (aDescription.has_value())
 			psl->SetDescription(aDescription.value());
-		int icon_index = aIconNumber ? *aIconNumber : 0;
+		int icon_index = aIconNumber.value_or(0);
 		if (aIconFile.has_value())
 			psl->SetIconLocation(aIconFile.value(), icon_index - (icon_index > 0 ? 1 : 0)); // Convert 1-based index to 0-based, but leave negative resource IDs as-is.
 		if (aHotkey.has_value())
@@ -1277,7 +1277,7 @@ bif_impl FResult FileCreateShortcut(StrArg aTargetFile, StrArg aShortcutFile, op
 				// Vk in low 8 bits, mods in high 8:
 				psl->SetHotkey(   (WORD)vk | ((WORD)(HOTKEYF_CONTROL | HOTKEYF_ALT) << 8)   );
 		}
-		if (aRunState)
+		if (aRunState.has_value())
 			psl->SetShowCmd(*aRunState); // No validation is done since there's a chance other numbers might be valid now or in the future.
 
 		IPersistFile *ppf;
