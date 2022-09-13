@@ -949,7 +949,7 @@ BOOL FileSetTimeCallback(LPCTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallb
 
 
 
-bif_impl FResult FileGetSize(optl<StrArg> aPath, optl<StrArg> aUnits, __int64 *aRetVal)
+bif_impl FResult FileGetSize(optl<StrArg> aPath, optl<StrArg> aUnits, __int64 &aRetVal)
 {
 	g->LastError = 0; // Set default for successful return or non-Win32 errors.
 
@@ -993,7 +993,7 @@ bif_impl FResult FileGetSize(optl<StrArg> aPath, optl<StrArg> aUnits, __int64 *a
 	}
 
 	g->LastError = 0;
-	*aRetVal = (__int64)size;
+	aRetVal = (__int64)size;
 	return OK;
 }
 

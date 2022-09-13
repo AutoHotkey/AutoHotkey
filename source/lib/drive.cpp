@@ -50,7 +50,7 @@ static void DriveFixPath(LPCTSTR &aDrive, TCHAR (&aBuf)[n])
 
 
 
-static FResult DriveSpace(LPCTSTR aPath, __int64 *aRetVal, bool aGetFreeSpace)
+static FResult DriveSpace(LPCTSTR aPath, __int64 &aRetVal, bool aGetFreeSpace)
 // Because of NTFS's ability to mount volumes into a directory, a path might not necessarily
 // have the same amount of free space as its root drive.  However, I'm not sure if this
 // method here actually takes that into account.
@@ -75,16 +75,16 @@ static FResult DriveSpace(LPCTSTR aPath, __int64 *aRetVal, bool aGetFreeSpace)
 	if (!GetDiskFreeSpaceEx(buf, &free, &total, &used))
 		return FR_E_WIN32;
 	// Casting this way allows sizes of up to 2,097,152 gigabytes:
-	*aRetVal = (__int64)((unsigned __int64)(aGetFreeSpace ? free.QuadPart : total.QuadPart) / 1048576);
+	aRetVal = (__int64)((unsigned __int64)(aGetFreeSpace ? free.QuadPart : total.QuadPart) / 1048576);
 	return OK;
 }
 
-bif_impl FResult DriveGetCapacity(StrArg aPath, __int64 *aRetVal)
+bif_impl FResult DriveGetCapacity(StrArg aPath, __int64 &aRetVal)
 {
 	return DriveSpace(aPath, aRetVal, false);
 }
 
-bif_impl FResult DriveGetSpaceFree(StrArg aPath, __int64 *aRetVal)
+bif_impl FResult DriveGetSpaceFree(StrArg aPath, __int64 &aRetVal)
 {
 	return DriveSpace(aPath, aRetVal, true);
 }
@@ -265,14 +265,14 @@ bif_impl FResult DriveGetLabel(StrArg aDrive, StrRet &aRetVal)
 
 
 
-bif_impl FResult DriveGetSerial(StrArg aDrive, __int64 *aRetVal)
+bif_impl FResult DriveGetSerial(StrArg aDrive, __int64 &aRetVal)
 {
 	TCHAR buf[MAX_PATH]; // MAX_PATH vs. T_MAX_PATH because testing in 2019 indicated GetVolumeInformation() did not support long paths.
 	DriveFixPath(aDrive, buf);
 	DWORD serial_number;
 	if (!GetVolumeInformation(aDrive, NULL, 0, &serial_number, NULL, NULL, NULL, 0))
 		return FR_E_WIN32;
-	*aRetVal = serial_number;
+	aRetVal = serial_number;
 	return OK;
 }
 

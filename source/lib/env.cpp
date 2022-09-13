@@ -160,7 +160,7 @@ bif_impl int MonitorGetPrimary()
 }
 
 
-static FResult MonitorGet(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal, bool aWorkArea)
+static FResult MonitorGet(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int &aRetVal, bool aWorkArea)
 {
 	MonitorInfoPackage mip = {0};
 	EnumForMonitorGet(mip, aIndex.value_or(0));
@@ -174,18 +174,18 @@ static FResult MonitorGet(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, 
 	if (aTop) *aTop = monitor_rect.top;
 	if (aRight) *aRight = monitor_rect.right;
 	if (aBottom) *aBottom = monitor_rect.bottom;
-	*aRetVal = mip.count;
+	aRetVal = mip.count;
 	return OK;
 }
 
 
-bif_impl FResult MonitorGet(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal)
+bif_impl FResult MonitorGet(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int &aRetVal)
 {
 	return MonitorGet(aIndex, aLeft, aTop, aRight, aBottom, aRetVal, false);
 }
 
 
-bif_impl FResult MonitorGetWorkArea(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal)
+bif_impl FResult MonitorGetWorkArea(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int &aRetVal)
 {
 	return MonitorGet(aIndex, aLeft, aTop, aRight, aBottom, aRetVal, true);
 }

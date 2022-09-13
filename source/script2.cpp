@@ -2032,13 +2032,13 @@ BOOL Line::CheckValidFinallyJump(Line* jumpTarget, bool aSilent)
 ////////////////////
 
 
-bif_impl void Persistent(BOOL *aNewValue, BOOL *aOldValue)
+bif_impl void Persistent(BOOL *aNewValue, BOOL &aOldValue)
 {
 	// Returning the old value might have some use, but if the caller doesn't want its value to change,
 	// something awkward like "Persistent(isPersistent := Persistent())" is needed.  Rather than just
 	// returning the current status, Persistent() makes the script persistent because that's likely to
 	// be its most common use by far, and it's what users familiar with the old #Persistent may expect.
-	*aOldValue = g_persistent;
+	aOldValue = g_persistent;
 	g_persistent = aNewValue ? *aNewValue : TRUE;
 }
 

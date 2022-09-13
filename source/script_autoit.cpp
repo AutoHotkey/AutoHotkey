@@ -97,7 +97,7 @@ bif_impl void RunAs(optl<StrArg> aUser, optl<StrArg> aPass, optl<StrArg> aDomain
 
 
 
-bif_impl FResult SysGetIPAddresses(IObject **aRetVal)
+bif_impl FResult SysGetIPAddresses(IObject *&aRetVal)
 {
 	// aaa.bbb.ccc.ddd = 15, but allow room for larger IP's in the future.
 	#define IP_ADDRESS_SIZE 32 // The maximum size of any of the strings we return, including terminator.
@@ -109,7 +109,7 @@ bif_impl FResult SysGetIPAddresses(IObject **aRetVal)
 	WSADATA wsadata;
 	if (WSAStartup(MAKEWORD(1, 1), &wsadata)) // Failed (it returns 0 on success).
 	{
-		*aRetVal = addresses;
+		aRetVal = addresses;
 		return OK;
 	}
 
@@ -136,7 +136,7 @@ bif_impl FResult SysGetIPAddresses(IObject **aRetVal)
 	}
 
 	WSACleanup();
-	*aRetVal = addresses;
+	aRetVal = addresses;
 	return OK;
 }
 
