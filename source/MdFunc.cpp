@@ -287,7 +287,6 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				t = &param;
 			arg_value = (UINT_PTR)TokenToString(*t, buf);
 		}
-#if 0 // Currently unused/untested
 		else if (arg_type == MdType::Object)
 		{
 			arg_value = (DWORD_PTR)TokenToObject(param);
@@ -297,7 +296,6 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				goto end;
 			}
 		}
-#endif
 		else if (arg_type == MdType::Variant)
 		{
 			arg_value = (DWORD_PTR)&param;

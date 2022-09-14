@@ -1,6 +1,11 @@
 
 md_func_x(BlockInput, ScriptBlockInput, FResult, (In, String, Mode))
 
+#ifdef ENABLE_REGISTERCALLBACK
+md_func(CallbackCreate, (In, Object, Function), (In_Opt, String, Options), (In_Opt, Int32, ParamCount), (Ret, Int64, RetVal))
+md_func(CallbackFree, (In, Int64, Callback))
+#endif
+
 md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
 md_func_v(Critical, (In_Opt, String, OnOffNumber))
 

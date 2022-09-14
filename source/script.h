@@ -3251,11 +3251,6 @@ BIF_DECL(BIF_SetTimer);
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_On);
 
-#ifdef ENABLE_REGISTERCALLBACK
-BIF_DECL(BIF_CallbackCreate);
-BIF_DECL(BIF_CallbackFree);
-#endif
-
 BIF_DECL(BIF_MenuFromHandle);
 BIF_DECL(BIF_TraySetIcon);
 

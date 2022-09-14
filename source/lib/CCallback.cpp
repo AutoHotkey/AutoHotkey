@@ -167,8 +167,8 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 
 
 
-BIF_DECL(BIF_CallbackCreate)
-// Returns: Address of callback procedure, or empty string on failure.
+bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> aParamCount, __int64 &aRetVal)
+// Returns: Address of callback procedure.
 // Parameters:
 // 1: Name of the function to be called when the callback routine is executed.
 // 2: Options.
@@ -177,11 +177,7 @@ BIF_DECL(BIF_CallbackCreate)
 // Author: Original x86 RegisterCallback() was created by Jonathan Rennison (JGR).
 //   x64 support by fincs.  Various changes by Lexikos.
 {
-	IObject *func = ParamIndexToObject(0);
-	if (!func)
-		_f_throw_param(0, _T("object"));
-
-	LPTSTR options = ParamIndexToOptionalString(1);
+	auto options = aOptions.value_or_empty();
 	bool pass_params_pointer = _tcschr(options, '&'); // Callback wants the address of the parameter list instead of their values.
 #ifdef WIN32_PLATFORM
 	bool use_cdecl = StrChrAny(options, _T("Cc")); // Recognize "C" as the "CDecl" option.
@@ -190,25 +186,26 @@ BIF_DECL(BIF_CallbackCreate)
 	bool require_param_count = false;
 #endif
 
-	bool params_specified = !ParamIndexIsOmittedOrEmpty(2);
+	bool params_specified = aParamCount.has_value();
 	if (pass_params_pointer && require_param_count && !params_specified)
-		_f_throw_value(ERR_PARAM3_MUST_NOT_BE_BLANK);
+		return FR_E_ARG(2);
 
-	int actual_param_count = params_specified ? ParamIndexToInt(2) : 0;
+	int actual_param_count = aParamCount.value_or(0);
+	ResultToken result_token; // Just used for .result.
 	if (!ValidateFunctor(func
 		, pass_params_pointer ? 1 : actual_param_count // Count of script parameters being passed.
-		, aResultToken
+		, result_token
 		// Use MinParams as actual_param_count if unspecified and no & option.
 		, params_specified || pass_params_pointer ? nullptr : &actual_param_count))
 	{
-		return;
+		return result_token.Exited() ? FR_FAIL : OK;
 	}
 	
 #ifdef WIN32_PLATFORM
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
 	{
 		func->Release();
-		_f_throw_param(2);
+		return FR_E_ARG(2);
 	}
 #endif
 
@@ -225,7 +222,7 @@ BIF_DECL(BIF_CallbackCreate)
 	//						memory and the VirtualProtect function to grant PAGE_EXECUTE access."
 	RCCallbackFunc *callbackfunc=(RCCallbackFunc*) GlobalAlloc(GMEM_FIXED,sizeof(RCCallbackFunc));	//allocate structure off process heap, automatically RWE and fixed.
 	if (!callbackfunc)
-		_f_throw_oom;
+		return FR_E_OUTOFMEM;
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
 
 #ifdef WIN32_PLATFORM
@@ -281,19 +278,20 @@ BIF_DECL(BIF_CallbackCreate)
 	DWORD dwOldProtect;
 	VirtualProtect(callbackfunc, sizeof(RCCallbackFunc), PAGE_EXECUTE_READWRITE, &dwOldProtect);
 
-	_f_return_i((__int64)callbackfunc); // Yield the callable address as the result.
+	aRetVal = ((__int64)callbackfunc); // Yield the callable address as the result.
+	return OK;
 }
 
-BIF_DECL(BIF_CallbackFree)
+bif_impl FResult CallbackFree(__int64 aCallback)
 {
-	INT_PTR address = ParamIndexToIntPtr(0);
+	INT_PTR address = (INT_PTR)aCallback;
 	if (address < 65536 && address >= 0) // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
-		_f_throw_param(0);
+		return FR_E_ARG(0);
 	RCCallbackFunc *callbackfunc = (RCCallbackFunc *)address;
 	callbackfunc->func->Release();
 	callbackfunc->func = NULL; // To help detect bugs.
 	GlobalFree(callbackfunc);
-	_f_return_empty;
+	return OK;
 }
 
 #endif
