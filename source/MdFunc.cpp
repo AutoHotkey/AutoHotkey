@@ -455,6 +455,7 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 	{
 	case MdType::Bool32:
 	case MdType::Int32: aToken.SetValue(*(int*)aPtr); break;
+	case MdType::UInt32: aToken.SetValue(*(UINT*)aPtr); break;
 	case MdType::Int64: aToken.SetValue(*(__int64*)aPtr); break;
 	case MdType::Float64: aToken.SetValue(*(double*)aPtr); break;
 	case MdType::Object:

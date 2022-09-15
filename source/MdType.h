@@ -9,7 +9,9 @@ enum class MdType : UINT8
 	TypeFloat	= 2,
 	Size32		= 0x10, // This is just so Int32 != TypeInt, for debugging purposes.
 	Size64		= 0x20, // Flag for types that are 64-bit even on x86-32.
+	Unsigned	= 0x40,
 	Int32		= TypeInt | Size32,
+	UInt32		= TypeInt | Size32 | Unsigned,
 	Int64		= TypeInt | Size64,
 	Float64		= TypeFloat | Size64,
 	String		= 3,
@@ -47,6 +49,8 @@ enum class MdType : UINT8
 
 template<MdType T> struct md_argtype;
 template<> struct md_argtype<MdType::Int32> { typedef int t; };
+template<> struct md_argtype<MdType::UInt32> { typedef UINT t; };
+template<> struct md_argtype<MdType::Float64> { typedef double t; };
 template<> struct md_argtype<MdType::Int64> { typedef __int64 t; };
 template<> struct md_argtype<MdType::String> { typedef StrArg t; };
 template<> struct md_argtype<MdType::Object> { typedef IObject *t; };
