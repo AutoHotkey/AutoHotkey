@@ -266,7 +266,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 
 void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
 
-DWORD ProcessExist(LPTSTR aProcess);
+DWORD ProcessExist(LPCTSTR aProcess);
 DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly);
 
 FResult Shutdown(int nFlag);
@@ -656,7 +656,6 @@ enum BuiltInFunctionID {
 	FID_WinMoveBottom = 0, FID_WinMoveTop,
 	FID_WinShow = 0, FID_WinHide, FID_WinMinimize, FID_WinMaximize, FID_WinRestore, FID_WinClose, FID_WinKill,
 	FID_WinActivate = 0, FID_WinActivateBottom,
-	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, FID_ProcessGetName, FID_ProcessGetPath,
 	FID_OnExit = 0, FID_OnClipboardChange, FID_OnError,
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlFindItem, FID_ControlGetIndex, FID_ControlGetChoice, FID_ControlGetItems, FID_ListViewGetContent, FID_EditGetLineCount, FID_EditGetCurrentLine, FID_EditGetCurrentCol, FID_EditGetLine, FID_EditGetSelectedText, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChooseIndex, FID_ControlChooseString, FID_EditPaste,
@@ -3346,7 +3345,6 @@ BIF_DECL(BIF_WinShow);
 BIF_DECL(BIF_WinActivate);
 BIF_DECL(BIF_MenuSelect);
 BIF_DECL(BIF_Process);
-BIF_DECL(BIF_ProcessSetPriority);
 BIF_DECL(BIF_Wait);
 
 BIF_DECL(BIF_SetBIV);

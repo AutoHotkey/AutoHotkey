@@ -118,6 +118,14 @@ md_func(Pause, (In_Opt, Int32, NewState))
 
 md_func_v(Persistent, (In_Opt, Bool32, NewValue), (Ret, Bool32, OldValue))
 
+md_func(ProcessClose, (In, String, Process), (Ret, UInt32, ClosedPID))
+md_func_x(ProcessExist, ProcessExist, UInt32, (In_Opt, String, Process))
+md_func(ProcessGetName, (In_Opt, String, Process), (Ret, String, Name))
+md_func(ProcessGetPath, (In_Opt, String, Process), (Ret, String, Path))
+md_func(ProcessSetPriority, (In, String, Priority), (In_Opt, String, Process), (Ret, UInt32, FoundPID))
+md_func(ProcessWait, (In, String, Process), (In_Opt, Float64, Timeout), (Ret, UInt32, FoundPID))
+md_func(ProcessWaitClose, (In, String, Process), (In_Opt, Float64, Timeout), (Ret, UInt32, UnclosedPID))
+
 md_func(Reload, md_arg_none)
 
 md_func_v(RunAs, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, String, Domain))

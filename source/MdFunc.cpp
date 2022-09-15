@@ -358,6 +358,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	{
 	case MdType::Int32: aResultToken.SetValue(ri32); break;
 	case MdType::Int64: aResultToken.SetValue(ri64); break;
+	case MdType::UInt32: aResultToken.SetValue((UINT)rup); break;
 	case MdType::Float64: aResultToken.SetValue(GetDoubleRetval()); break;
 	case MdType::String: aResultToken.SetValue((LPTSTR)rup); break; // Strictly statically-allocated strings.
 	case MdType::ResultType: aResultToken.SetResult((ResultType)rup); break;
