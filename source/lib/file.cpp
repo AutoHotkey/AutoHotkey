@@ -1088,9 +1088,9 @@ bif_impl FResult DirCreate(StrArg aPath)
 }
 
 
-bif_impl FResult DirDelete(StrArg aPath, BOOL *aRecurse)
+bif_impl FResult DirDelete(StrArg aPath, optl<BOOL> aRecurse)
 {
-	return Line::Util_RemoveDir(aPath, aRecurse && *aRecurse) ? OK : FR_E_FAILED;
+	return Line::Util_RemoveDir(aPath, aRecurse.value_or(FALSE)) ? OK : FR_E_FAILED;
 }
 
 

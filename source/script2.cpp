@@ -2032,22 +2032,22 @@ BOOL Line::CheckValidFinallyJump(Line* jumpTarget, bool aSilent)
 ////////////////////
 
 
-bif_impl void Persistent(BOOL *aNewValue, BOOL &aOldValue)
+bif_impl void Persistent(optl<BOOL> aNewValue, BOOL &aOldValue)
 {
 	// Returning the old value might have some use, but if the caller doesn't want its value to change,
 	// something awkward like "Persistent(isPersistent := Persistent())" is needed.  Rather than just
 	// returning the current status, Persistent() makes the script persistent because that's likely to
 	// be its most common use by far, and it's what users familiar with the old #Persistent may expect.
 	aOldValue = g_persistent;
-	g_persistent = aNewValue ? *aNewValue : TRUE;
+	g_persistent = aNewValue.value_or(TRUE);
 }
 
 
 
-static void InstallHook(BOOL *aInstalling, BOOL *aUseForce, HookType which_hook)
+static void InstallHook(optl<BOOL> aInstalling, optl<BOOL> aUseForce, HookType which_hook)
 {
-	bool installing = aInstalling ? *aInstalling : true;
-	bool use_force = aUseForce ? *aUseForce : false;
+	bool installing = aInstalling.value_or(true);
+	bool use_force = aUseForce.value_or(false);
 	// When the second parameter is true, unconditionally remove the hook.  If the first parameter is
 	// also true, the hook will be reinstalled fresh.  Otherwise the hook will be left uninstalled,
 	// until something happens to reinstall it, such as Hotkey::ManifestAllHotkeysHotstringsHooks().
@@ -2058,12 +2058,12 @@ static void InstallHook(BOOL *aInstalling, BOOL *aUseForce, HookType which_hook)
 		Hotkey::ManifestAllHotkeysHotstringsHooks();
 }
 
-bif_impl void InstallKeybdHook(BOOL *aInstalling, BOOL *aUseForce)
+bif_impl void InstallKeybdHook(optl<BOOL> aInstalling, optl<BOOL> aUseForce)
 {
 	InstallHook(aInstalling, aUseForce, HOOK_KEYBD);
 }
 
-bif_impl void InstallMouseHook(BOOL *aInstalling, BOOL *aUseForce)
+bif_impl void InstallMouseHook(optl<BOOL> aInstalling, optl<BOOL> aUseForce)
 {
 	InstallHook(aInstalling, aUseForce, HOOK_MOUSE);
 }
