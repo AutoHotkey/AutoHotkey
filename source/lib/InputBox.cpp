@@ -23,49 +23,51 @@ GNU General Public License for more details.
 
 
 
-ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox)
+ResultType InputBoxParseOptions(LPCTSTR aOptions, InputBoxType &aInputBox)
 {
-	LPTSTR next_option, option_end;
-	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
+	LPCTSTR next_option, option_end;
+	for (next_option = aOptions; ; next_option = omit_leading_whitespace(option_end))
 	{
-		// Find the end of this option item:
-		if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
-			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
+		if (!*next_option)
+			return OK; // All options parsed OK.
 
-		// Temporarily terminate for simplicity and to reduce ambiguity:
-		TCHAR orig_char = *option_end;
-		*option_end = '\0';
+		// Find the end of this option item:
+		for (option_end = next_option; *option_end && !IS_SPACE_OR_TAB(*option_end); ++option_end);
 
 		// The legacy InputBox command used "Hide", but "Password" seems clearer
 		// and better for consistency with the equivalent Edit control option:
-		if (!_tcsnicmp(next_option, _T("Password"), 8) && _tcslen(next_option) <= 9)
-			aInputBox.password_char = next_option[8] ? next_option[8] : UorA(L'\x25CF', '*');
-		else
+		if (!_tcsnicmp(next_option, _T("Password"), 8))
 		{
-			// All of the remaining options are single-letter followed by a number:
-			TCHAR option_char = ctoupper(*next_option);
-			if (!_tcschr(_T("XYWHT"), option_char) // Not a valid option char.
-				|| !IsNumeric(next_option + 1 // Or not a valid number.
-					, option_char == 'X' || option_char == 'Y' // Only X and Y allow negative numbers.
-					, FALSE, option_char == 'T')) // Only Timeout allows floating-point.
+			if (next_option[8] && !IS_SPACE_OR_TAB(next_option[8]))
 			{
-				*option_end = orig_char; // Undo the temporary termination.
-				return ValueError(ERR_INVALID_OPTION, next_option, FAIL_OR_OK);
+				if (next_option[8] && (next_option[9] && !IS_SPACE_OR_TAB(next_option[9])))
+					break; // More than one character - invalid.
+				aInputBox.password_char = next_option[8];
 			}
-
-			switch (ctoupper(*next_option))
-			{
-			case 'W': aInputBox.width = DPIScale(ATOI(next_option + 1)); break;
-			case 'H': aInputBox.height = DPIScale(ATOI(next_option + 1)); break;
-			case 'X': aInputBox.xpos = ATOI(next_option + 1); break;
-			case 'Y': aInputBox.ypos = ATOI(next_option + 1); break;
-			case 'T': aInputBox.timeout = (DWORD)(ATOF(next_option + 1) * 1000); break;
-			}
+			else
+				aInputBox.password_char = UorA(L'\x25CF', '*');
+			continue;
 		}
+
+		// All of the remaining options are a single letter followed by a number.
+		TCHAR option_char = ctoupper(*next_option);
+		LPTSTR n_end;
+		auto value = _tcstod(next_option + 1, &n_end); // Supports hex with VC++ 2015 and later.
+		if (*n_end && !IS_SPACE_OR_TAB(*n_end) // Invalid option or non-numeric suffix.
+			|| value < 0 && !(option_char == 'X' || option_char == 'Y'))
+			break; 
 		
-		*option_end = orig_char; // Undo the temporary termination.
+		switch (ctoupper(*next_option))
+		{
+		case 'W': aInputBox.width = DPIScale((int)value); continue;
+		case 'H': aInputBox.height = DPIScale((int)value); continue;
+		case 'X': aInputBox.xpos = (int)value; continue;
+		case 'Y': aInputBox.ypos = (int)value; continue;
+		case 'T': aInputBox.timeout = (DWORD)(value * 1000); continue;
+		}
+		break;
 	}
-	return OK;
+	return ValueError(ERR_INVALID_OPTION, next_option, FAIL_OR_OK);
 }
 
 
