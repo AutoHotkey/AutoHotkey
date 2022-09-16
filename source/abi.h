@@ -59,3 +59,13 @@ public:
 	StrArg value_or_null() { return _value; }
 	StrArg value_or_empty() { return _value ? _value : _T(""); }
 };
+
+template<> class optl<IObject *>
+{
+	IObject *_value;
+public:
+	optl(IObject *v) : _value {v} {}
+	optl(nullptr_t) : _value {nullptr} {}
+	bool has_value() { return _value != nullptr; }
+	IObject *value() { return _value; }
+};
