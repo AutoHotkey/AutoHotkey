@@ -212,7 +212,6 @@ FuncEntry g_BIF[] =
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
 	BIF1(Tan, 1, 1),
-	BIF1(ToolTip, 0, 4),
 	BIFn(Trim, 1, 2, BIF_Trim),
 	BIF1(Type, 1, 1),
 	BIF1(VarSetStrCapacity, 1, 2, {1}),

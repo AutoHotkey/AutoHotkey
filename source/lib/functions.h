@@ -166,6 +166,8 @@ md_func(SysGetIPAddresses, (Ret, Object, RetVal))
 
 md_func(Thread, (In, String, Command), (In_Opt, Int32, Value1), (In_Opt, Int32, Value2))
 
+md_func(ToolTip, (In_Opt, String, Text), (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Index), (Ret, Int64, Hwnd))
+
 md_func(TraySetIcon, (In_Opt, String, File), (In_Opt, Int32, Number), (In_Opt, Bool32, Freeze))
 md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options))
 

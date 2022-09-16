@@ -1107,16 +1107,11 @@ bif_impl FResult MsgBox(optl<StrArg> aText, optl<StrArg> aTitle, optl<StrArg> aO
 // GUI-related: ToolTip //
 //////////////////////////
 
-BIF_DECL(BIF_ToolTip)
+bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<int> aIndex, __int64 &aRetVal)
 {
-	int window_index = 0; // Default if param index 3 omitted
-	if (!ParamIndexIsOmitted(3))
-	{
-		Throw_if_Param_NaN(3);
-		window_index = ParamIndexToInt(3) - 1;
-		if (window_index < 0 || window_index >= MAX_TOOLTIPS)
-			_f_throw_value(_T("Max window number is ") MAX_TOOLTIPS_STR _T("."));
-	}
+	int window_index = aIndex.value_or(0);
+	if (window_index < 0 || window_index >= MAX_TOOLTIPS)
+		return FR_E_ARG(3);
 
 	HWND tip_hwnd = g_hWndToolTip[window_index];
 
@@ -1129,19 +1124,17 @@ BIF_DECL(BIF_ToolTip)
 	// ToolTip text, 388, 24
 	// Sleep 1000
 	// ToolTip text, 388, 24
-	TCHAR number_buf[MAX_NUMBER_SIZE];
-	auto tip_text = ParamIndexToOptionalString(0, number_buf);
+	auto tip_text = aText.value_or_empty();
 	if (!*tip_text)
 	{
 		if (tip_hwnd && IsWindow(tip_hwnd))
 			DestroyWindow(tip_hwnd);
 		g_hWndToolTip[window_index] = NULL;
-		_f_return_empty;
+		aRetVal = 0;
+		return OK;
 	}
 	
-	bool param1_omitted = ParamIndexIsOmitted(1);
-	bool param2_omitted = ParamIndexIsOmitted(2);
-	bool one_or_both_coords_unspecified = param1_omitted || param2_omitted;
+	bool one_or_both_coords_unspecified = !aX.has_value() || !aY.has_value();
 		 
 	POINT pt, pt_cursor;
 	if (one_or_both_coords_unspecified)
@@ -1161,20 +1154,14 @@ BIF_DECL(BIF_ToolTip)
 	}
 
 	POINT origin = { 0 };
-	if (!param1_omitted || !param2_omitted) // Need the offsets.
+	if (aX.has_value() || aY.has_value()) // Need the offsets.
 		CoordToScreen(origin, COORD_MODE_TOOLTIP);
 
 	// This will also convert from relative to screen coordinates if appropriate:
-	if (!param1_omitted)
-	{
-		Throw_if_Param_NaN(1);
-		pt.x = ParamIndexToInt(1) + origin.x;
-	}
-	if (!param2_omitted)
-	{
-		Throw_if_Param_NaN(2);
-		pt.y = ParamIndexToInt(2) + origin.y;
-	}
+	if (aX.has_value())
+		pt.x = aX.value() + origin.x;
+	if (aY.has_value())
+		pt.y = aY.value() + origin.y;
 	HMONITOR hmon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
 	MONITORINFO mi;
 	mi.cbSize = sizeof(mi);
@@ -1187,7 +1174,7 @@ BIF_DECL(BIF_ToolTip)
 	TOOLINFO ti = { 0 };
 	ti.cbSize = sizeof(ti);
 	ti.uFlags = TTF_TRACK;
-	ti.lpszText = tip_text;
+	ti.lpszText = const_cast<LPTSTR>(tip_text);
 	// ti.hwnd is the window to which notification messages are sent.  Set this to allow customization.
 	ti.hwnd = g_hWnd;
 	// All of ti's other members are left at NULL/0, including the following:
@@ -1215,7 +1202,7 @@ BIF_DECL(BIF_ToolTip)
 		tip_hwnd = g_hWndToolTip[window_index] = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, TTS_NOPREFIX | TTS_ALWAYSTIP
 			, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, NULL, NULL);
 		if (!tip_hwnd)
-			_f_throw_win32();
+			return FR_E_WIN32;
 		SendMessage(tip_hwnd, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&ti);
 	}
 
@@ -1306,7 +1293,8 @@ BIF_DECL(BIF_ToolTip)
 	// And do a TTM_TRACKACTIVATE even if the tooltip window already existed upon entry to this function,
 	// so that in case it was hidden or dismissed while its HWND still exists, it will be shown again:
 	SendMessage(tip_hwnd, TTM_TRACKACTIVATE, TRUE, (LPARAM)&ti);
-	_f_return((size_t)tip_hwnd);
+	aRetVal = (size_t)tip_hwnd;
+	return OK;
 }
 
 

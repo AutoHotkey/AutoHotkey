@@ -3252,8 +3252,6 @@ BIF_DECL(BIF_On);
 
 BIF_DECL(BIF_MenuFromHandle);
 
-BIF_DECL(BIF_ToolTip);
-
 // Gui
 BIF_DECL(BIF_GuiFromHwnd);
 BIF_DECL(BIF_GuiCtrlFromHwnd);
