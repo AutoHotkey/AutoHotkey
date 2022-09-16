@@ -3249,10 +3249,6 @@ BIF_DECL(BIF_Hotkey);
 BIF_DECL(BIF_GuiFromHwnd);
 BIF_DECL(BIF_GuiCtrlFromHwnd);
 
-BIF_DECL(BIF_IL_Create);
-BIF_DECL(BIF_IL_Destroy);
-BIF_DECL(BIF_IL_Add);
-
 BIF_DECL(BIF_LoadPicture);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.

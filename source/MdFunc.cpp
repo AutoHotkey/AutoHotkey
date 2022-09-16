@@ -372,6 +372,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		if (!(BOOL)rup)
 			aResultToken.Win32Error();
 		break;
+	case MdType::Bool32: aResultToken.SetValue(ri32 ? TRUE : FALSE); break;
 	}
 	if (retval_index != -1)
 	{

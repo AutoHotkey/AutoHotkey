@@ -76,6 +76,10 @@ md_func(GroupDeactivate, (In, String, GroupName), (In_Opt, String, Mode))
 
 md_func_x(Hotstring, BIF_Hotstring, FResult, (In, String, String), (In_Opt, Variant, Replacement), (In_Opt, String, OnOffToggle), (Ret, Variant, RetVal))
 
+md_func(IL_Add, (In, Int64, ImageList), (In, String, Filename), (In_Opt, Int32, IconNumber), (In_Opt, Bool32, ResizeNonIcon), (Ret, Int32, Index))
+md_func_x(IL_Create, IL_Create, Int64, (In_Opt, Int32, InitialCount), (In_Opt, Int32, GrowCount), (In_Opt, Bool32, LargeIcons))
+md_func_x(IL_Destroy, IL_Destroy, Bool32, (In, Int64, ImageList))
+
 md_func(IniDelete, (In, String, Path), (In, String, Section), (In_Opt, String, Key))
 md_func(IniRead, (In, String, Path), (In_Opt, String, Section), (In_Opt, String, Key), (In_Opt, String, Default), (Ret, String, RetVal))
 md_func(IniWrite, (In, String, Value), (In, String, Path), (In, String, Section), (In_Opt, String, Key))

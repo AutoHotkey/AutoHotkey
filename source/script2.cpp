@@ -3047,44 +3047,40 @@ void GuiControlType::StatusBar(ResultToken &aResultToken, int aID, int aFlags, E
 
 
 
-BIF_DECL(BIF_IL_Create)
+bif_impl __int64 IL_Create(optl<int> aInitialCount, optl<int> aGrowCount, optl<BOOL> aLargeIcons)
 // Returns: Handle to the new image list, or 0 on failure.
 // Parameters:
 // 1: Initial image count (ImageList_Create() ignores values <=0, so no need for error checking).
 // 2: Grow count (testing shows it can grow multiple times, even when this is set <=0, so it's apparently only a performance aid)
-// 3: Width of each image (overloaded to mean small icon size when omitted or false, large icon size otherwise).
+// 3: Width of each image (currently meaning small icon size when omitted or false, large icon size otherwise).
 // 4: Future: Height of each image [if this param is present and >0, it would mean param 3 is not being used in its TRUE/FALSE mode)
 // 5: Future: Flags/Color depth
 {
-	// The following old comment makes no sense because large icons are only used if param3 is NON-ZERO,
-	// and there was never a distinction between passing zero and omitting the param:
-	// So that param3 can be reserved as a future "specified width" param, to go along with "specified height"
-	// after it, only when the parameter is both present and numerically zero are large icons used.  Otherwise,
-	// small icons are used.
-	int param3 = ParamIndexToOptionalBOOL(2, FALSE);
-	_f_return_i((size_t)ImageList_Create(GetSystemMetrics(param3 ? SM_CXICON : SM_CXSMICON)
-		, GetSystemMetrics(param3 ? SM_CYICON : SM_CYSMICON)
-		, ILC_MASK | ILC_COLOR32  // ILC_COLOR32 or at least something higher than ILC_COLOR is necessary to support true-color icons.
-		, ParamIndexToOptionalInt(0, 2)    // cInitial. 2 seems a better default than one, since it might be common to have only two icons in the list.
-		, ParamIndexToOptionalInt(1, 5)));  // cGrow.  Somewhat arbitrary default.
+	BOOL large = aLargeIcons.value_or(FALSE);
+	return (size_t)ImageList_Create(
+		GetSystemMetrics(large ? SM_CXICON : SM_CXSMICON),
+		GetSystemMetrics(large ? SM_CYICON : SM_CYSMICON),
+		ILC_MASK | ILC_COLOR32,  // ILC_COLOR32 or at least something higher than ILC_COLOR is necessary to support true-color icons.
+		aInitialCount.value_or(2),  // 2 seems a better default than one, since it might be common to have only two icons in the list.
+		aGrowCount.value_or(5)  // Somewhat arbitrary default.
+	);
 }
 
 
 
-BIF_DECL(BIF_IL_Destroy)
+bif_impl BOOL IL_Destroy(__int64 aImageList)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
 {
-	// Load-time validation has ensured there is at least one parameter.
 	// Returns nonzero if successful, or zero otherwise, so force it to conform to TRUE/FALSE for
 	// better consistency with other functions:
-	_f_return_i(ImageList_Destroy((HIMAGELIST)ParamIndexToInt64(0)) ? 1 : 0);
+	return ImageList_Destroy((HIMAGELIST)aImageList) ? 1 : 0;
 }
 
 
 
-BIF_DECL(BIF_IL_Add)
+bif_impl FResult IL_Add(__int64 aImageList, StrArg aFilename, optl<int> aIconNumber, optl<BOOL> aResizeNonIcon, int &aIndex)
 // Returns: the one-based index of the newly added icon, or zero on failure.
 // Parameters:
 // 1: HIMAGELIST: Handle of an existing ImageList.
@@ -3101,16 +3097,16 @@ BIF_DECL(BIF_IL_Add)
 // The parameters above (at least #4) can be overloaded in the future calling ImageList_GetImageInfo() to determine
 // whether the imagelist has a mask.
 {
-	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter.
+	HIMAGELIST himl = (HIMAGELIST)aImageList;
 	if (!himl)
-		_f_throw_param(0);
+		return FR_E_ARG(0);
 
-	int param3 = ParamIndexToOptionalInt(2, 0);
+	int param3 = aIconNumber.value_or(0);
 	int icon_number, width = 0, height = 0; // Zero width/height causes image to be loaded at its actual width/height.
-	if (!ParamIndexIsOmitted(3)) // Presence of fourth parameter switches mode to be "load a non-icon image".
+	if (aResizeNonIcon.has_value()) // The presence of this parameter switches mode to be "load a non-icon image".
 	{
 		icon_number = 0; // Zero means "load icon or bitmap (doesn't matter)".
-		if (ParamIndexToBOOL(3)) // A value of True indicates that the image should be scaled to fit the imagelist's image size.
+		if (aResizeNonIcon.value()) // A value of True indicates that the image should be scaled to fit the imagelist's image size.
 			ImageList_GetIconSize(himl, &width, &height); // Determine the width/height to which it should be scaled.
 		//else retain defaults of zero for width/height, which loads the image at actual size, which in turn
 		// lets ImageList_AddMasked() divide it up into separate images based on its width.
@@ -3122,10 +3118,12 @@ BIF_DECL(BIF_IL_Add)
 	}
 
 	int image_type;
-	HBITMAP hbitmap = LoadPicture(ParamIndexToString(1, _f_number_buf) // Caller has ensured there are at least two parameters.
-		, width, height, image_type, icon_number, false); // Defaulting to "false" for "use GDIplus" provides more consistent appearance across multiple OSes.
+	HBITMAP hbitmap = LoadPicture(aFilename, width, height, image_type, icon_number, false); // Defaulting to "false" for "use GDIplus" provides more consistent appearance across multiple OSes.
 	if (!hbitmap)
-		_f_return_i(0);
+	{
+		aIndex = 0;
+		return OK;
+	}
 
 	int index;
 	if (image_type == IMAGE_BITMAP) // In this mode, param3 is always assumed to be an RGB color.
@@ -3140,7 +3138,8 @@ BIF_DECL(BIF_IL_Add)
 		index = ImageList_AddIcon(himl, (HICON)hbitmap) + 1; // +1 to convert to one-based.
 		DestroyIcon((HICON)hbitmap); // Works on cursors too.  See notes in LoadPicture().
 	}
-	_f_return_i(index);
+	aIndex = index;
+	return OK;
 }
 
 
