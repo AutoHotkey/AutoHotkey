@@ -2522,12 +2522,12 @@ BIF_DECL(BIF_Hotkey)
 
 
 
-BIF_DECL(BIF_SetTimer)
+bif_impl FResult SetTimer(optl<IObject*> aFunction, optl<__int64> aPeriod, optl<int> aPriority)
 {
 	IObject *callback;
 	// Note that only one timer per callback is allowed because the callback is the
 	// unique identifier that allows us to update or delete an existing timer.
-	if (ParamIndexIsOmitted(0)) // Fully omitted, not an empty string.
+	if (!aFunction.has_value())
 	{
 		if (g->CurrentTimer)
 			// Default to the timer which launched the current thread.
@@ -2536,37 +2536,35 @@ BIF_DECL(BIF_SetTimer)
 			callback = NULL;
 		if (!callback)
 			// Either the thread was not launched by a timer or the timer has been deleted.
-			_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);
+			return FR_E_ARG(0);
 	}
 	else
 	{
-		callback = ParamIndexToObject(0);
-		if (!callback)
-			_f_throw_param(0, _T("object"));
-		if (!ValidateFunctor(callback, 0, aResultToken))
-			return;
+		callback = aFunction.value();
+		ResultToken result_token; // Used just for .result.
+		if (!ValidateFunctor(callback, 0, result_token))
+			return result_token.Exited() ? FR_FAIL : OK;
 	}
 	__int64 period = DEFAULT_TIMER_PERIOD;
 	int priority = 0;
 	bool update_period = false, update_priority = false;
-	if (!ParamIndexIsOmitted(1))
+	if (aPeriod.has_value())
 	{
-		Throw_if_Param_NaN(1);
-		period = ParamIndexToInt64(1);
+		period = aPeriod.value();
 		if (!period)
 		{
 			g_script.DeleteTimer(callback);
-			_f_return_empty;
+			return OK;
 		}
 		update_period = true;
 	}
-	if (!ParamIndexIsOmitted(2))
+	if (aPriority.has_value())
 	{
-		priority = ParamIndexToInt(2);
+		priority = aPriority.value();
 		update_priority = true;
 	}
 	g_script.UpdateOrCreateTimer(callback, update_period, period, update_priority, priority);
-	_f_return_empty;
+	return OK;
 }
 
 

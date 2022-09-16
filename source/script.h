@@ -3245,7 +3245,6 @@ BIF_DECL(BIF_DateAdd);
 BIF_DECL(BIF_DateDiff);
 BIF_DECL(BIF_PostSendMessage);
 BIF_DECL(BIF_Hotkey);
-BIF_DECL(BIF_SetTimer);
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_On);
 

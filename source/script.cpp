@@ -185,7 +185,6 @@ FuncEntry g_BIF[] =
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
 	BIFn(SetRegView, 1, 1, BIF_SetBIV),
 	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
-	BIF1(SetTimer, 0, 3),
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
 	BIF1(Sin, 1, 1),
 	BIF1(Sort, 1, 3),
