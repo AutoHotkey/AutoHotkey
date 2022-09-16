@@ -3245,10 +3245,6 @@ BIF_DECL(BIF_DateDiff);
 BIF_DECL(BIF_PostSendMessage);
 BIF_DECL(BIF_Hotkey);
 
-// Gui
-BIF_DECL(BIF_GuiFromHwnd);
-BIF_DECL(BIF_GuiCtrlFromHwnd);
-
 BIF_DECL(BIF_LoadPicture);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.

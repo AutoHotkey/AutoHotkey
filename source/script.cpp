@@ -105,8 +105,6 @@ FuncEntry g_BIF[] =
 	BIF1(Format, 1, NA),
 	BIF1(FormatTime, 0, 2),
 	BIFn(GetMethod, 1, 3, BIF_GetMethod),
-	BIF1(GuiCtrlFromHwnd, 1, 1),
-	BIF1(GuiFromHwnd, 1, 2),
 	BIF1(HasBase, 2, 2),
 	BIFn(HasMethod, 1, 3, BIF_GetMethod),
 	BIF1(HasProp, 2, 2),

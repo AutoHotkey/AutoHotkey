@@ -74,6 +74,9 @@ md_func(GroupAdd, (In, String, GroupName), (In_Opt, String, WinTitle), (In_Opt, 
 md_func(GroupClose, (In, String, GroupName), (In_Opt, String, Mode))
 md_func(GroupDeactivate, (In, String, GroupName), (In_Opt, String, Mode))
 
+md_func_v(GuiCtrlFromHwnd, (In, UIntPtr, Hwnd), (Ret, Object, Gui))
+md_func_v(GuiFromHwnd, (In, UIntPtr, Hwnd), (In_Opt, Bool32, Recurse), (Ret, Object, Gui))
+
 md_func_x(Hotstring, BIF_Hotstring, FResult, (In, String, String), (In_Opt, Variant, Replacement), (In_Opt, String, OnOffToggle), (Ret, Variant, RetVal))
 
 md_func(IL_Add, (In, UIntPtr, ImageList), (In, String, Filename), (In_Opt, Int32, IconNumber), (In_Opt, Bool32, ResizeNonIcon), (Ret, Int32, Index))
