@@ -80,6 +80,8 @@ md_func(IniDelete, (In, String, Path), (In, String, Section), (In_Opt, String, K
 md_func(IniRead, (In, String, Path), (In_Opt, String, Section), (In_Opt, String, Key), (In_Opt, String, Default), (Ret, String, RetVal))
 md_func(IniWrite, (In, String, Value), (In, String, Path), (In, String, Section), (In_Opt, String, Key))
 
+md_func(InputBox, (In_Opt, String, Prompt), (In_Opt, String, Title), (In_Opt, String, Options), (In_Opt, String, Default), (Ret, Object, RetVal))
+
 md_func_v(InstallKeybdHook, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 md_func_v(InstallMouseHook, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 

@@ -72,17 +72,12 @@ ResultType InputBoxParseOptions(LPCTSTR aOptions, InputBoxType &aInputBox)
 
 
 
-BIF_DECL(BIF_InputBox)
+bif_impl FResult InputBox(optl<StrArg> aPrompt, optl<StrArg> aTitle, optl<StrArg> aOptions, optl<StrArg> aDefault, IObject *&aRetVal)
 {
-	_f_param_string_opt(aText, 0);
-	_f_param_string_opt_def(aTitle, 1, g_script.DefaultDialogTitle());
-	_f_param_string_opt(aOptions, 2);
-	_f_param_string_opt(aDefault, 3);
-
 	InputBoxType inputbox;
-	inputbox.title = aTitle;
-	inputbox.text = aText;
-	inputbox.default_string = aDefault;
+	inputbox.title = aTitle.has_value() ? aTitle.value() : g_script.DefaultDialogTitle();
+	inputbox.text = aPrompt.value_or_empty();
+	inputbox.default_string = aDefault.value_or_null();
 	inputbox.return_string = nullptr;
 	// Set defaults:
 	inputbox.width = INPUTBOX_DEFAULT;
@@ -92,8 +87,8 @@ BIF_DECL(BIF_InputBox)
 	inputbox.password_char = '\0';
 	inputbox.timeout = 0;
 	// Parse options and override defaults:
-	if (!InputBoxParseOptions(aOptions, inputbox))
-		_f_return_FAIL; // It already displayed the error.
+	if (aOptions.has_value() && !InputBoxParseOptions(aOptions.value(), inputbox))
+		return FR_FAIL; // It already displayed the error.
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP
@@ -115,24 +110,19 @@ BIF_DECL(BIF_InputBox)
 	case IDCANCEL:		reason = _T("Cancel");	break;
 	default:			reason = nullptr;		break;
 	}
-	// result can be -1 or FAIL in case of failure, but since failure of any
-	// kind is rare, all kinds are handled the same way, below.
 
+	FResult fresult;
 	if (reason && value)
 	{
 		ExprTokenType argt[] = { _T("Result"), reason, _T("Value"), value };
 		ExprTokenType *args[_countof(argt)] = { argt, argt+1, argt+2, argt+3 };
-		if (Object *obj = Object::Create(args, _countof(args)))
-		{
-			free(value);
-			_f_return(obj);
-		}
+		aRetVal = Object::Create(args, _countof(args));
+		fresult = aRetVal ? OK : FR_E_OUTOFMEM;
 	}
-
+	else
+		fresult = result == -1 ? FR_E_WIN32 : FR_E_FAILED;
 	free(value);
-	// Since above didn't return, result is -1 (DialogBox somehow failed),
-	// result is FAIL (something failed in InputBoxProc), or value is null.
-	_f_throw(ERR_INTERNAL_CALL);
+	return fresult;
 }
 
 
@@ -215,7 +205,7 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		GetClientRect(hWndDlg, &rect);  // Not to be confused with GetWindowRect().
 		SendMessage(hWndDlg, WM_SIZE, SIZE_RESTORED, rect.right + (rect.bottom<<16));
 		
-		if (*CURR_INPUTBOX.default_string)
+		if (CURR_INPUTBOX.default_string)
 			SetDlgItemText(hWndDlg, IDC_INPUTEDIT, CURR_INPUTBOX.default_string);
 
 		if (hWndDlg != GetForegroundWindow()) // Normally it will be foreground since the template has this property.

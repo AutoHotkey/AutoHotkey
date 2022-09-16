@@ -281,9 +281,9 @@ DWORD GetAHKInstallDir(LPTSTR aBuf);
 
 struct InputBoxType
 {
-	LPTSTR title;
-	LPTSTR text;
-	LPTSTR default_string;
+	LPCTSTR title;
+	LPCTSTR text;
+	LPCTSTR default_string;
 	LPTSTR return_string;
 	int width;
 	int height;
@@ -3254,7 +3254,6 @@ BIF_DECL(BIF_MenuFromHandle);
 BIF_DECL(BIF_TraySetIcon);
 
 BIF_DECL(BIF_MsgBox);
-BIF_DECL(BIF_InputBox);
 BIF_DECL(BIF_ToolTip);
 
 // Gui

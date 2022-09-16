@@ -120,7 +120,6 @@ FuncEntry g_BIF[] =
 	BIF1(IL_Create, 0, 3),
 	BIF1(IL_Destroy, 1, 1),
 	BIF1(ImageSearch, 7, 7, {1, 2}),
-	BIF1(InputBox, 0, 4),
 	BIF1(InStr, 2, 5),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
 	BIFi(IsAlpha, 1, 2, BIF_IsTypeish, VAR_TYPE_ALPHA),
