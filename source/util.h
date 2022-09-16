@@ -22,9 +22,9 @@ GNU General Public License for more details.
 
 
 #ifdef _WIN64
-#define Exp32or64(a,b) (b)
+#define Exp32or64(exp32, exp64) (exp64)
 #else
-#define Exp32or64(a,b) (a)
+#define Exp32or64(exp32, exp64) (exp32)
 #endif
 
 
