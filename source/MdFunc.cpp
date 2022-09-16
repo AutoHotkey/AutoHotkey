@@ -463,14 +463,14 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 	case MdType::Int64: aToken.SetValue(*(__int64*)aPtr); break;
 	case MdType::Float64: aToken.SetValue(*(double*)aPtr); break;
 	case MdType::Object:
-		if (aPtr && *(IObject**)aPtr)
-			aToken.SetValue(*(IObject**)aPtr);
+		if (auto obj = *(IObject**)aPtr)
+			aToken.SetValue(obj);
 		else
 			aToken.SetValue(_T(""), 0);
 		break;
 	case MdType::String: // String*, not String
-		if (aPtr)
-			aToken.SetValue(*(LPTSTR*)aPtr);
+		if (auto str = *(LPTSTR*)aPtr)
+			aToken.SetValue(str);
 		else
 			aToken.SetValue(_T(""), 0);
 		break;
