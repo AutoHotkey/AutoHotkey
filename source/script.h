@@ -3025,7 +3025,7 @@ public:
 
 	WinGroup *FindGroup(LPCTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPCTSTR aGroupName);
-	Label *FindLabel(LPTSTR aLabelName);
+	Label *FindLabel(LPCTSTR aLabelName);
 
 	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
 		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, DWORD &aLastError);
@@ -3222,7 +3222,6 @@ BIF_DECL(BIF_NumGet);
 BIF_DECL(BIF_NumPut);
 BIF_DECL(BIF_StrGetPut);
 BIF_DECL(BIF_StrPtr);
-BIF_DECL(BIF_IsLabel);
 BIF_DECL(BIF_IsTypeish);
 BIF_DECL(BIF_IsSet);
 BIF_DECL(BIF_VarSetStrCapacity);

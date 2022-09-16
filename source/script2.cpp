@@ -2116,9 +2116,9 @@ BIF_DECL(BIF_String)
 ////////////////////
 
 
-BIF_DECL(BIF_IsLabel)
+bif_impl BOOL IsLabel(StrArg aName)
 {
-	_f_return_b(g_script.FindLabel(ParamIndexToString(0, _f_number_buf)) ? 1 : 0);
+	return g_script.FindLabel(aName) ? 1 : 0;
 }
 
 

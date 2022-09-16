@@ -85,6 +85,8 @@ md_func(InputBox, (In_Opt, String, Prompt), (In_Opt, String, Title), (In_Opt, St
 md_func_v(InstallKeybdHook, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 md_func_v(InstallMouseHook, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 
+md_func_x(IsLabel, IsLabel, Bool32, (In, String, Name))
+
 md_func(KeyHistory, (In_Opt, Int32, MaxEvents))
 md_func_v(ListHotkeys, md_arg_none)
 md_func_v(ListLines, (In_Opt, Int32, Mode))

@@ -126,7 +126,6 @@ FuncEntry g_BIF[] =
 	BIFi(IsDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_DIGIT),
 	BIFi(IsFloat, 1, 1, BIF_IsTypeish, VAR_TYPE_FLOAT),
 	BIFi(IsInteger, 1, 1, BIF_IsTypeish, VAR_TYPE_INTEGER),
-	BIF1(IsLabel, 1, 1),
 	BIFi(IsLower, 1, 2, BIF_IsTypeish, VAR_TYPE_LOWER),
 	BIFi(IsNumber, 1, 1, BIF_IsTypeish, VAR_TYPE_NUMBER),
 	BIF1(IsObject, 1, 1),
@@ -4076,7 +4075,7 @@ void Script::DeleteTimer(IObject *aLabel)
 
 
 
-Label *Script::FindLabel(LPTSTR aLabelName)
+Label *Script::FindLabel(LPCTSTR aLabelName)
 // Returns the first label whose name matches aLabelName, or NULL if not found.
 
 // If duplicates labels are now possible, callers must be aware that only the first match is returned.
