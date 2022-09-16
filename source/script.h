@@ -2944,7 +2944,7 @@ public:
 	void CreateTrayIcon();
 	void UpdateTrayIcon(bool aForceUpdate = false);
 	void ShowTrayIcon(bool aShow);
-	ResultType SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon);
+	ResultType SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon);
 	void SetTrayTip(LPTSTR aText);
 	ResultType AutoExecSection();
 	bool IsPersistent();
@@ -3251,7 +3251,6 @@ BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_On);
 
 BIF_DECL(BIF_MenuFromHandle);
-BIF_DECL(BIF_TraySetIcon);
 
 BIF_DECL(BIF_MsgBox);
 BIF_DECL(BIF_ToolTip);

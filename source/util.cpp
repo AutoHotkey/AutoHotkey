@@ -2042,7 +2042,7 @@ int GetSystemTrayIconSize()
 
 
 
-HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
+HBITMAP LoadPicture(LPCTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
 	, bool aUseGDIPlusIfAvailable, bool *apNoDelete, HMODULE *apModule)
 // Returns NULL on failure.
 // If aIconNumber > 0, an HICON or HCURSOR is returned (both should be interchangeable), never an HBITMAP.
@@ -2097,7 +2097,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			return NULL;
 	}
 
-	LPTSTR file_ext = _tcsrchr(aFilespec, '.');
+	auto file_ext = _tcsrchr(aFilespec, '.');
 	if (file_ext)
 		++file_ext;
 
@@ -2320,7 +2320,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			// LPVOID and "int" are used to avoid compiler errors caused by... namespace issues?
 			typedef int (WINAPI *GdiplusStartupType)(ULONG_PTR*, LPVOID, LPVOID);
 			typedef VOID (WINAPI *GdiplusShutdownType)(ULONG_PTR);
-			typedef int (WINGDIPAPI *GdipCreateBitmapFromFileType)(LPVOID, LPVOID);
+			typedef int (WINGDIPAPI *GdipCreateBitmapFromFileType)(LPCWSTR, LPVOID);
 			typedef int (WINGDIPAPI *GdipCreateHBITMAPFromBitmapType)(LPVOID, LPVOID, DWORD);
 			typedef int (WINGDIPAPI *GdipDisposeImageType)(LPVOID);
 			GdiplusStartupType DynGdiplusStartup = (GdiplusStartupType)GetProcAddress(hinstGDI, "GdiplusStartup");
@@ -2570,7 +2570,7 @@ LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
 }
 
 // L17: Extract icon of the appropriate size from an executable (or compatible) file.
-HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, int aHeight, HMODULE *apModule)
+HICON ExtractIconFromExecutable(LPCTSTR aFilespec, int aIconNumber, int aWidth, int aHeight, HMODULE *apModule)
 {
 	HICON hicon = NULL;
 

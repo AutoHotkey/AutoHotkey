@@ -129,18 +129,6 @@ bif_impl FResult TrayTip(optl<StrArg> aText, optl<StrArg> aTitle, optl<StrArg> a
 
 
 
-BIF_DECL(BIF_TraySetIcon)
-{
-	if (!g_script.SetTrayIcon(
-		ParamIndexToOptionalString(0, _f_number_buf) // buf is provided for error-reporting purposes.
-		, ParamIndexToOptionalInt(1, 1)
-		, ParamIndexIsOmitted(2) ? NEUTRAL : ParamIndexToBOOL(2) ? TOGGLED_ON : TOGGLED_OFF))
-		_f_return_FAIL;
-	_f_return_empty;
-}
-
-
-
 /////////////////
 // Main Window //
 /////////////////

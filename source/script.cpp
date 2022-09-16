@@ -214,7 +214,6 @@ FuncEntry g_BIF[] =
 	BIF1(SubStr, 2, 3),
 	BIF1(Tan, 1, 1),
 	BIF1(ToolTip, 0, 4),
-	BIF1(TraySetIcon, 0, 3),
 	BIFn(Trim, 1, 2, BIF_Trim),
 	BIF1(Type, 1, 1),
 	BIF1(VarSetStrCapacity, 1, 2, {1}),
@@ -964,7 +963,13 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 
 
 
-ResultType Script::SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon)
+bif_impl FResult TraySetIcon(optl<StrArg> aIconFile, optl<int> aIconNumber, optl<BOOL> aFreeze)
+{
+	return g_script.SetTrayIcon(aIconFile.value_or_null(), aIconNumber.value_or(1)
+		, aFreeze.has_value() ? aFreeze.value() ? TOGGLED_ON : TOGGLED_OFF : NEUTRAL) ? OK : FR_FAIL;
+}
+
+ResultType Script::SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon)
 {
 	bool force_update = false;
 
@@ -977,7 +982,7 @@ ResultType Script::SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueTyp
 		}
 	}
 	
-	if (*aIconFile == '*' && !aIconFile[1]) // Restore the standard icon.
+	if (aIconFile && *aIconFile == '*' && !aIconFile[1]) // Restore the standard icon.
 	{
 		if (mCustomIcon)
 		{
@@ -991,14 +996,14 @@ ResultType Script::SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueTyp
 			mCustomIconNumber = 0;
 			force_update = true;
 		}
-		aIconFile = _T(""); // Handle this like TraySetIcon(,,n) in case n was specified.
+		aIconFile = nullptr; // Update the icon and return, below.
 	}
 	
-	if (!*aIconFile) // No icon specified, or it was already reset to default above.
+	if (!aIconFile) // No icon specified, or it was already reset to default above.
 	{
 		if (force_update)
 			UpdateTrayIcon(true);
-		return OK; // We were called just to freeze/unfreeze the icon.
+		return OK;
 	}
 
 	// v1.0.43.03: Load via LoadPicture() vs. ExtractIcon() because ExtractIcon harms the quality
