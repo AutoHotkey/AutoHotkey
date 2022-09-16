@@ -656,7 +656,6 @@ enum BuiltInFunctionID {
 	FID_WinMoveBottom = 0, FID_WinMoveTop,
 	FID_WinShow = 0, FID_WinHide, FID_WinMinimize, FID_WinMaximize, FID_WinRestore, FID_WinClose, FID_WinKill,
 	FID_WinActivate = 0, FID_WinActivateBottom,
-	FID_OnExit = 0, FID_OnClipboardChange, FID_OnError,
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlFindItem, FID_ControlGetIndex, FID_ControlGetChoice, FID_ControlGetItems, FID_ListViewGetContent, FID_EditGetLineCount, FID_EditGetCurrentLine, FID_EditGetCurrentCol, FID_EditGetLine, FID_EditGetSelectedText, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChooseIndex, FID_ControlChooseString, FID_EditPaste,
 	FID_ControlSend = SCM_NOT_RAW, FID_ControlSendText = SCM_RAW_TEXT,
@@ -3245,7 +3244,6 @@ BIF_DECL(BIF_DateAdd);
 BIF_DECL(BIF_DateDiff);
 BIF_DECL(BIF_PostSendMessage);
 BIF_DECL(BIF_Hotkey);
-BIF_DECL(BIF_On);
 
 BIF_DECL(BIF_MenuFromHandle);
 

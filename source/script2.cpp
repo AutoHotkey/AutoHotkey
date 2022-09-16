@@ -2898,59 +2898,51 @@ void MsgMonitorList::Dispose()
 }
 
 
-BIF_DECL(BIF_On)
+static FResult OnScriptEvent(IObject *aFunction, optl<int> aAddRemove, MsgMonitorList &handlers, int aParamCount)
 {
-	_f_set_retval_p(_T("")); // In all cases there is no return value.
-	auto event_type = _f_callee_id;
-	MsgMonitorList *phandlers;
-	switch (event_type)
-	{
-	case FID_OnError: phandlers = &g_script.mOnError; break;
-	case FID_OnClipboardChange: phandlers = &g_script.mOnClipboardChange; break;
-	default: phandlers = &g_script.mOnExit; break;
-	}
-	MsgMonitorList &handlers = *phandlers;
-
-
-	IObject *callback = ParamIndexToObject(0);
-	if (!callback)
-		_f_throw_param(0, _T("object"));
-	if (!ValidateFunctor(callback, event_type == FID_OnClipboardChange ? 1 : 2, aResultToken))
-		return;
+	ResultToken result_token; // Used just for .result.
+	if (!ValidateFunctor(aFunction, aParamCount, result_token))
+		return result_token.Exited() ? FR_FAIL : OK;
 	
-	int mode = 1; // Default.
-	if (!ParamIndexIsOmitted(1))
-		mode = ParamIndexToInt(1);
+	int mode = aAddRemove.value_or(1);
 
-	MsgMonitorStruct *existing = handlers.Find(0, callback);
+	MsgMonitorStruct *existing = handlers.Find(0, aFunction);
 
 	switch (mode)
 	{
 	case  1:
 	case -1:
-		if (existing)
-			return;
-		if (event_type == FID_OnClipboardChange)
-		{
-			// Do this before adding the handler so that it won't be called as a result of the
-			// SetClipboardViewer() call on Windows XP.  This won't cause existing handlers to
-			// be called because in that case the clipboard listener is already enabled.
-			g_script.EnableClipboardListener(true);
-		}
-		if (!handlers.Add(0, callback, mode == 1))
-			_f_throw_oom;
+		if (!existing && !handlers.Add(0, aFunction, mode == 1))
+			return FR_E_OUTOFMEM;
 		break;
 	case  0:
 		if (existing)
 			handlers.Delete(existing);
 		break;
 	default:
-		_f_throw_param(1);
+		return FR_E_ARG(1);
 	}
-	// In case the above enabled the clipboard listener but failed to add the handler,
-	// do this even if mode != 0:
-	if (event_type == FID_OnClipboardChange && !handlers.Count())
-		g_script.EnableClipboardListener(false);
+	return OK;
+}
+
+bif_impl FResult OnClipboardChange(IObject *aFunction, optl<int> aAddRemove)
+{
+	auto result = OnScriptEvent(aFunction, aAddRemove, g_script.mOnClipboardChange, 1);
+	// Unlike SetClipboardViewer(), AddClipboardFormatListener() doesn't cause existing
+	// listeners to be called, so we can simply enable or disable our listener based on
+	// whether any handlers are registered.  This has no effect if already enabled:
+	g_script.EnableClipboardListener(g_script.mOnClipboardChange.Count() > 0);
+	return result;
+}
+
+bif_impl FResult OnError(IObject *aFunction, optl<int> aAddRemove)
+{
+	return OnScriptEvent(aFunction, aAddRemove, g_script.mOnError, 2);
+}
+
+bif_impl FResult OnExit(IObject *aFunction, optl<int> aAddRemove)
+{
+	return OnScriptEvent(aFunction, aAddRemove, g_script.mOnExit, 2);
 }
 
 
