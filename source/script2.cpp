@@ -2662,27 +2662,16 @@ bif_impl void OutputDebug(StrArg aText)
 // Event Handling Functions //
 //////////////////////////////
 
-BIF_DECL(BIF_OnMessage)
-// Returns: An empty string.
-// Parameters:
-// 1: Message number to monitor.
-// 2: Name of the function that will monitor the message.
-// 3: Maximum threads and "register first" flag.
+bif_impl FResult OnMessage(UINT aNumber, IObject *aFunction, optl<int> aMaxThreads)
 {
-	// Currently OnMessage (in v2) has no return value.
-	_f_set_retval_p(_T(""), 0);
-
-	// Prior validation has ensured there's at least two parameters:
-	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
-
 	// Set defaults:
 	bool mode_is_delete = false;
 	int max_instances = 1;
 	bool call_it_last = true;
 
-	if (!ParamIndexIsOmitted(2)) // Parameter #3 is present.
+	if (aMaxThreads.has_value())
 	{
-		max_instances = (int)ParamIndexToInt64(2);
+		max_instances = aMaxThreads.value();
 		// For backward-compatibility, values between MAX_INSTANCES+1 and SHORT_MAX must be supported.
 		if (max_instances > MsgMonitorStruct::MAX_INSTANCES) // MAX_INSTANCES >= MAX_THREADS_LIMIT.
 			max_instances = MsgMonitorStruct::MAX_INSTANCES;
@@ -2695,24 +2684,20 @@ BIF_DECL(BIF_OnMessage)
 			mode_is_delete = true;
 	}
 
-	// Parameter #2: The callback to add or remove.  Must be an object.
-	IObject *callback = TokenToObject(*aParam[1]);
-	if (!callback)
-		_f_throw_param(1, _T("object"));
-
 	// Check if this message already exists in the array:
-	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
+	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(aNumber, aFunction);
 	bool item_already_exists = (pmonitor != NULL);
 	if (!item_already_exists)
 	{
 		if (mode_is_delete) // Delete a non-existent item.
-			_f_return_retval; // Yield the default return value set earlier (an empty string).
-		if (!ValidateFunctor(callback, 4, aResultToken))
-			return;
+			return OK;
+		ResultToken result_token; // Used just for .result.
+		if (!ValidateFunctor(aFunction, 4, result_token))
+			return result_token.Exited() ? FR_FAIL : OK;
 		// From this point on, it is certain that an item will be added to the array.
-		pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last);
+		pmonitor = g_MsgMonitor.Add(aNumber, aFunction, call_it_last);
 		if (!pmonitor)
-			_f_throw_oom;
+			return FR_E_OUTOFMEM;
 	}
 
 	MsgMonitorStruct &monitor = *pmonitor;
@@ -2732,10 +2717,8 @@ BIF_DECL(BIF_OnMessage)
 			// occur while the monitor is currently running, which requires more complex handling within
 			// MsgMonitor() (see its comments for details).
 			g_MsgMonitor.Delete(pmonitor);
-			_f_return_retval;
+			return OK;
 		}
-		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
-			_f_return_retval; // Everything was already set up above to yield the proper return value.
 		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
 		// Continue on to update this item's attributes.
 	}
@@ -2747,10 +2730,10 @@ BIF_DECL(BIF_OnMessage)
 	}
 
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
-	if (!item_already_exists || !ParamIndexIsOmitted(2))
+	if (!item_already_exists || aMaxThreads.has_value())
 		monitor.max_instances = max_instances;
 	// Otherwise, the parameter was omitted so leave max_instances at its current value.
-	_f_return_retval;
+	return OK;
 }
 
 

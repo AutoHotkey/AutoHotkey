@@ -165,7 +165,6 @@ FuncEntry g_BIF[] =
 	BIFn(OnClipboardChange, 1, 2, BIF_On),
 	BIFn(OnError, 1, 2, BIF_On),
 	BIFn(OnExit, 1, 2, BIF_On),
-	BIF1(OnMessage, 2, 3),
 	BIF1(Ord, 1, 1),
 	BIF1(PixelGetColor, 2, 3),
 	BIF1(PixelSearch, 7, 8, {1, 2}),

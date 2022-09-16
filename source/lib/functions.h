@@ -118,6 +118,8 @@ md_func(MouseMove,
 
 md_func(MsgBox, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options), (Ret, String, RetVal))
 
+md_func(OnMessage, (In, UInt32, Number), (In, Object, Function), (In_Opt, Int32, MaxThreads))
+
 md_func_v(OutputDebug, (In, String, Text))
 
 md_func(Pause, (In_Opt, Int32, NewState))
