@@ -1107,7 +1107,7 @@ bif_impl FResult MsgBox(optl<StrArg> aText, optl<StrArg> aTitle, optl<StrArg> aO
 // GUI-related: ToolTip //
 //////////////////////////
 
-bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<int> aIndex, __int64 &aRetVal)
+bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<int> aIndex, UINT_PTR &aRetVal)
 {
 	int window_index = aIndex.value_or(0);
 	if (window_index < 0 || window_index >= MAX_TOOLTIPS)
@@ -1293,7 +1293,7 @@ bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<in
 	// And do a TTM_TRACKACTIVATE even if the tooltip window already existed upon entry to this function,
 	// so that in case it was hidden or dismissed while its HWND still exists, it will be shown again:
 	SendMessage(tip_hwnd, TTM_TRACKACTIVATE, TRUE, (LPARAM)&ti);
-	aRetVal = (size_t)tip_hwnd;
+	aRetVal = (UINT_PTR)tip_hwnd;
 	return OK;
 }
 
@@ -2952,7 +2952,7 @@ bif_impl FResult OnExit(IObject *aFunction, optl<int> aAddRemove)
 ///////////////////////
 
 
-bif_impl void MenuFromHandle(__int64 aHandle, IObject *&aRetVal)
+bif_impl void MenuFromHandle(UINT_PTR aHandle, IObject *&aRetVal)
 {
 	if (aRetVal = g_script.FindMenu((HMENU)aHandle))
 		aRetVal->AddRef();
@@ -3047,7 +3047,7 @@ void GuiControlType::StatusBar(ResultToken &aResultToken, int aID, int aFlags, E
 
 
 
-bif_impl __int64 IL_Create(optl<int> aInitialCount, optl<int> aGrowCount, optl<BOOL> aLargeIcons)
+bif_impl UINT_PTR IL_Create(optl<int> aInitialCount, optl<int> aGrowCount, optl<BOOL> aLargeIcons)
 // Returns: Handle to the new image list, or 0 on failure.
 // Parameters:
 // 1: Initial image count (ImageList_Create() ignores values <=0, so no need for error checking).
@@ -3057,7 +3057,7 @@ bif_impl __int64 IL_Create(optl<int> aInitialCount, optl<int> aGrowCount, optl<B
 // 5: Future: Flags/Color depth
 {
 	BOOL large = aLargeIcons.value_or(FALSE);
-	return (size_t)ImageList_Create(
+	return (UINT_PTR)ImageList_Create(
 		GetSystemMetrics(large ? SM_CXICON : SM_CXSMICON),
 		GetSystemMetrics(large ? SM_CYICON : SM_CYSMICON),
 		ILC_MASK | ILC_COLOR32,  // ILC_COLOR32 or at least something higher than ILC_COLOR is necessary to support true-color icons.
@@ -3068,7 +3068,7 @@ bif_impl __int64 IL_Create(optl<int> aInitialCount, optl<int> aGrowCount, optl<B
 
 
 
-bif_impl BOOL IL_Destroy(__int64 aImageList)
+bif_impl BOOL IL_Destroy(UINT_PTR aImageList)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
@@ -3080,7 +3080,7 @@ bif_impl BOOL IL_Destroy(__int64 aImageList)
 
 
 
-bif_impl FResult IL_Add(__int64 aImageList, StrArg aFilename, optl<int> aIconNumber, optl<BOOL> aResizeNonIcon, int &aIndex)
+bif_impl FResult IL_Add(UINT_PTR aImageList, StrArg aFilename, optl<int> aIconNumber, optl<BOOL> aResizeNonIcon, int &aIndex)
 // Returns: the one-based index of the newly added icon, or zero on failure.
 // Parameters:
 // 1: HIMAGELIST: Handle of an existing ImageList.

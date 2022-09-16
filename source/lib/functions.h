@@ -2,8 +2,8 @@
 md_func_x(BlockInput, ScriptBlockInput, FResult, (In, String, Mode))
 
 #ifdef ENABLE_REGISTERCALLBACK
-md_func(CallbackCreate, (In, Object, Function), (In_Opt, String, Options), (In_Opt, Int32, ParamCount), (Ret, Int64, RetVal))
-md_func(CallbackFree, (In, Int64, Callback))
+md_func(CallbackCreate, (In, Object, Function), (In_Opt, String, Options), (In_Opt, Int32, ParamCount), (Ret, UIntPtr, RetVal))
+md_func(CallbackFree, (In, UIntPtr, Callback))
 #endif
 
 md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
@@ -69,16 +69,16 @@ md_func_x(GetKeySC, GetKeySC, Int32, (In, String, KeyName))
 md_func(GetKeyState, (In, String, KeyName), (In_Opt, String, Mode), (Ret, Variant, RetVal))
 md_func_x(GetKeyVK, GetKeyVK, Int32, (In, String, KeyName))
 
-md_func(GroupActivate, (In, String, GroupName), (In_Opt, String, Mode), (Ret, Int64, RetVal))
+md_func(GroupActivate, (In, String, GroupName), (In_Opt, String, Mode), (Ret, UIntPtr, RetVal))
 md_func(GroupAdd, (In, String, GroupName), (In_Opt, String, WinTitle), (In_Opt, String, WinText), (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText))
 md_func(GroupClose, (In, String, GroupName), (In_Opt, String, Mode))
 md_func(GroupDeactivate, (In, String, GroupName), (In_Opt, String, Mode))
 
 md_func_x(Hotstring, BIF_Hotstring, FResult, (In, String, String), (In_Opt, Variant, Replacement), (In_Opt, String, OnOffToggle), (Ret, Variant, RetVal))
 
-md_func(IL_Add, (In, Int64, ImageList), (In, String, Filename), (In_Opt, Int32, IconNumber), (In_Opt, Bool32, ResizeNonIcon), (Ret, Int32, Index))
-md_func_x(IL_Create, IL_Create, Int64, (In_Opt, Int32, InitialCount), (In_Opt, Int32, GrowCount), (In_Opt, Bool32, LargeIcons))
-md_func_x(IL_Destroy, IL_Destroy, Bool32, (In, Int64, ImageList))
+md_func(IL_Add, (In, UIntPtr, ImageList), (In, String, Filename), (In_Opt, Int32, IconNumber), (In_Opt, Bool32, ResizeNonIcon), (Ret, Int32, Index))
+md_func_x(IL_Create, IL_Create, UIntPtr, (In_Opt, Int32, InitialCount), (In_Opt, Int32, GrowCount), (In_Opt, Bool32, LargeIcons))
+md_func_x(IL_Destroy, IL_Destroy, Bool32, (In, UIntPtr, ImageList))
 
 md_func(IniDelete, (In, String, Path), (In, String, Section), (In_Opt, String, Key))
 md_func(IniRead, (In, String, Path), (In_Opt, String, Section), (In_Opt, String, Key), (In_Opt, String, Default), (Ret, String, RetVal))
@@ -96,7 +96,7 @@ md_func_v(ListHotkeys, md_arg_none)
 md_func_v(ListLines, (In_Opt, Int32, Mode))
 md_func_v(ListVars, md_arg_none)
 
-md_func_v(MenuFromHandle, (In, Int64, Handle), (Ret, Object, Menu))
+md_func_v(MenuFromHandle, (In, UIntPtr, Handle), (Ret, Object, Menu))
 
 md_func(MonitorGet, (In_Opt, Int32, N), (Out_Opt, Int32, Left), (Out_Opt, Int32, Top), (Out_Opt, Int32, Right), (Out_Opt, Int32, Bottom), (Ret, Int32, RetVal))
 md_func_x(MonitorGetCount, MonitorGetCount, Int32, md_arg_none)
@@ -182,7 +182,7 @@ md_func(SysGetIPAddresses, (Ret, Object, RetVal))
 
 md_func(Thread, (In, String, Command), (In_Opt, Int32, Value1), (In_Opt, Int32, Value2))
 
-md_func(ToolTip, (In_Opt, String, Text), (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Index), (Ret, Int64, Hwnd))
+md_func(ToolTip, (In_Opt, String, Text), (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Index), (Ret, UIntPtr, Hwnd))
 
 md_func(TraySetIcon, (In_Opt, String, File), (In_Opt, Int32, Number), (In_Opt, Bool32, Freeze))
 md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options))

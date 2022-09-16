@@ -220,7 +220,7 @@ bif_impl FResult GroupAdd(StrArg aGroup, optl<StrArg> aTitle, optl<StrArg> aText
 
 
 
-bif_impl FResult GroupActivate(StrArg aGroup, optl<StrArg> aMode, __int64 &aRetVal)
+bif_impl FResult GroupActivate(StrArg aGroup, optl<StrArg> aMode, UINT_PTR &aRetVal)
 {
 	WinGroup *group;
 	if (   !(group = g_script.FindGroup(aGroup, true))   ) // Last parameter -> create-if-not-found.

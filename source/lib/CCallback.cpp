@@ -167,7 +167,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 
 
 
-bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> aParamCount, __int64 &aRetVal)
+bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> aParamCount, UINT_PTR &aRetVal)
 // Returns: Address of callback procedure.
 // Parameters:
 // 1: Name of the function to be called when the callback routine is executed.
@@ -278,16 +278,15 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 	DWORD dwOldProtect;
 	VirtualProtect(callbackfunc, sizeof(RCCallbackFunc), PAGE_EXECUTE_READWRITE, &dwOldProtect);
 
-	aRetVal = ((__int64)callbackfunc); // Yield the callable address as the result.
+	aRetVal = (UINT_PTR)callbackfunc; // Yield the callable address as the result.
 	return OK;
 }
 
-bif_impl FResult CallbackFree(__int64 aCallback)
+bif_impl FResult CallbackFree(UINT_PTR aCallback)
 {
-	INT_PTR address = (INT_PTR)aCallback;
-	if (address < 65536 && address >= 0) // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+	if (aCallback < 65536) // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
 		return FR_E_ARG(0);
-	RCCallbackFunc *callbackfunc = (RCCallbackFunc *)address;
+	RCCallbackFunc *callbackfunc = (RCCallbackFunc *)aCallback;
 	callbackfunc->func->Release();
 	callbackfunc->func = NULL; // To help detect bugs.
 	GlobalFree(callbackfunc);

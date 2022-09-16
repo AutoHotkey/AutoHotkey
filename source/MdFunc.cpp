@@ -357,6 +357,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	switch (mRetType)
 	{
 	case MdType::Int32: aResultToken.SetValue(ri32); break;
+	case MdType::UInt64:
 	case MdType::Int64: aResultToken.SetValue(ri64); break;
 	case MdType::UInt32: aResultToken.SetValue((UINT)rup); break;
 	case MdType::Float64: aResultToken.SetValue(GetDoubleRetval()); break;
@@ -458,6 +459,7 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 	case MdType::Bool32:
 	case MdType::Int32: aToken.SetValue(*(int*)aPtr); break;
 	case MdType::UInt32: aToken.SetValue(*(UINT*)aPtr); break;
+	case MdType::UInt64:
 	case MdType::Int64: aToken.SetValue(*(__int64*)aPtr); break;
 	case MdType::Float64: aToken.SetValue(*(double*)aPtr); break;
 	case MdType::Object:

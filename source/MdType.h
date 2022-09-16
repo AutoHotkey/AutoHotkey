@@ -13,6 +13,8 @@ enum class MdType : UINT8
 	Int32		= TypeInt | Size32,
 	UInt32		= TypeInt | Size32 | Unsigned,
 	Int64		= TypeInt | Size64,
+	UInt64		= TypeInt | Size64 | Unsigned,
+	UIntPtr		= Exp32or64(UInt32, UInt64),
 	Float64		= TypeFloat | Size64,
 	String		= 3,
 	Object,
@@ -52,6 +54,7 @@ template<> struct md_argtype<MdType::Int32> { typedef int t; };
 template<> struct md_argtype<MdType::UInt32> { typedef UINT t; };
 template<> struct md_argtype<MdType::Float64> { typedef double t; };
 template<> struct md_argtype<MdType::Int64> { typedef __int64 t; };
+template<> struct md_argtype<MdType::UInt64> { typedef UINT64 t; };
 template<> struct md_argtype<MdType::String> { typedef StrArg t; };
 template<> struct md_argtype<MdType::Object> { typedef IObject *t; };
 template<> struct md_argtype<MdType::Void> { typedef void t; };
