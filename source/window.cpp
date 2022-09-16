@@ -1015,19 +1015,8 @@ int MsgBox(LPCTSTR aText, UINT uType, LPCTSTR aTitle, double aTimeout, HWND aOwn
 	// Set the below globals so that any WM_TIMER messages dispatched by this call to
 	// MsgBox() (which may result in a recursive call back to us) know not to display
 	// any more MsgBoxes:
-	if (g_nMessageBoxes > MAX_MSGBOXES + 1)  // +1 for the final warning dialog.  Verified correct.
-		return 0;
-
-	if (g_nMessageBoxes == MAX_MSGBOXES)
-	{
-		// Do a recursive call to self so that it will be forced to the foreground.
-		// But must increment this so that the recursive call allows the last MsgBox
-		// to be displayed:
-		++g_nMessageBoxes;
-		MsgBox(_T("The maximum number of MsgBoxes has been reached."));
-		--g_nMessageBoxes;
-		return 0;
-	}
+	if (g_nMessageBoxes >= MAX_MSGBOXES)
+		return AHK_TOO_MANY_MSGBOXES;
 
 	if (!aText) // In case the caller explicitly called it with a NULL, overriding the default.
 		aText = (uType & 0xF) ? _T("") : _T("Press OK to continue."); // Use default text only if OK is the only button.

@@ -114,6 +114,8 @@ md_func(MouseMove,
 	(In_Opt, Int32, Speed),
 	(In_Opt, String, Relative))
 
+md_func(MsgBox, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options), (Ret, String, RetVal))
+
 md_func_v(OutputDebug, (In, String, Text))
 
 md_func(Pause, (In_Opt, Int32, NewState))

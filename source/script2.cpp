@@ -942,15 +942,18 @@ UserFunc* Script::CreateHotFunc()
 /////////////////////////
 
 
-ResultType MsgBoxParseOptions(LPTSTR aOptions, int &aType, double &aTimeout, HWND &aOwner)
+ResultType MsgBoxParseOptions(LPCTSTR aOptions, int &aType, double &aTimeout, HWND &aOwner)
 {
 	aType = 0;
 	aTimeout = 0;
 
+	if (!aOptions)
+		return OK;
+
 	//int button_option = 0;
 	//int icon_option = 0;
 
-	LPTSTR next_option, option_end;
+	LPCTSTR next_option, option_end;
 	TCHAR option[1+MAX_NUMBER_SIZE];
 	for (next_option = omit_leading_whitespace(aOptions); ; next_option = omit_leading_whitespace(option_end))
 	{
@@ -1053,23 +1056,18 @@ LPTSTR MsgBoxResultString(int aResult)
 }
 
 
-BIF_DECL(BIF_MsgBox)
+bif_impl FResult MsgBox(optl<StrArg> aText, optl<StrArg> aTitle, optl<StrArg> aOptions, StrRet &aRetVal)
 {
 	int result;
 	HWND dialog_owner = THREAD_DIALOG_OWNER; // Resolve macro only once to reduce code size.
 	// dialog_owner is passed via parameter to avoid internally-displayed MsgBoxes from being
 	// affected by script-thread's owner setting.
-	_f_param_string_opt_def(aText, 0, nullptr);
-	_f_param_string_opt_def(aTitle, 1, nullptr);
-	_f_param_string_opt(aOptions, 2);
 	int type;
 	double timeout;
-	if (!MsgBoxParseOptions(aOptions, type, timeout, dialog_owner))
-	{
-		aResultToken.SetExitResult(FAIL);
-		return;
-	}
-	result = MsgBox(aText, type, aTitle, timeout, dialog_owner);
+	if (!MsgBoxParseOptions(aOptions.value_or_null(), type, timeout, dialog_owner))
+		return FR_FAIL;
+	SetLastError(0); // To differentiate MAX_MSGBOXES from invalid parameters.
+	result = MsgBox(aText.value_or_null(), type, aTitle.value_or_null(), timeout, dialog_owner);
 	// If the MsgBox window can't be displayed for any reason, always return FAIL to
 	// the caller because it would be unsafe to proceed with the execution of the
 	// current script subroutine.  For example, if the script contains an IfMsgBox after,
@@ -1088,15 +1086,19 @@ BIF_DECL(BIF_MsgBox)
 	//	// not have any effect.  The below only takes effect if MsgBox()'s call to
 	//	// MessageBox() failed in some unexpected way:
 	//	_f_throw("The MsgBox could not be displayed.");
-	// v1.1.09.02: If the MsgBox failed due to invalid options, it seems better to display
-	// an error dialog than to silently exit the thread:
-	if (!result && GetLastError() == ERROR_INVALID_MSGBOX_STYLE)
-		_f_throw_param(2);
-	// Return a string such as "OK", "Yes" or "No" if possible, or fall back to the integer value.
+
+	// Return a button name such as "OK", "Yes" or "No" if applicable.
 	if (LPTSTR result_string = MsgBoxResultString(result))
-		_f_return_p(result_string);
-	else
-		_f_return_i(result);
+	{
+		aRetVal.SetStatic(result_string);
+		return OK;
+	}
+	if (result == AHK_TOO_MANY_MSGBOXES)
+		// Raise an error, since the MsgBox() might be intended to request approval or input from
+		// the user, and continuing without doing so could be risky:
+		return FError(_T("The maximum number of MsgBoxes has been reached."));
+	auto error = GetLastError();
+	return error == ERROR_INVALID_MSGBOX_STYLE ? FR_E_ARG(2) : FR_E_WIN32(error);
 }
 
 

@@ -643,6 +643,7 @@ enum enum_act {
 // dependency between script.h and window.h.  Update: It can't be -1 either because
 // that value is used to indicate failure by DialogBox():
 #define AHK_TIMEOUT -2
+#define AHK_TOO_MANY_MSGBOXES -3
 // And these to prevent mutual dependency problem between window.h and globaldata.h:
 #define MAX_MSGBOXES 7 // Probably best not to change this because it's used by OurTimers to set the timer IDs, which should probably be kept the same for backward compatibility.
 #define MAX_MSG_MONITORS 500
