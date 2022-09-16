@@ -2952,15 +2952,10 @@ bif_impl FResult OnExit(IObject *aFunction, optl<int> aAddRemove)
 ///////////////////////
 
 
-BIF_DECL(BIF_MenuFromHandle)
+bif_impl void MenuFromHandle(__int64 aHandle, IObject *&aRetVal)
 {
-	auto *menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
-	if (menu)
-	{
-		menu->AddRef();
-		_f_return(menu);
-	}
-	_f_return_empty;
+	if (aRetVal = g_script.FindMenu((HMENU)aHandle))
+		aRetVal->AddRef();
 }
 
 

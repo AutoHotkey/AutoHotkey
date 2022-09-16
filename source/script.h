@@ -3245,8 +3245,6 @@ BIF_DECL(BIF_DateDiff);
 BIF_DECL(BIF_PostSendMessage);
 BIF_DECL(BIF_Hotkey);
 
-BIF_DECL(BIF_MenuFromHandle);
-
 // Gui
 BIF_DECL(BIF_GuiFromHwnd);
 BIF_DECL(BIF_GuiCtrlFromHwnd);

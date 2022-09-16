@@ -92,6 +92,8 @@ md_func_v(ListHotkeys, md_arg_none)
 md_func_v(ListLines, (In_Opt, Int32, Mode))
 md_func_v(ListVars, md_arg_none)
 
+md_func_v(MenuFromHandle, (In, Int64, Handle), (Ret, Object, Menu))
+
 md_func(MonitorGet, (In_Opt, Int32, N), (Out_Opt, Int32, Left), (Out_Opt, Int32, Top), (Out_Opt, Int32, Right), (Out_Opt, Int32, Bottom), (Ret, Int32, RetVal))
 md_func_x(MonitorGetCount, MonitorGetCount, Int32, md_arg_none)
 md_func(MonitorGetName, (In_Opt, Int32, N), (Ret, String, RetVal))
