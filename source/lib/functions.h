@@ -206,6 +206,8 @@ md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, Strin
 
 md_func(WinGetClass, MD_WINTITLE_ARGS, (Ret, String, Class))
 md_func(WinGetClientPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height), MD_WINTITLE_ARGS)
+md_func(WinGetCount, MD_WINTITLE_ARGS, (Ret, Int32, Count))
+md_func(WinGetList, MD_WINTITLE_ARGS, (Ret, Object, HwndArray))
 md_func(WinGetPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height), MD_WINTITLE_ARGS)
 md_func(WinGetText, MD_WINTITLE_ARGS, (Ret, String, Title))
 md_func(WinGetTitle, MD_WINTITLE_ARGS, (Ret, String, Title))

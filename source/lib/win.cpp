@@ -1702,44 +1702,78 @@ bif_impl FResult WinGetClass(WINTITLE_PARAMETERS_DECL, StrRet &aRetVal)
 
 
 
-void WinGetList(ResultToken &aResultToken, BuiltInFunctionID aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
-// Helper function for WinGet() to avoid having a WindowSearch object on its stack (since that object
-// normally isn't needed).
+static FResult WinGetListCount(WINTITLE_PARAMETERS_DECL, WindowSearch &ws)
 {
-	WindowSearch ws;
-	ws.mFindLastMatch = true; // Must set mFindLastMatch to get all matches rather than just the first.
-	if (aCmd == FID_WinGetList)
-		if (  !(ws.mArray = Array::Create())  )
-			_f_throw_oom;
-	// Check if we were asked to "list" or count the active window:
-	if (USE_FOREGROUND_WINDOW(aTitle, aText, aExcludeTitle, aExcludeText))
+	HWND target_window = NULL;
+	bool hwnd_specified = false;
+
+	if (aWinTitle)
 	{
-		HWND target_window; // Set by the macro below.
-		SET_TARGET_TO_ALLOWABLE_FOREGROUND(g->DetectHiddenWindows)
-		if (aCmd == FID_WinGetCount)
+		ResultToken result_token; // TODO: Factor out the use of ResultToken just for error-reporting.
+		result_token.SetResult(OK); // Must be initialized.
+		switch (DetermineTargetHwnd(target_window, result_token, *aWinTitle))
 		{
-			_f_return_i(target_window != NULL); // i.e. 1 if a window was found.
+		case FAIL: return FR_FAIL;
+		case OK: hwnd_specified = true; break;
 		}
-		// Otherwise, it's FID_WinGetList:
-		if (target_window)
-			// Since the target window has been determined, we know that it is the only window
-			// to be put into the array:
-			ws.mArray->Append((__int64)(size_t)target_window);
-		// Otherwise, return an empty array.
-		_f_return(ws.mArray);
 	}
+
+	auto title = aWinTitle ? TokenToString(*aWinTitle) : _T("");
+	auto text = aWinText.value_or_empty();
+	auto ex_title = aExcludeTitle.value_or_empty();
+	auto ex_text = aExcludeText.value_or_empty();
+
+	// Check if we were asked to count the active window:
+	if (USE_FOREGROUND_WINDOW(title, text, ex_title, ex_text))
+		SET_TARGET_TO_ALLOWABLE_FOREGROUND(g->DetectHiddenWindows)
+
+	if (hwnd_specified)
+	{
+		if (target_window)
+		{
+			if (ws.mArray)
+				ws.mArray->Append((__int64)(size_t)target_window);
+			ws.mFoundCount++;
+		}
+		return OK;
+	}
+
+	ws.mFindLastMatch = true; // Must set mFindLastMatch to get all matches rather than just the first.
 	// Enumerate all windows which match the criteria:
 	// If aTitle is ahk_id nnnn, the Enum() below will be inefficient.  However, ahk_id is almost unheard of
 	// in this context because it makes little sense, so no extra code is added to make that case efficient.
-	if (ws.SetCriteria(*g, aTitle, aText, aExcludeTitle, aExcludeText)) // These criteria allow the possibility of a match.
+	if (ws.SetCriteria(*g, title, text, ex_title, ex_text)) // These criteria allow the possibility of a match.
 		EnumWindows(EnumParentFind, (LPARAM)&ws);
 	//else leave ws.mFoundCount set to zero (by the constructor).
-	if (aCmd == FID_WinGetList)
-		// Return the array even if it is empty:
-		_f_return(ws.mArray);
-	else // FID_WinGetCount
-		_f_return_i(ws.mFoundCount);
+	return OK;
 }
+
+
+
+bif_impl FResult WinGetCount(WINTITLE_PARAMETERS_DECL, int &aRetVal)
+{
+	WindowSearch ws;
+	auto fr = WinGetListCount(WINTITLE_PARAMETERS, ws);
+	aRetVal = ws.mFoundCount;
+	return OK;
+}
+
+
+
+bif_impl FResult WinGetList(WINTITLE_PARAMETERS_DECL, IObject *&aRetVal)
+{
+	WindowSearch ws;
+	if (  !(ws.mArray = Array::Create())  )
+		return FR_E_OUTOFMEM;
+	auto fr = WinGetListCount(WINTITLE_PARAMETERS, ws);
+	if (fr == OK)
+		aRetVal = ws.mArray;
+	else
+		ws.mArray->Release();
+	return OK;
+}
+
+
 
 void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetchHWNDs); // Forward declaration.
 
@@ -1754,11 +1788,6 @@ BIF_DECL(BIF_WinGet)
 
 	BuiltInFunctionID cmd = _f_callee_id;
 
-	if (cmd == FID_WinGetList || cmd == FID_WinGetCount)
-	{
-		WinGetList(aResultToken, cmd, aTitle, aText, aExcludeTitle, aExcludeText);
-		return;
-	}
 	// Not List or Count, so it's a function that operates on a single window.
 	HWND target_window = NULL;
 	if (aParamCount > 0)
