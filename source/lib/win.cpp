@@ -2008,7 +2008,7 @@ BIF_DECL(BIF_WinGetPos)
 
 
 DECLSPEC_NOINLINE // Lexikos: noinline saves ~300 bytes.  Originally the duplicated code prevented inlining.
-HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+HWND Line::DetermineTargetWindow(LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText)
 {
 	// Lexikos: Not sure why these checks were duplicated here and in WinExist(),
 	// so they're left here for reference:

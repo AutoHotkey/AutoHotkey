@@ -914,7 +914,7 @@ public:
 	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
 	BOOL CheckValidFinallyJump(Line* jumpTarget, bool aSilent = false);
 
-	static HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	static HWND DetermineTargetWindow(LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText);
 
 	
 	static ArgTypeType ArgIsVar(ActionTypeType aActionType, int aArgIndex, int aArgCount)
@@ -3361,7 +3361,7 @@ FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 void PauseCurrentThread();
 void ToggleSuspendState();
 
-LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
+LPCTSTR RegExMatch(LPCTSTR aHaystack, LPCTSTR aNeedleRegEx);
 FResult SetWorkingDir(LPCTSTR aNewDir);
 void UpdateWorkingDir(LPCTSTR aNewDir = NULL);
 LPTSTR GetWorkingDir();

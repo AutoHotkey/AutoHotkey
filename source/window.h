@@ -43,7 +43,7 @@ if (USE_FOREGROUND_WINDOW(title, text, exclude_title, exclude_text))\
 
 
 
-inline bool IsTextMatch(LPTSTR aHaystack, LPTSTR aNeedle)
+inline bool IsTextMatch(LPCTSTR aHaystack, LPCTSTR aNeedle)
 // Generic helper function used by WindowSearch and other things.
 // To help performance, it's the caller's responsibility to ensure that all params are not NULL.
 {
@@ -93,10 +93,10 @@ public:
 	TCHAR mCriterionTitle[SEARCH_PHRASE_SIZE]; // For storing the title.
 	TCHAR mCriterionClass[SEARCH_PHRASE_SIZE]; // For storing the "ahk_class" class name.
 	size_t mCriterionTitleLength;             // Length of mCriterionTitle.
-	LPTSTR mCriterionExcludeTitle;             // ExcludeTitle.
+	LPCTSTR mCriterionExcludeTitle;           // ExcludeTitle.
 	size_t mCriterionExcludeTitleLength;      // Length of the above.
-	LPTSTR mCriterionText;                     // WinText.
-	LPTSTR mCriterionExcludeText;              // ExcludeText.
+	LPCTSTR mCriterionText;                   // WinText.
+	LPCTSTR mCriterionExcludeText;            // ExcludeText.
 	HWND mCriterionHwnd;                      // For "ahk_id".
 	DWORD mCriterionPID;                      // For "ahk_pid".
 	WinGroup *mCriterionGroup;                // For "ahk_group".
@@ -133,7 +133,7 @@ public:
 		}
 	}
 
-	ResultType SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText);
 	void UpdateCandidateAttributes();
 	HWND IsMatch(bool aInvert = false);
 
@@ -227,7 +227,7 @@ HWND WinClose(HWND aWnd, int aTimeToWaitForClose = DEFAULT_WINCLOSE_WAIT, bool a
 HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
 	, bool aUpdateLastUsed = false);
 
-HWND WinExist(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
+HWND WinExist(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText
 	, bool aFindLastMatch = false, bool aUpdateLastUsed = false
 	, HWND aAlreadyVisited[] = NULL, int aAlreadyVisitedCount = 0);
 

@@ -364,7 +364,7 @@ int RegExCallout(pcret_callout_block *cb)
 	return (int)number_to_return;
 }
 
-pcret *get_compiled_regex(LPTSTR aRegEx, pcret_extra *&aExtra, int *aOptionsLength, ResultToken *aResultToken)
+pcret *get_compiled_regex(LPCTSTR aRegEx, pcret_extra *&aExtra, int *aOptionsLength, ResultToken *aResultToken)
 // Returns the compiled RegEx, or NULL on failure.
 // This function is called by things other than built-in functions so it should be kept general-purpose.
 // Upon failure, if aResultToken!=NULL:
@@ -668,7 +668,7 @@ error: // Since NULL is returned here, caller should ignore the contents of the 
 
 
 
-LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx)
+LPCTSTR RegExMatch(LPCTSTR aHaystack, LPCTSTR aNeedleRegEx)
 // Returns NULL if no match.  Otherwise, returns the address where the pattern was found in aHaystack.
 {
 	pcret_extra *extra;

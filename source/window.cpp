@@ -578,7 +578,7 @@ HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aEx
 
 
 
-HWND WinExist(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
+HWND WinExist(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText
 	, bool aFindLastMatch, bool aUpdateLastUsed, HWND aAlreadyVisited[], int aAlreadyVisitedCount)
 // This function must be kept thread-safe because it may be called (indirectly) by hook thread too.
 // In addition, it must not change the value of anything in aSettings except when aUpdateLastUsed==true.
@@ -1460,7 +1460,7 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, INT_PTR aBufSize, UINT aTimeout
 
 
 
-ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText)
 // Returns FAIL if the new criteria can't possibly match a window (due to ahk_id being in invalid
 // window or the specified ahk_group not existing).  Otherwise, it returns OK.
 // Callers must ensure that aText, aExcludeTitle, and aExcludeText point to buffers whose contents
@@ -1484,7 +1484,8 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTi
 	mSettings = &aSettings;
 
 	DWORD orig_criteria = mCriteria;
-	TCHAR *ahk_flag, *cp, buf[MAX_VAR_NAME_LENGTH + 1];
+	TCHAR buf[MAX_VAR_NAME_LENGTH + 1];
+	LPCTSTR ahk_flag, cp;
 	int criteria_count;
 	size_t size;
 
@@ -1534,7 +1535,7 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTi
 			cp += 5;
 			mCriteria |= CRITERION_GROUP;
 			tcslcpy(buf, omit_leading_whitespace(cp), _countof(buf));
-			if (cp = StrChrAny(buf, _T(" \t"))) // Group names can't contain spaces, so terminate at the first one to exclude any "ahk_" criteria that come afterward.
+			if (auto cp = StrChrAny(buf, _T(" \t"))) // Group names can't contain spaces, so terminate at the first one to exclude any "ahk_" criteria that come afterward.
 				*cp = '\0';
 			if (   !(mCriterionGroup = g_script.FindGroup(buf))   )
 				return FAIL; // No such group: Inform caller of invalid criteria.  No need to do anything else further below.
@@ -1568,7 +1569,7 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTi
 			// Besides, even if it's possible for a class name to start with a space, a RegEx dot or other symbol
 			// can be used to match it via SetTitleMatchMode RegEx.
 			tcslcpy(criterion, omit_leading_whitespace(cp), SEARCH_PHRASE_SIZE); // Copy all of the remaining string to simplify the below.
-			for (cp = criterion; cp = tcscasestr(cp, _T("ahk_")); cp += 4)  // Fix for v1.0.47.06: strstr() changed to strcasestr() for consistency with the other sections.
+			for (auto cp = criterion; cp = tcscasestr(cp, _T("ahk_")); cp += 4)  // Fix for v1.0.47.06: strstr() changed to strcasestr() for consistency with the other sections.
 			{
 				// This loop truncates any other criteria from the class criteria.  It's not a complete
 				// solution because it doesn't validate that what comes after the "ahk_" string is a
