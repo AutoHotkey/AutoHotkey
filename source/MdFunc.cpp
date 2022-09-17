@@ -365,7 +365,10 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	case MdType::ResultType: aResultToken.SetResult((ResultType)rup); break;
 	case MdType::FResult:
 		if (FAILED(res))
+		{
 			FResultToError(aResultToken, aParam, aParamCount, res);
+			retval_index = -1; // Leave aResultToken empty.
+		}
 		else if (res == FR_ABORTED)
 			retval_index = -1; // Leave aResultToken set to its default value.
 		break;

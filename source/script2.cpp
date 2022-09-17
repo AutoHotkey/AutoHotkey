@@ -2541,9 +2541,9 @@ bif_impl FResult SetTimer(optl<IObject*> aFunction, optl<__int64> aPeriod, optl<
 	else
 	{
 		callback = aFunction.value();
-		ResultToken result_token; // Used just for .result.
-		if (!ValidateFunctor(callback, 0, result_token))
-			return result_token.Exited() ? FR_FAIL : OK;
+		auto fr = ValidateFunctor(callback, 0);
+		if (fr != OK)
+			return fr;
 	}
 	__int64 period = DEFAULT_TIMER_PERIOD;
 	int priority = 0;
@@ -2691,9 +2691,9 @@ bif_impl FResult OnMessage(UINT aNumber, IObject *aFunction, optl<int> aMaxThrea
 	{
 		if (mode_is_delete) // Delete a non-existent item.
 			return OK;
-		ResultToken result_token; // Used just for .result.
-		if (!ValidateFunctor(aFunction, 4, result_token))
-			return result_token.Exited() ? FR_FAIL : OK;
+		auto fr = ValidateFunctor(aFunction, 4);
+		if (fr != OK)
+			return fr;
 		// From this point on, it is certain that an item will be added to the array.
 		pmonitor = g_MsgMonitor.Add(aNumber, aFunction, call_it_last);
 		if (!pmonitor)
@@ -2900,9 +2900,9 @@ void MsgMonitorList::Dispose()
 
 static FResult OnScriptEvent(IObject *aFunction, optl<int> aAddRemove, MsgMonitorList &handlers, int aParamCount)
 {
-	ResultToken result_token; // Used just for .result.
-	if (!ValidateFunctor(aFunction, aParamCount, result_token))
-		return result_token.Exited() ? FR_FAIL : OK;
+	auto fr = ValidateFunctor(aFunction, aParamCount);
+	if (fr != OK)
+		return fr;
 	
 	int mode = aAddRemove.value_or(1);
 
@@ -3632,6 +3632,14 @@ IObject *TokenToObject(ExprTokenType &aToken)
 }
 
 
+
+FResult ValidateFunctor(IObject *aFunc, int aParamCount, int *aMinParams, bool aShowError)
+{
+	ResultToken result_token;
+	result_token.SetResult(OK);
+	return ValidateFunctor(aFunc, aParamCount, result_token, aMinParams, aShowError)
+		? OK : result_token.Exited() ? FR_FAIL : FR_ABORTED;
+}
 
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aUseMinParams, bool aShowError)
 {

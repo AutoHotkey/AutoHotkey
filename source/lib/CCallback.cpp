@@ -192,14 +192,12 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 
 	int actual_param_count = aParamCount.value_or(0);
 	ResultToken result_token; // Just used for .result.
-	if (!ValidateFunctor(func
+	auto fr = ValidateFunctor(func
 		, pass_params_pointer ? 1 : actual_param_count // Count of script parameters being passed.
-		, result_token
 		// Use MinParams as actual_param_count if unspecified and no & option.
-		, params_specified || pass_params_pointer ? nullptr : &actual_param_count))
-	{
-		return result_token.Exited() ? FR_FAIL : OK;
-	}
+		, params_specified || pass_params_pointer ? nullptr : &actual_param_count);
+	if (fr != OK)
+		return fr;
 	
 #ifdef WIN32_PLATFORM
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
