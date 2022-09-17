@@ -101,6 +101,8 @@ md_func_v(ListHotkeys, md_arg_none)
 md_func_v(ListLines, (In_Opt, Int32, Mode))
 md_func_v(ListVars, md_arg_none)
 
+md_func(LoadPicture, (In, String, Filename), (In_Opt, String, Options), (Out_Opt, Int32, ImageType), (Ret, UIntPtr, Handle))
+
 md_func_v(MenuFromHandle, (In, UIntPtr, Handle), (Ret, Object, Menu))
 
 md_func(MonitorGet, (In_Opt, Int32, N), (Out_Opt, Int32, Left), (Out_Opt, Int32, Top), (Out_Opt, Int32, Right), (Out_Opt, Int32, Bottom), (Ret, Int32, RetVal))

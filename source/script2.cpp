@@ -3148,19 +3148,14 @@ bif_impl FResult IL_Add(UINT_PTR aImageList, StrArg aFilename, optl<int> aIconNu
 // Misc Functions //
 ////////////////////
 
-BIF_DECL(BIF_LoadPicture)
+bif_impl FResult LoadPicture(StrArg aFilename, optl<StrArg> aOptions, int *aImageType, UINT_PTR &aRetVal)
 {
-	// h := LoadPicture(filename [, options, ByRef image_type])
-	LPTSTR filename = ParamIndexToString(0, aResultToken.buf);
-	LPTSTR options = ParamIndexToOptionalString(1);
-	Var *image_type_var = ParamIndexToOutputVar(2);
-
 	int width = -1;
 	int height = -1;
 	int icon_number = 0;
 	bool use_gdi_plus = false;
 
-	for (LPTSTR cp = options; cp; cp = StrChrAny(cp, _T(" \t")))
+	for (auto cp = aOptions.value_or_null(); cp; cp = StrChrAny(cp, _T(" \t")))
 	{
 		cp = omit_leading_whitespace(cp);
 		if (tolower(*cp) == 'w')
@@ -3178,13 +3173,14 @@ BIF_DECL(BIF_LoadPicture)
 		width = 0;
 
 	int image_type;
-	HBITMAP hbm = LoadPicture(filename, width, height, image_type, icon_number, use_gdi_plus);
-	if (image_type_var)
-		image_type_var->Assign(image_type);
+	HBITMAP hbm = LoadPicture(aFilename, width, height, image_type, icon_number, use_gdi_plus);
+	if (aImageType)
+		*aImageType = image_type;
 	else if (image_type != IMAGE_BITMAP && hbm)
 		// Always return a bitmap when the ImageType output var is omitted.
 		hbm = IconToBitmap32((HICON)hbm, true); // Also works for cursors.
-	aResultToken.value_int64 = (__int64)(UINT_PTR)hbm;
+	aRetVal = (UINT_PTR)hbm;
+	return OK;
 }
 
 
