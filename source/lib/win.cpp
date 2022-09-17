@@ -23,6 +23,17 @@ GNU General Public License for more details.
 
 
 
+#define WINTITLE_PARAMETERS_DECL ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText
+#define WINTITLE_PARAMETERS aWinTitle, aWinText, aExcludeTitle, aExcludeText
+#define DETERMINE_TARGET_WINDOW do { \
+	auto fr = DetermineTargetWindow(target_window, aWinTitle, aWinText.value_or_null(), aExcludeTitle.value_or_null(), aExcludeText.value_or_null()); \
+	if (fr != OK) \
+		return fr; } while (0)
+
+FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL);
+
+
+
 BIF_DECL(BIF_WinShow)
 {
 	auto action = _f_callee_id;
@@ -2039,6 +2050,31 @@ ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTok
 	if (!IsWindow(aWindow))
 		aWindow = 0;
 	return OK;
+}
+
+
+FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL)
+{
+	TCHAR number_buf[MAX_NUMBER_SIZE];
+	LPCTSTR title = _T("");
+	if (aWinTitle)
+	{
+		ResultToken result_token; // TODO: Factor out the use of ResultToken just for error-reporting.
+		result_token.SetResult(OK); // Must be initialized.
+		auto result = DetermineTargetHwnd(aWindow, result_token, *aWinTitle);
+		if (result != CONDITION_FALSE)
+		{
+			if (result == OK && !aWindow)
+				return FError(ERR_NO_WINDOW, nullptr, ErrorPrototype::Target);
+			return result ? OK : result_token.Exited() ? FR_FAIL : FR_ABORTED;
+		}
+		title = TokenToString(*aWinTitle, number_buf);
+	}
+	aWindow = Line::DetermineTargetWindow(title, aWinText.value_or_empty()
+		, aExcludeTitle.value_or_empty(), aExcludeText.value_or_empty());
+	if (aWindow)
+		return OK;
+	return FError(ERR_NO_WINDOW, title, ErrorPrototype::Target);
 }
 
 

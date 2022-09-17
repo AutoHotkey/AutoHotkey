@@ -1,4 +1,8 @@
 
+#ifndef MD_WINTITLE_ARGS
+#define MD_WINTITLE_ARGS (In_Opt, Variant, WinTitle), (In_Opt, String, WinText), (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText)
+#endif
+
 md_func_x(BlockInput, ScriptBlockInput, FResult, (In, String, Mode))
 
 #ifdef ENABLE_REGISTERCALLBACK
