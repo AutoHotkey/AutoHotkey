@@ -167,18 +167,16 @@ BIV_DECL_R(BIV_IsAdmin)
 
 
 
-BIF_DECL(BIF_PixelGetColor)
+bif_impl FResult PixelGetColor(int aX, int aY, optl<StrArg> aMode, StrRet &aRetVal)
 {
-	_f_set_retval_p(_f_retval_buf, 0); // PixelSearch() below relies on this.
-	*aResultToken.marker = '\0'; // Set default.
-	int aX = ParamIndexToInt(0);
-	int aY = ParamIndexToInt(1);
-	_f_param_string_opt(aOptions, 2);
+	LPTSTR buf = aRetVal.CallerBuf();
+	aRetVal.SetTemp(buf, 8);
+	
+	auto aOptions = aMode.value_or_empty();
 
 	if (tcscasestr(aOptions, _T("Slow"))) // New mode for v1.0.43.10.  Takes precedence over Alt mode.
 	{
-		PixelSearch(NULL, NULL, aX, aY, aX, aY, 0, 0, true, aResultToken); // It takes care of setting the return value.
-		return;
+		return PixelSearch(nullptr, nullptr, nullptr, aX, aY, aX, aY, 0, 0, buf); // It takes care of setting the return value.
 	}
 
 	CoordToScreen(aX, aY, COORD_MODE_PIXEL);
@@ -186,7 +184,7 @@ BIF_DECL(BIF_PixelGetColor)
 	bool use_alt_mode = tcscasestr(aOptions, _T("Alt")) != NULL; // New mode for v1.0.43.10: Two users reported that CreateDC works better in certain windows such as SciTE, at least one some systems.
 	HDC hdc = use_alt_mode ? CreateDC(_T("DISPLAY"), NULL, NULL, NULL) : GetDC(NULL);
 	if (!hdc)
-		_f_throw_win32();
+		return FR_E_WIN32;
 
 	// Assign the value as an 32-bit int to match Window Spy reports color values.
 	// Update for v1.0.21: Assigning in hex format seems much better, since it's easy to
@@ -199,8 +197,8 @@ BIF_DECL(BIF_PixelGetColor)
 	else
 		ReleaseDC(NULL, hdc);
 
-	aResultToken.marker_length = _stprintf(aResultToken.marker, _T("0x%06X"), bgr_to_rgb(color));
-	_f_return_retval;
+	_stprintf(buf, _T("0x%06X"), bgr_to_rgb(color));
+	return OK;
 }
 
 

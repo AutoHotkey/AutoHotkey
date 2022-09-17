@@ -3299,10 +3299,7 @@ BIF_DECL(BIF_ControlMove);
 BIF_DECL(BIF_ControlSend);
 BIF_DECL(BIF_ControlSetText);
 BIF_DECL(BIF_GroupActivate);
-BIF_DECL(BIF_ImageSearch);
 BIF_DECL(BIF_MouseGetPos);
-BIF_DECL(BIF_PixelGetColor);
-BIF_DECL(BIF_PixelSearch);
 BIF_DECL(BIF_Reg);
 BIF_DECL(BIF_Random);
 BIF_DECL(BIF_Run);
@@ -3385,9 +3382,9 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason);
 void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions);
 bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex);
 
-void PixelSearch(Var *aOutputVarX, Var *aOutputVarY
+FResult PixelSearch(BOOL *aFound, ResultToken *aFoundX, ResultToken *aFoundY
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
-	, int aVariation, bool aIsPixelGetColor, ResultToken &aResultToken);
+	, int aVariation, LPTSTR aGetColor);
 
 ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional = false);
 ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional = false);

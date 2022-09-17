@@ -134,9 +134,9 @@ end:
 
 
 
-void PixelSearch(Var *output_var_x, Var *output_var_y
+FResult PixelSearch(BOOL *aFound, ResultToken *aFoundX, ResultToken *aFoundY
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
-	, int aVariation, bool aIsPixelGetColor, ResultToken &aResultToken)
+	, int aVariation, LPTSTR aGetColor)
 // Author: The fast-mode PixelSearch was created by Aurelian Maga.
 {
 	// For maintainability, get RGB/BGR conversion out of the way early.
@@ -144,12 +144,6 @@ void PixelSearch(Var *output_var_x, Var *output_var_y
 
 	// Many of the following sections are similar to those in ImageSearch(), so they should be
 	// maintained together.
-
-	if (!aIsPixelGetColor)
-	{
-		output_var_x->Assign();  // Init to empty string regardless of whether we succeed here.
-		output_var_y->Assign();  // Same.
-	}
 
 	POINT origin = {0};
 	CoordToScreen(origin, COORD_MODE_PIXEL);
@@ -197,13 +191,9 @@ void PixelSearch(Var *output_var_x, Var *output_var_y
 	}
 	//else leave uninitialized since they won't be used.
 
-	DWORD first_error = 0;
 	HDC hdc = GetDC(NULL);
 	if (!hdc)
-	{
-		first_error = GetLastError();
-		goto error;
-	}
+		return FR_E_WIN32;
 
 	bool found = false; // Must init here for use by "goto fast_end".
 
@@ -249,10 +239,11 @@ void PixelSearch(Var *output_var_x, Var *output_var_y
 		for (i = 0; i < screen_pixel_count; ++i)
 			screen_pixel[i] &= 0xF8F8F8F8;
 
-	if (aIsPixelGetColor)
+	if (aGetColor)
 	{
 		COLORREF color = screen_pixel[0] & 0x00FFFFFF; // See other 0x00FFFFFF below for explanation.
-		aResultToken.marker_length = _stprintf(aResultToken.marker, _T("0x%06X"), color);
+		// In this case, aFoundX is a pointer to PixelGetColor's aResultToken.
+		_stprintf(aGetColor, _T("0x%06X"), color);
 	}
 	else if (aVariation < 1) // Caller wants an exact match on one particular color.
 	{
@@ -331,7 +322,7 @@ void PixelSearch(Var *output_var_x, Var *output_var_y
 	}
 
 fast_end:
-	first_error = GetLastError(); // Might help to ensure the correct error number is thrown on failure.
+	DWORD error = GetLastError(); // Might help to ensure the correct error number is thrown on failure.
 	ReleaseDC(NULL, hdc);
 	if (sdc)
 	{
@@ -344,70 +335,45 @@ fast_end:
 	if (screen_pixel)
 		free(screen_pixel);
 	else // One of the GDI calls failed and the search wasn't carried out.
-		goto error;
+		return FR_E_WIN32(error);
 
-	if (aIsPixelGetColor)
-		return; // Return value was already set.
+	if (aGetColor)
+		return OK; // Return value was already set.
 
 	// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
 	// coords to make them relative to the position of the target window (rect will contain
 	// zeroes if this doesn't need to be done):
 	if (found)
 	{
-		output_var_x->Assign((left + i%screen_width) - origin.x);
-		output_var_y->Assign((top + i/screen_width) - origin.y);
+		aFoundX->SetValue((left + i%screen_width) - origin.x);
+		aFoundY->SetValue((top + i/screen_width) - origin.y);
 	}
-	_f_return_b(found);
-
-error:
-	_f_throw_win32(first_error);
+	*aFound = found;
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_PixelSearch)
+bif_impl FResult PixelSearch(BOOL &aFound, ResultToken &aFoundX, ResultToken &aFoundY
+	, int aLeft, int aTop, int aRight, int aBottom, UINT aColor, optl<int> aVariation)
 {
-	Var *output_var_x = ParamIndexToOutputVar(0);
-	Var *output_var_y = ParamIndexToOutputVar(1);
-	// Redundant due to prior validation of OutputVars:
-	//if (!output_var_x)
-	//	_f_throw_param(0, _T("variable reference"));
-	//if (!output_var_y)
-	//	_f_throw_param(1, _T("variable reference"));
-	ASSERT(output_var_x && output_var_y);
-	PixelSearch(output_var_x, output_var_y
-		, ParamIndexToInt(2), ParamIndexToInt(3), ParamIndexToInt(4), ParamIndexToInt(5)
-		, ParamIndexToInt(6), ParamIndexToOptionalInt(7, 0), false, aResultToken);
+	return PixelSearch(&aFound, &aFoundX, &aFoundY, aLeft, aTop, aRight, aBottom, aColor
+		, aVariation.value_or(0), nullptr);
 }
 
 
 
-//ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile)
-BIF_DECL(BIF_ImageSearch)
+bif_impl FResult ImageSearch(ResultToken &aFoundX, ResultToken &aFoundY
+	, int aLeft, int aTop, int aRight, int aBottom, StrArg aImageFile
+	, BOOL &aRetVal)
 // Author: ImageSearch was created by Aurelian Maga.
 {
 	// Many of the following sections are similar to those in PixelSearch(), so they should be
 	// maintained together.
 
-	Var *output_var_x = ParamIndexToOutputVar(0);
-	Var *output_var_y = ParamIndexToOutputVar(1);
-	// Redundant due to prior validation of OutputVars:
-	//if (!output_var_x)
-	//	_f_throw_param(0, _T("variable reference"));
-	//if (!output_var_y)
-	//	_f_throw_param(1, _T("variable reference"));
-	ASSERT(output_var_x && output_var_y);
-
-	int aLeft = ParamIndexToInt(2);
-	int aTop = ParamIndexToInt(3);
-	int aRight = ParamIndexToInt(4);
-	int aBottom = ParamIndexToInt(5);
-
-	_f_param_string(aImageFile, 6);
-
 	// Set default results (output variables), in case of early return:
-	output_var_x->Assign();  // Init to empty string regardless of whether we succeed here.
-	output_var_y->Assign();  // Same.
+	//aFoundX.SetValue(_T(""), 0);  // Init to empty string regardless of whether we succeed here.
+	//aFoundY.SetValue(_T(""), 0);  // Same.
 
 	POINT origin = {0};
 	CoordToScreen(origin, COORD_MODE_PIXEL);
@@ -424,7 +390,7 @@ BIF_DECL(BIF_ImageSearch)
 	int width = 0, height = 0;
 	// For icons, override the default to be 16x16 because that is what is sought 99% of the time.
 	// This new default can be overridden by explicitly specifying w0 h0:
-	LPTSTR cp = _tcsrchr(aImageFile, '.');
+	auto cp = _tcsrchr(aImageFile, '.');
 	if (cp)
 	{
 		++cp;
@@ -480,7 +446,7 @@ BIF_DECL(BIF_ImageSearch)
 			}
 		} // switch()
 		if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find the first space or tab after the option.
-			goto arg7_error; // Bad option/format.
+			return FR_E_ARG(6); // Bad option/format.
 		// Now it's the space or tab (if there is one) after the option letter.  Advance by exactly one character
 		// because only one space or tab is considered the delimiter.  Any others are considered to be part of the
 		// filename (though some or all OSes might simply ignore them or tolerate them as first-try match criteria).
@@ -512,13 +478,12 @@ BIF_DECL(BIF_ImageSearch)
 	// by the search.  In other words, nothing works.  Obsolete comment: Pass "true" so that an attempt
 	// will be made to load icons as bitmaps if GDIPlus is available.
 	if (!hbitmap_image)
-		goto arg7_error;
+		return FR_E_ARG(6);
 
-	DWORD first_error = 0;
 	HDC hdc = GetDC(NULL);
 	if (!hdc)
 	{
-		first_error = GetLastError();
+		DWORD error = GetLastError();
 		if (!no_delete_bitmap)
 		{
 			if (image_type == IMAGE_ICON)
@@ -526,7 +491,7 @@ BIF_DECL(BIF_ImageSearch)
 			else
 				DeleteObject(hbitmap_image);
 		}
-		goto error;
+		return FR_E_WIN32(error);
 	}
 
 	// From this point on, "goto end" will assume hdc and hbitmap_image are non-NULL, but that the below
@@ -746,7 +711,7 @@ BIF_DECL(BIF_ImageSearch)
 	}
 
 end:
-	first_error = GetLastError();
+	DWORD error = GetLastError();
 	ReleaseDC(NULL, hdc);
 	if (!no_delete_bitmap && hbitmap_image)
 		DeleteObject(hbitmap_image);
@@ -765,21 +730,16 @@ end:
 	if (screen_pixel)
 		free(screen_pixel);
 	else // One of the GDI calls failed.
-		goto error;
+		return FR_E_WIN32(error);
 
 	if (found)
 	{
 		// Calculate xpos and ypos of where the match was found and adjust coords to
 		// make them relative to the position of the target window (rect will contain
 		// zeroes if this doesn't need to be done):
-		output_var_x->Assign((aLeft + i%screen_width) - origin.x);
-		output_var_y->Assign((aTop + i/screen_width) - origin.y);
+		aFoundX.SetValue((aLeft + i%screen_width) - origin.x);
+		aFoundY.SetValue((aTop + i/screen_width) - origin.y);
 	}
-	_f_return_b(found);
-
-arg7_error:
-	_f_throw_param(6);
-
-error:
-	_f_throw_win32(first_error);
+	aRetVal = found;
+	return OK;
 }

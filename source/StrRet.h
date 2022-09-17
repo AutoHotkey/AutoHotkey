@@ -104,6 +104,10 @@ public:
 	{
 		SetStatic(s);
 	}
+	void SetTemp(LPCTSTR s, size_t n)
+	{
+		SetStatic(s, n);
+	}
 
 	// Set the length of the string which has been written into the buffer returned by Alloc().
 	// Calling this is optional.
