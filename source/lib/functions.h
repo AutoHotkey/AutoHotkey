@@ -124,6 +124,7 @@ md_func(MouseClickDrag,
 	(In, Int32, X2), (In, Int32, Y2),
 	(In_Opt, Int32, Speed),
 	(In_Opt, String, Relative))
+md_func(MouseGetPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Variant, Win), (Out_Opt, Variant, Control), (In_Opt, Int32, Flag))
 md_func(MouseMove,
 	(In, Int32, X), (In, Int32, Y),
 	(In_Opt, Int32, Speed),

@@ -1314,58 +1314,41 @@ VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 // MouseGetPos //
 /////////////////
 
-BIF_DECL(BIF_MouseGetPos)
-// Returns OK or FAIL.
+bif_impl FResult MouseGetPos(int *aX, int *aY, ResultToken *aParent, ResultToken *aChild, optl<int> aFlag)
 {
-	// Since SYM_VAR is always VAR_NORMAL, these always resolve to normal vars or nullptr:
-	Var *output_var_x = ParamIndexToOutputVar(0);
-	Var *output_var_y = ParamIndexToOutputVar(1);
-	Var *output_var_parent = ParamIndexToOutputVar(2);
-	Var *output_var_child = ParamIndexToOutputVar(3);
-	int aOptions = ParamIndexToOptionalInt(4, 0);
-
 	POINT point;
 	GetCursorPos(&point);  // Realistically, can't fail?
 
 	POINT origin = {0};
 	CoordToScreen(origin, COORD_MODE_MOUSE);
 
-	if (output_var_x) // else the user didn't want the X coordinate, just the Y.
-		if (!output_var_x->Assign(point.x - origin.x))
-			_f_return_FAIL;
-	if (output_var_y) // else the user didn't want the Y coordinate, just the X.
-		if (!output_var_y->Assign(point.y - origin.y))
-			_f_return_FAIL;
+	if (aX) *aX = point.x - origin.x;
+	if (aY) *aY = point.y - origin.y;
 
-	_f_set_retval_p(_T(""), 0); // Set default.
+	if (!aParent && !aChild)
+		return OK;
 
-	if (!output_var_parent && !output_var_child)
-		_f_return_retval;
-
-	if (output_var_parent)
-		output_var_parent->Assign(); // Set default: empty.
-	if (output_var_child)
-		output_var_child->Assign(); // Set default: empty.
+	int aOptions = aFlag.value_or(0);
 
 	// This is the child window.  Despite what MSDN says, WindowFromPoint() appears to fetch
 	// a non-NULL value even when the mouse is hovering over a disabled control (at least on XP).
 	HWND child_under_cursor = WindowFromPoint(point);
 	if (!child_under_cursor)
-		_f_return_retval;
+		return OK;
 
 	HWND parent_under_cursor = GetNonChildParent(child_under_cursor);  // Find the first ancestor that isn't a child.
-	if (output_var_parent)
+	if (aParent)
 	{
 		// Testing reveals that an invisible parent window never obscures another window beneath it as seen by
 		// WindowFromPoint().  In other words, the below never happens, so there's no point in having it as a
 		// documented feature:
 		//if (!g->DetectHiddenWindows && !IsWindowVisible(parent_under_cursor))
 		//	return output_var_parent->Assign();
-		output_var_parent->AssignHWND(parent_under_cursor);
+		aParent->SetValue((UINT_PTR)parent_under_cursor);
 	}
 
-	if (!output_var_child)
-		_f_return_retval;
+	if (!aChild)
+		return OK;
 
 	// Doing it this way overcomes the limitations of WindowFromPoint() and ChildWindowFromPoint()
 	// and also better matches the control that Window Spy would think is under the cursor:
@@ -1383,12 +1366,12 @@ BIF_DECL(BIF_MouseGetPos)
 	// although probably constant, is not useful for determine which one is one top of the others).
 
 	if (parent_under_cursor == child_under_cursor) // if there's no control per se, make it blank.
-		_f_return_retval;
+		return OK;
 
 	if (aOptions & 0x02) // v1.0.43.06: Bitwise flag that means "return control's HWND vs. ClassNN".
 	{
-		output_var_child->AssignHWND(child_under_cursor);
-		_f_return_retval;
+		aChild->SetValue((UINT_PTR)child_under_cursor);
+		return OK;
 	}
 
 	class_and_hwnd_type cah;
@@ -1396,17 +1379,17 @@ BIF_DECL(BIF_MouseGetPos)
 	TCHAR class_name[WINDOW_CLASS_SIZE];
 	cah.class_name = class_name;
 	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5))  // -5 to allow room for sequence number.
-		_f_return_retval;
+		return OK;
 	cah.class_count = 0;  // Init for the below.
 	cah.is_found = false; // Same.
 	EnumChildWindows(parent_under_cursor, EnumChildFindSeqNum, (LPARAM)&cah); // Find this control's seq. number.
 	if (!cah.is_found)
-		_f_return_retval;
+		return OK;
 	// Append the class sequence number onto the class name and set the output param to be that value:
 	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
-	if (!output_var_child->Assign(class_name))
-		_f_return_FAIL;
-	_f_return_retval;
+	if (!TokenSetResult(*aChild, class_name))
+		return aChild->Exited() ? FR_FAIL : FR_ABORTED;
+	return OK;
 }
 
 
