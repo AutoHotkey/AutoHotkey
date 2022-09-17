@@ -296,22 +296,21 @@ bif_impl FResult GroupClose(StrArg aGroup, optl<StrArg> aMode)
 
 
 
-BIF_DECL(BIF_WinMove)
+bif_impl FResult WinMove(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int> aHeight, WINTITLE_PARAMETERS_DECL)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 4, aParamCount - 4))
-		return;
+	DETERMINE_TARGET_WINDOW;
 	RECT rect;
 	if (!GetWindowRect(target_window, &rect)
 		|| !MoveWindow(target_window
-			, ParamIndexToOptionalInt(0, rect.left) // X-position
-			, ParamIndexToOptionalInt(1, rect.top)  // Y-position
-			, ParamIndexToOptionalInt(2, rect.right - rect.left)
-			, ParamIndexToOptionalInt(3, rect.bottom - rect.top)
+			, aX.value_or(rect.left) // X-position
+			, aY.value_or(rect.top)  // Y-position
+			, aWidth.value_or(rect.right - rect.left)
+			, aHeight.value_or(rect.bottom - rect.top)
 			, TRUE)) // Do repaint.
-		_f_throw_win32();
+		return FR_E_WIN32;
 	DoWinDelay;
-	_f_return_empty;
+	return OK;
 }
 
 
@@ -667,23 +666,24 @@ BIF_DECL(BIF_ControlGetPos)
 
 
 
-BIF_DECL(BIF_ControlGetFocus)
+bif_impl FResult ControlGetFocus(WINTITLE_PARAMETERS_DECL, UINT_PTR &aRetVal)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
-		return;
+	DETERMINE_TARGET_WINDOW;
 
 	GUITHREADINFO guithreadInfo;
 	guithreadInfo.cbSize = sizeof(GUITHREADINFO);
 	if (!GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &guithreadInfo))
-		_f_throw_win32();
+		return FR_E_WIN32;
 
 	// Use IsChild() to ensure the focused control actually belongs to this window.
 	// Otherwise, a HWND will be returned if any window in the same thread has focus,
 	// including the target window itself (typically when it has no controls).
 	if (!IsChild(target_window, guithreadInfo.hwndFocus))
-		_f_return_i(0); // As documented, if "none of the target window's controls has focus, the return value is 0".
-	_f_return_i((UINT_PTR)guithreadInfo.hwndFocus);
+		aRetVal = 0; // As documented, if "none of the target window's controls has focus, the return value is 0".
+	else
+		aRetVal = (UINT_PTR)guithreadInfo.hwndFocus;
+	return OK;
 }
 
 
@@ -1618,11 +1618,10 @@ BIF_DECL(BIF_WinSet)
 
 
 
-BIF_DECL(BIF_WinRedraw)
+bif_impl FResult WinRedraw(WINTITLE_PARAMETERS_DECL)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
-		return;
+	DETERMINE_TARGET_WINDOW;
 	// Seems best to always have the last param be TRUE. Also, it seems best not to call
 	// UpdateWindow(), which forces the window to immediately process a WM_PAINT message,
 	// since that might not be desirable.  Some other methods of getting a window to redraw:
@@ -1631,65 +1630,74 @@ BIF_DECL(BIF_WinRedraw)
 	// SetWindowPos(mHwnd, NULL, 0, 0, 0, 0, SWP_DRAWFRAME|SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
 	// GetClientRect(mHwnd, &client_rect); InvalidateRect(mHwnd, &client_rect, TRUE);
 	InvalidateRect(target_window, NULL, TRUE);
-	_f_return_empty;
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_WinMoveTopBottom)
+static FResult WinMoveTopBottom(WINTITLE_PARAMETERS_DECL, HWND mode)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
-		return;
-	HWND mode = _f_callee_id == FID_WinMoveBottom ? HWND_BOTTOM : HWND_TOP;
+	DETERMINE_TARGET_WINDOW;
 	// Note: SWP_NOACTIVATE must be specified otherwise the target window often fails to move:
 	if (!SetWindowPos(target_window, mode, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE))
-		_f_throw_win32();
-	_f_return_empty;
+		return FR_E_WIN32;
+	return OK;
+}
+
+bif_impl FResult WinMoveTop(WINTITLE_PARAMETERS_DECL)
+{
+	return WinMoveTopBottom(WINTITLE_PARAMETERS, HWND_TOP);
+}
+
+bif_impl FResult WinMoveBottom(WINTITLE_PARAMETERS_DECL)
+{
+	return WinMoveTopBottom(WINTITLE_PARAMETERS, HWND_BOTTOM);
 }
 
 
 
-BIF_DECL(BIF_WinSetTitle)
+bif_impl FResult WinSetTitle(StrArg aNewTitle, WINTITLE_PARAMETERS_DECL)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
-		return;
-	if (!SetWindowText(target_window, ParamIndexToString(0, _f_number_buf)))
-		_f_throw_win32();
-	_f_return_empty;
+	DETERMINE_TARGET_WINDOW;
+	if (!SetWindowText(target_window, aNewTitle))
+		return FR_E_WIN32;
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_WinGetTitle)
+bif_impl FResult WinGetTitle(WINTITLE_PARAMETERS_DECL, StrRet &aRetVal)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
-		return;
+	DETERMINE_TARGET_WINDOW;
 
-	int space_needed = target_window ? GetWindowTextLength(target_window) + 1 : 1; // 1 for terminator.
-	if (!TokenSetResult(aResultToken, NULL, space_needed - 1))
-		return;  // It already displayed the error.
-	aResultToken.symbol = SYM_STRING;
+	auto estimated_length = GetWindowTextLength(target_window);
+	auto buf = aRetVal.Alloc(estimated_length);
+	if (!buf)
+		return FR_E_OUTOFMEM;
 	// Update length using the actual length, rather than the estimate provided by GetWindowTextLength():
-	aResultToken.marker_length = GetWindowText(target_window, aResultToken.marker, space_needed);
-	if (!aResultToken.marker_length)
+	auto actual_length = GetWindowText(target_window, buf, estimated_length + 1);
+	aRetVal.SetLength(actual_length);
+	if (!actual_length)
 		// There was no text to get or GetWindowText() failed.
-		*aResultToken.marker = '\0';
+		*buf = '\0';
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_WinGetClass)
+bif_impl FResult WinGetClass(WINTITLE_PARAMETERS_DECL, StrRet &aRetVal)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
-		return;
+	DETERMINE_TARGET_WINDOW;
 	TCHAR class_name[WINDOW_CLASS_SIZE];
 	if (!GetClassName(target_window, class_name, _countof(class_name)))
-		_f_throw_win32();
-	_f_return(class_name);
+		return FR_E_WIN32;
+	if (!aRetVal.Copy(class_name))
+		return FR_E_OUTOFMEM;
+	return OK;
 }
 
 
@@ -1909,11 +1917,10 @@ BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam)
 
 
 
-BIF_DECL(BIF_WinGetText)
+bif_impl FResult WinGetText(WINTITLE_PARAMETERS_DECL, StrRet &aRetVal)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
-		return;
+	DETERMINE_TARGET_WINDOW;
 
 	length_and_buf_type sab;
 	sab.buf = NULL; // Tell it just to calculate the length this time around.
@@ -1922,17 +1929,12 @@ BIF_DECL(BIF_WinGetText)
 	EnumChildWindows(target_window, EnumChildGetText, (LPARAM)&sab);
 
 	if (!sab.total_length) // No text in window.
-		_f_return_empty;
+		return OK;
 
-	if (!TokenSetResult(aResultToken, NULL, sab.total_length))
-		return;  // It already displayed the error.
-	aResultToken.symbol = SYM_STRING;
+	sab.buf = aRetVal.Alloc(sab.total_length);
+	if (!sab.buf)
+		return FR_E_OUTOFMEM;
 
-	// Fetch the text directly into the var.  Also set the length explicitly
-	// in case actual size written was different than the estimated size (since
-	// GetWindowTextLength() can return more space that will actually be required
-	// in certain circumstances, see MSDN):
-	sab.buf = aResultToken.marker;
 	// Note: The capacity member below exists because granted capacity might be a little larger than we asked for,
 	// which allows the actual text fetched to be larger than the length estimate retrieved by the first pass
 	// (which generally shouldn't happen since MSDN docs say that the actual length can be less, but never greater,
@@ -1945,13 +1947,10 @@ BIF_DECL(BIF_WinGetText)
 	// MSDN says that can happen generally, and also specifically because: "ANSI applications may have
 	// the string in the buffer reduced in size (to a minimum of half that of the wParam value) due to
 	// conversion from ANSI to Unicode."
-	aResultToken.marker_length = sab.total_length;
-	if (!sab.total_length)
-	{
-		// Something went wrong, so make sure we set to empty string.
-		*sab.buf = '\0';
-		_f_throw(ERR_FAILED);
-	}
+	aRetVal.SetLength(sab.total_length);
+	if (!sab.total_length) // Something went wrong.
+		return FR_E_FAILED;
+	return OK;
 }
 
 
@@ -1987,33 +1986,40 @@ BOOL CALLBACK EnumChildGetText(HWND aWnd, LPARAM lParam)
 
 
 
-BIF_DECL(BIF_WinGetPos)
+static FResult WinGetPos(int *aX, int *aY, int *aWidth, int *aHeight, WINTITLE_PARAMETERS_DECL, bool aClient)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 4, aParamCount - 4))
-		return;
+	DETERMINE_TARGET_WINDOW;
+
 	RECT rect;
-	if (_f_callee_id == FID_WinGetPos)
+	if (!aClient)
 	{
 		GetWindowRect(target_window, &rect);
 		rect.right -= rect.left; // Convert right to width.
 		rect.bottom -= rect.top; // Convert bottom to height.
 	}
-	else // FID_WinGetClientPos
+	else
 	{
 		GetClientRect(target_window, &rect); // Get client pos relative to client (position is always 0,0).
 		// Since the position is always 0,0, right,bottom are already equivalent to width,height.
 		MapWindowPoints(target_window, NULL, (LPPOINT)&rect, 1); // Convert position to screen coordinates.
 	}
 
-	for (int i = 0; i < 4; ++i)
-	{
-		Var *var = ParamIndexToOutputVar(i);
-		if (!var)
-			continue;
-		var->Assign(((int *)(&rect))[i]); // Always succeeds.
-	}
-	_f_return_empty;
+	if (aX) *aX = rect.left;
+	if (aY) *aY = rect.top;
+	if (aWidth) *aWidth = rect.right;
+	if (aHeight) *aHeight = rect.bottom;
+	return OK;
+}
+
+bif_impl FResult WinGetPos(int *aX, int *aY, int *aWidth, int *aHeight, WINTITLE_PARAMETERS_DECL)
+{
+	return WinGetPos(aX, aY, aWidth, aHeight, WINTITLE_PARAMETERS, false);
+}
+
+bif_impl FResult WinGetClientPos(int *aX, int *aY, int *aWidth, int *aHeight, WINTITLE_PARAMETERS_DECL)
+{
+	return WinGetPos(aX, aY, aWidth, aHeight, WINTITLE_PARAMETERS, true);
 }
 
 

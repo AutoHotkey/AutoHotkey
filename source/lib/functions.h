@@ -10,6 +10,8 @@ md_func(CallbackCreate, (In, Object, Function), (In_Opt, String, Options), (In_O
 md_func(CallbackFree, (In, UIntPtr, Callback))
 #endif
 
+md_func(ControlGetFocus, MD_WINTITLE_ARGS, (Ret, UIntPtr, Hwnd))
+
 md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
 md_func_v(Critical, (In_Opt, String, OnOffNumber))
 
@@ -202,5 +204,14 @@ md_func(ToolTip, (In_Opt, String, Text), (In_Opt, Int32, X), (In_Opt, Int32, Y),
 md_func(TraySetIcon, (In_Opt, String, File), (In_Opt, Int32, Number), (In_Opt, Bool32, Freeze))
 md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options))
 
+md_func(WinGetClass, MD_WINTITLE_ARGS, (Ret, String, Class))
+md_func(WinGetClientPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height), MD_WINTITLE_ARGS)
+md_func(WinGetPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height), MD_WINTITLE_ARGS)
+md_func(WinGetText, MD_WINTITLE_ARGS, (Ret, String, Title))
+md_func(WinGetTitle, MD_WINTITLE_ARGS, (Ret, String, Title))
 md_func_v(WinMinimizeAll, md_arg_none)
 md_func_v(WinMinimizeAllUndo, md_arg_none)
+md_func(WinMove, (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Width), (In_Opt, Int32, Height), MD_WINTITLE_ARGS)
+md_func(WinMoveBottom, MD_WINTITLE_ARGS)
+md_func(WinMoveTop, MD_WINTITLE_ARGS)
+md_func(WinSetTitle, (In, String, NewTitle), MD_WINTITLE_ARGS)
