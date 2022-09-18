@@ -25,56 +25,15 @@ GNU General Public License for more details.
 HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
 	, bool aFindLastMatch, bool aReturnFoundWindow, HWND aAlreadyVisited[], int aAlreadyVisitedCount)
 {
-	// If window is already active, be sure to leave it that way rather than activating some
-	// other window that may match title & text also.  NOTE: An explicit check is done
-	// for this rather than just relying on EnumWindows() to obey the z-order because
-	// EnumWindows() is *not* guaranteed to enumerate windows in z-order, thus the currently
-	// active window, even if it's an exact match, might become overlapped by another matching
-	// window.  Also, use the USE_FOREGROUND_WINDOW vs. IF_USE_FOREGROUND_WINDOW macro for
-	// this because the active window can sometimes be NULL (i.e. if it's a hidden window
-	// and DetectHiddenWindows is off):
 	HWND target_window;
-	if (USE_FOREGROUND_WINDOW(aTitle, aText, aExcludeTitle, aExcludeText))
-	{
-		// User asked us to activate the "active" window, which by definition already is.
-		SET_TARGET_TO_ALLOWABLE_FOREGROUND(aSettings.DetectHiddenWindows)
-		// The documented behavior is "If a matching window is already active, that window
-		// will be kept active"; however, if the active (foreground) window is hidden and
-		// DetectHiddenWindows is off, that window isn't a match and so we should search
-		// for a matching window.
-		if (target_window) // Added in v1.1.20.
-		{
-			// The window is already active, but might be minimized.  The behavior in
-			// v1.1.19 and earlier was to leave it minimized, but it seems more useful
-			// and intuitive to restore it.  The documentation says "If the window is
-			// minimized, it is automatically restored prior to being activated."
-			if (IsIconic(target_window))
-				ShowWindow(target_window, SW_RESTORE);
-			return target_window;
-		}
-	}
-
-	if (!aFindLastMatch && !*aTitle && !*aText && !*aExcludeTitle && !*aExcludeText)
-	{
-		// User passed no params, so use the window most recently found by WinExist():
-		if (   !(target_window = GetValidLastUsedWindow(aSettings))   )
-			return NULL;
-	}
-	else
-	{
-		/*
-		// Might not help avg. performance any?
-		if (!aFindLastMatch) // Else even if the windows is already active, we want the bottommost one.
-			if (hwnd = WinActive(aTitle, aText, aExcludeTitle, aExcludeText)) // Already active.
-				return target_window;
-		*/
-		// Don't activate in this case, because the top-most window might be an
-		// always-on-top but not-meant-to-be-activated window such as AutoIt's
-		// splash text:
-		if (   !(target_window = WinExist(aSettings, aTitle, aText, aExcludeTitle, aExcludeText, aFindLastMatch
-			, false, aAlreadyVisited, aAlreadyVisitedCount))   )
-			return NULL;
-	}
+	// There are no checks for WinActivate("A") or WinActivate() since WinExist() handles both
+	// of those cases.
+	// There's no attempt to check whether the current active window is a match, because the
+	// established behaviour is to activate the top/bottom-most active window regardless, and
+	// that seems more useful than ignoring the call.
+	if (   !(target_window = WinExist(aSettings, aTitle, aText, aExcludeTitle, aExcludeText, aFindLastMatch
+		, false, aAlreadyVisited, aAlreadyVisitedCount))   )
+		return NULL;
 	// Above has ensured that target_window is non-NULL, that it is a valid window, and that
 	// it is eligible due to g->DetectHiddenWindows being true or the window not being hidden
 	// (or being one of the script's GUI windows).
