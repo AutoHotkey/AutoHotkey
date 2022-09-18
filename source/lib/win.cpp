@@ -1768,116 +1768,163 @@ bif_impl FResult WinGetList(WINTITLE_PARAMETERS_DECL, IObject *&aRetVal)
 
 
 
-void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetchHWNDs); // Forward declaration.
-
-
-
-BIF_DECL(BIF_WinGet)
+bif_impl FResult WinGetID(WINTITLE_PARAMETERS_DECL, UINT &aRetVal)
 {
-	_f_param_string_opt(aTitle, 0);
-	_f_param_string_opt(aText, 1);
-	_f_param_string_opt(aExcludeTitle, 2);
-	_f_param_string_opt(aExcludeText, 3);
-
-	BuiltInFunctionID cmd = _f_callee_id;
-
-	// Not List or Count, so it's a function that operates on a single window.
-	HWND target_window = NULL;
-	if (aParamCount > 0)
-		switch (DetermineTargetHwnd(target_window, aResultToken, *aParam[0]))
-		{
-		case FAIL: return;
-		case OK:
-			if (!target_window)
-				_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
-		}
-	if (!target_window)
-		target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == FID_WinGetIDLast);
-	if (!target_window)
-		_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
-
-	switch(cmd)
-	{
-	case FID_WinGetID:
-	case FID_WinGetIDLast:
-		_f_return((size_t)target_window);
-
-	case FID_WinGetPID:
-	case FID_WinGetProcessName:
-	case FID_WinGetProcessPath:
-		DWORD pid;
-		GetWindowThreadProcessId(target_window, &pid);
-		if (cmd == FID_WinGetPID)
-		{
-			_f_return_i(pid);
-		}
-		// Otherwise, get the full path and name of the executable that owns this window.
-		TCHAR process_name[MAX_PATH];
-		GetProcessName(pid, process_name, _countof(process_name), cmd == FID_WinGetProcessName);
-		_f_return(process_name);
-
-	case FID_WinGetMinMax:
-		// Testing shows that it's not possible for a minimized window to also be maximized (under
-		// the theory that upon restoration, it *would* be maximized.  This is unfortunate if there
-		// is no other way to determine what the restoration size and maximized state will be for a
-		// minimized window.
-		_f_return_i(IsZoomed(target_window) ? 1 : (IsIconic(target_window) ? -1 : 0));
-
-	case FID_WinGetControls:
-	case FID_WinGetControlsHwnd:
-		WinGetControlList(aResultToken, target_window, cmd == FID_WinGetControlsHwnd);
-		return;
-
-	case FID_WinGetStyle:
-	case FID_WinGetExStyle:
-		_f_return_i(GetWindowLong(target_window, cmd == FID_WinGetStyle ? GWL_STYLE : GWL_EXSTYLE));
-
-	case FID_WinGetTransparent:
-	case FID_WinGetTransColor:
-		COLORREF color;
-		BYTE alpha;
-		DWORD flags;
-		if (!(GetLayeredWindowAttributes(target_window, &color, &alpha, &flags)))
-			break;
-		if (cmd == FID_WinGetTransparent)
-		{
-			if (flags & LWA_ALPHA)
-			{
-				_f_return_i(alpha);
-			}
-		}
-		else // FID_WinGetTransColor
-		{
-			if (flags & LWA_COLORKEY)
-			{
-				// Store in hex format to aid in debugging scripts.  Also, the color is always
-				// stored in RGB format, since that's what WinSet uses:
-				LPTSTR result = _f_retval_buf;
-				_stprintf(result, _T("0x%06X"), bgr_to_rgb(color));
-				_f_return_p(result);
-			}
-			// Otherwise, this window does not have a transparent color (or it's not accessible to us,
-			// perhaps for reasons described at MSDN GetLayeredWindowAttributes()).
-		}
-	}
-	_f_return_empty;
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	aRetVal = (UINT)(UINT_PTR)target_window;
+	return OK;
 }
 
 
 
-void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetchHWNDs)
+bif_impl FResult WinGetIDLast(WINTITLE_PARAMETERS_DECL, UINT &aRetVal)
+{
+	HWND target_window;
+	auto fr = DetermineTargetWindow(target_window, aWinTitle, aWinText.value_or_null(), aExcludeTitle.value_or_null(), aExcludeText.value_or_null()
+		, true); // Pass true for aFindLastMatch.
+	if (fr != OK)
+		return fr;
+	aRetVal = (UINT)(UINT_PTR)target_window;
+	return OK;
+}
+
+
+
+bif_impl FResult WinGetPID(WINTITLE_PARAMETERS_DECL, UINT &aRetVal)
+{
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	DWORD pid;
+	GetWindowThreadProcessId(target_window, &pid);
+	aRetVal = pid;
+	return OK;
+}
+
+
+
+static FResult WinGetProcessName(WINTITLE_PARAMETERS_DECL, StrRet &aRetVal, bool aGetNameOnly)
+{
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	DWORD pid;
+	GetWindowThreadProcessId(target_window, &pid);
+	TCHAR name[MAX_PATH];
+	if (!GetProcessName(pid, name, _countof(name), aGetNameOnly))
+		return FR_E_WIN32;
+	if (!aRetVal.Copy(name))
+		return FR_E_OUTOFMEM;
+	return OK;
+}
+
+bif_impl FResult WinGetProcessName(WINTITLE_PARAMETERS_DECL, StrRet &aRetVal)
+{
+	return WinGetProcessName(WINTITLE_PARAMETERS, aRetVal, true);
+}
+
+bif_impl FResult WinGetProcessPath(WINTITLE_PARAMETERS_DECL, StrRet &aRetVal)
+{
+	return WinGetProcessName(WINTITLE_PARAMETERS, aRetVal, false);
+}
+
+
+
+bif_impl FResult WinGetMinMax(WINTITLE_PARAMETERS_DECL, int &aRetVal)
+{
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	// Testing shows that it's not possible for a minimized window to also be maximized,
+	// but GetWindowPlacement could be used to determine whether it *would* be maximized
+	// upon restoration, and what the size will be.
+	aRetVal = IsZoomed(target_window) ? 1 : (IsIconic(target_window) ? -1 : 0);
+	return OK;
+}
+
+
+
+static FResult WinGetLong(WINTITLE_PARAMETERS_DECL, UINT &aRetVal, int nIndex)
+{
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	aRetVal = GetWindowLong(target_window, nIndex);
+	return OK;
+}
+
+bif_impl FResult WinGetStyle(WINTITLE_PARAMETERS_DECL, UINT &aRetVal)
+{
+	return WinGetLong(WINTITLE_PARAMETERS, aRetVal, GWL_STYLE);
+}
+
+bif_impl FResult WinGetExStyle(WINTITLE_PARAMETERS_DECL, UINT &aRetVal)
+{
+	return WinGetLong(WINTITLE_PARAMETERS, aRetVal, GWL_EXSTYLE);
+}
+
+
+
+bif_impl FResult WinGetTransparent(WINTITLE_PARAMETERS_DECL, ResultToken &aResultToken)
+{
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	BYTE alpha;
+	DWORD flags;
+	if (!(GetLayeredWindowAttributes(target_window, nullptr, &alpha, &flags)))
+		return OK;
+	if (flags & LWA_ALPHA)
+		aResultToken.SetValue(alpha);
+	return OK;
+}
+
+
+
+bif_impl FResult WinGetTransColor(WINTITLE_PARAMETERS_DECL, StrRet &aRetVal)
+{
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	COLORREF color;
+	DWORD flags;
+	if (!(GetLayeredWindowAttributes(target_window, &color, nullptr, &flags)))
+		return OK;
+	if (flags & LWA_COLORKEY)
+	{
+		// Store in hex format to aid in debugging scripts.  Also, the color is always
+		// stored in RGB format, since that's what WinSet uses:
+		LPTSTR result = aRetVal.CallerBuf();
+		_stprintf(result, _T("0x%06X"), bgr_to_rgb(color));
+		aRetVal.SetTemp(result);
+	}
+	// Otherwise, this window does not have a transparent color (or it's not accessible to us,
+	// perhaps for reasons described at MSDN GetLayeredWindowAttributes()).
+	return OK;
+}
+
+
+
+static FResult WinGetControls(WINTITLE_PARAMETERS_DECL, IObject *&aRetVal, bool aFetchHWNDs)
 // Caller must ensure that aTargetWindow is non-NULL and valid.
 // Every control is fetched rather than just a list of distinct class names (possibly with a
 // second script array containing the quantity of each class) because it's conceivable that the
 // z-order of the controls will be useful information to some script authors.
 {
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
 	control_list_type cl; // A big struct containing room to store class names and counts for each.
-	if (  !(cl.target_array = Array::Create())  )
-		_f_throw_oom;
+	if (  !(aRetVal = cl.target_array = Array::Create())  )
+		return FR_E_OUTOFMEM;
 	CL_INIT_CONTROL_LIST(cl)
 	cl.fetch_hwnds = aFetchHWNDs;
-	EnumChildWindows(aTargetWindow, EnumChildGetControlList, (LPARAM)&cl);
-	_f_return(cl.target_array);
+	EnumChildWindows(target_window, EnumChildGetControlList, (LPARAM)&cl);
+	return OK;
+}
+
+bif_impl FResult WinGetControls(WINTITLE_PARAMETERS_DECL, IObject *&aRetVal)
+{
+	return WinGetControls(WINTITLE_PARAMETERS, aRetVal, false);
+}
+
+bif_impl FResult WinGetControlsHwnd(WINTITLE_PARAMETERS_DECL, IObject *&aRetVal)
+{
+	return WinGetControls(WINTITLE_PARAMETERS, aRetVal, true);
 }
 
 
