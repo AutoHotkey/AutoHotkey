@@ -23,7 +23,7 @@ GNU General Public License for more details.
 
 
 HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
-	, bool aFindLastMatch, bool aReturnFoundWindow, HWND aAlreadyVisited[], int aAlreadyVisitedCount)
+	, bool aFindLastMatch, HWND aAlreadyVisited[], int aAlreadyVisitedCount)
 {
 	HWND target_window;
 	// There are no checks for WinActivate("A") or WinActivate() since WinExist() handles both
@@ -38,10 +38,8 @@ HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR a
 	// it is eligible due to g->DetectHiddenWindows being true or the window not being hidden
 	// (or being one of the script's GUI windows).
 	HWND activated = SetForegroundWindowEx(target_window);
-	// GroupActivate wants the window found above, even if it isn't now active.
-	// aReturnFoundWindow was added because aAlreadyVisited is allocated on first
-	// use and therefore not a reliable indicator of whether this is GroupActivate.
-	return aReturnFoundWindow ? target_window : activated;
+	// Callers want the window found above, even if it isn't now active.
+	return target_window;
 }
 
 

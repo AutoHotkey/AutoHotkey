@@ -213,7 +213,7 @@ struct point_and_hwnd_type
 
 
 HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
-	, bool aFindLastMatch = false, bool aReturnFoundWindow = false
+	, bool aFindLastMatch = false
 	, HWND aAlreadyVisited[] = NULL, int aAlreadyVisitedCount = 0);
 HWND SetForegroundWindowEx(HWND aTargetWindow);
 

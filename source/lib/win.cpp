@@ -206,7 +206,7 @@ BIF_DECL(BIF_WinActivate)
 	_f_param_string_opt(aExcludeTitle, 2);
 	_f_param_string_opt(aExcludeText, 3);
 
-	if (!WinActivate(*g, aTitle, aText, aExcludeTitle, aExcludeText, _f_callee_id == FID_WinActivateBottom, true))
+	if (!WinActivate(*g, aTitle, aText, aExcludeTitle, aExcludeText, _f_callee_id == FID_WinActivateBottom))
 		_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
 
 	// It seems best to do these sleeps here rather than in the windowing
