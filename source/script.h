@@ -3367,6 +3367,7 @@ bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken,
 bool FileCreateDir(LPCTSTR aDirSpec);
 
 ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTokenType &aToken);
+FResult DetermineTargetHwnd(HWND &aWindow, bool &aDetermined, ExprTokenType &aToken);
 ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0);
 ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0, bool aThrowIfNotFound = true);
 #define DETERMINE_TARGET_CONTROL(param_offset) \

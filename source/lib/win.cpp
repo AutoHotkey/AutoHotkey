@@ -1702,13 +1702,9 @@ static FResult WinGetListCount(WINTITLE_PARAMETERS_DECL, WindowSearch &ws)
 
 	if (aWinTitle)
 	{
-		ResultToken result_token; // TODO: Factor out the use of ResultToken just for error-reporting.
-		result_token.SetResult(OK); // Must be initialized.
-		switch (DetermineTargetHwnd(target_window, result_token, *aWinTitle))
-		{
-		case FAIL: return FR_FAIL;
-		case OK: hwnd_specified = true; break;
-		}
+		auto fr = DetermineTargetHwnd(target_window, hwnd_specified, *aWinTitle);
+		if (fr != OK)
+			return fr;
 	}
 
 	auto title = aWinTitle ? TokenToString(*aWinTitle) : _T("");
@@ -1718,7 +1714,10 @@ static FResult WinGetListCount(WINTITLE_PARAMETERS_DECL, WindowSearch &ws)
 
 	// Check if we were asked to count the active window:
 	if (USE_FOREGROUND_WINDOW(title, text, ex_title, ex_text))
+	{
 		SET_TARGET_TO_ALLOWABLE_FOREGROUND(g->DetectHiddenWindows)
+		hwnd_specified = true;
+	}
 
 	if (hwnd_specified)
 	{
@@ -1748,7 +1747,7 @@ bif_impl FResult WinGetCount(WINTITLE_PARAMETERS_DECL, int &aRetVal)
 	WindowSearch ws;
 	auto fr = WinGetListCount(WINTITLE_PARAMETERS, ws);
 	aRetVal = ws.mFoundCount;
-	return OK;
+	return fr;
 }
 
 
@@ -1763,7 +1762,7 @@ bif_impl FResult WinGetList(WINTITLE_PARAMETERS_DECL, IObject *&aRetVal)
 		aRetVal = ws.mArray;
 	else
 		ws.mArray->Release();
-	return OK;
+	return fr;
 }
 
 
@@ -2125,6 +2124,18 @@ ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTok
 	if (!IsWindow(aWindow))
 		aWindow = 0;
 	return OK;
+}
+
+
+FResult DetermineTargetHwnd(HWND &aWindow, bool &aDetermined, ExprTokenType &aToken)
+{
+	// TODO: Factor out the use of ResultToken just for error-reporting.
+	ResultToken result_token; // Only result_token.result is used.
+	result_token.SetResult(OK); // Must be initialized.
+	auto result = DetermineTargetHwnd(aWindow, result_token, aToken);
+	if (result == OK)
+		aDetermined = true;
+	return result ? OK : result_token.Exited() ? FR_FAIL : FR_ABORTED;
 }
 
 
