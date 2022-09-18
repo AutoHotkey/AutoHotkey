@@ -30,7 +30,7 @@ GNU General Public License for more details.
 	if (fr != OK) \
 		return fr; } while (0)
 
-FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL);
+FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL, bool aFindLastMatch = false);
 
 
 
@@ -182,32 +182,15 @@ BIF_DECL(BIF_WinShow)
 
 
 
-BIF_DECL(BIF_WinActivate)
+static FResult WinActivate(WINTITLE_PARAMETERS_DECL, bool aBottom)
 {
-	_f_set_retval_p(_T(""), 0);
+	HWND target_window;
+	auto fr = DetermineTargetWindow(target_window, aWinTitle, aWinText.value_or_null(), aExcludeTitle.value_or_null(), aExcludeText.value_or_null()
+		, aBottom); // The last parameter determines whether the first or last match is used.
+	if (fr != OK)
+		return fr;
 
-	if (aParamCount > 0)
-	{
-		HWND target_hwnd;
-		switch (DetermineTargetHwnd(target_hwnd, aResultToken, *aParam[0]))
-		{
-		case FAIL: return;
-		case OK:
-			if (!target_hwnd)
-				_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
-			SetForegroundWindowEx(target_hwnd);
-			DoWinDelay;
-			_f_return_retval;
-		}
-	}
-
-	_f_param_string_opt(aTitle, 0);
-	_f_param_string_opt(aText, 1);
-	_f_param_string_opt(aExcludeTitle, 2);
-	_f_param_string_opt(aExcludeText, 3);
-
-	if (!WinActivate(*g, aTitle, aText, aExcludeTitle, aExcludeText, _f_callee_id == FID_WinActivateBottom))
-		_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
+	SetForegroundWindowEx(target_window);
 
 	// It seems best to do these sleeps here rather than in the windowing
 	// functions themselves because that way, the program can use the
@@ -216,7 +199,17 @@ BIF_DECL(BIF_WinActivate)
 	// such as bringing a message box to the foreground, since no other
 	// actions will be dependent on it actually having happened):
 	DoWinDelay;
-	_f_return_retval;
+	return OK;
+}
+
+bif_impl FResult WinActivate(WINTITLE_PARAMETERS_DECL)
+{
+	return WinActivate(WINTITLE_PARAMETERS, false);
+}
+
+bif_impl FResult WinActivateBottom(WINTITLE_PARAMETERS_DECL)
+{
+	return WinActivate(WINTITLE_PARAMETERS, true);
 }
 
 
@@ -2088,7 +2081,7 @@ ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTok
 }
 
 
-FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL)
+FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL, bool aFindLastMatch)
 {
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 	LPCTSTR title = _T("");
@@ -2105,8 +2098,8 @@ FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL)
 		}
 		title = TokenToString(*aWinTitle, number_buf);
 	}
-	aWindow = Line::DetermineTargetWindow(title, aWinText.value_or_empty()
-		, aExcludeTitle.value_or_empty(), aExcludeText.value_or_empty());
+	aWindow = WinExist(*g, title, aWinText.value_or_empty(), aExcludeTitle.value_or_empty()
+		, aExcludeText.value_or_empty(), aFindLastMatch);
 	if (aWindow)
 		return OK;
 	return FError(ERR_NO_WINDOW, title, ErrorPrototype::Target);

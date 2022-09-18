@@ -204,6 +204,8 @@ md_func(ToolTip, (In_Opt, String, Text), (In_Opt, Int32, X), (In_Opt, Int32, Y),
 md_func(TraySetIcon, (In_Opt, String, File), (In_Opt, Int32, Number), (In_Opt, Bool32, Freeze))
 md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options))
 
+md_func(WinActivate, MD_WINTITLE_ARGS)
+md_func(WinActivateBottom, MD_WINTITLE_ARGS)
 md_func(WinGetClass, MD_WINTITLE_ARGS, (Ret, String, Class))
 md_func(WinGetClientPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height), MD_WINTITLE_ARGS)
 md_func(WinGetCount, MD_WINTITLE_ARGS, (Ret, Int32, Count))
