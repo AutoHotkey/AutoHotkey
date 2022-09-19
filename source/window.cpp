@@ -841,7 +841,7 @@ error:
 
 
 
-HWND ControlExist(HWND aParentWindow, LPTSTR aClassNameAndNum)
+HWND ControlExist(HWND aParentWindow, LPCTSTR aClassNameAndNum)
 {
 	if (!aParentWindow || !aClassNameAndNum || !*aClassNameAndNum)
 		return NULL;

@@ -121,7 +121,7 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 		if (!retval && !MdType_IsBits(aArg[i]))
 		{
 			++pc;
-			if (!opt)
+			if (!opt && pc - 1 == mMinParams)
 				mMinParams = pc;
 			if (aArg[i] == MdType::String || aArg[i] == MdType::Variant && out != MdType::Void)
 				++mMaxResultTokens;

@@ -1,6 +1,8 @@
 
 #ifndef MD_WINTITLE_ARGS
 #define MD_WINTITLE_ARGS (In_Opt, Variant, WinTitle), (In_Opt, String, WinText), (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText)
+#define MD_CONTROL_ARGS (In, Variant, Control), MD_WINTITLE_ARGS
+#define MD_CONTROL_ARGS_OPT (In_Opt, Variant, Control), MD_WINTITLE_ARGS
 #endif
 
 md_func_x(BlockInput, ScriptBlockInput, FResult, (In, String, Mode))
@@ -10,7 +12,15 @@ md_func(CallbackCreate, (In, Object, Function), (In_Opt, String, Options), (In_O
 md_func(CallbackFree, (In, UIntPtr, Callback))
 #endif
 
+md_func(ControlFocus, MD_CONTROL_ARGS)
+md_func(ControlGetClassNN, MD_CONTROL_ARGS, (Ret, String, ClassNN))
 md_func(ControlGetFocus, MD_WINTITLE_ARGS, (Ret, UIntPtr, Hwnd))
+md_func(ControlGetPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height), MD_CONTROL_ARGS)
+md_func(ControlGetText, MD_CONTROL_ARGS, (Ret, String, Text))
+md_func(ControlMove, (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Width), (In_Opt, Int32, Height), MD_CONTROL_ARGS)
+md_func(ControlSend, (In, String, Keys), MD_CONTROL_ARGS_OPT)
+md_func(ControlSendText, (In, String, Keys), MD_CONTROL_ARGS_OPT)
+md_func(ControlSetText, (In, String, NewText), MD_CONTROL_ARGS)
 
 md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
 md_func_v(Critical, (In_Opt, String, OnOffNumber))

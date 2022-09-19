@@ -242,7 +242,7 @@ BOOL CALLBACK EnumChildFind(HWND hwnd, LPARAM lParam);
 #define SB_DEFAULT_CHECK_INTERVAL 50
 void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber = 1
 	, LPTSTR aTextToWaitFor = nullptr, int aWaitTime = -1, int aCheckInterval = SB_DEFAULT_CHECK_INTERVAL);
-HWND ControlExist(HWND aParentWindow, LPTSTR aClassNameAndNum = NULL);
+HWND ControlExist(HWND aParentWindow, LPCTSTR aClassNameAndNum = NULL);
 BOOL CALLBACK EnumControlFind(HWND aWnd, LPARAM lParam);
 
 #define MSGBOX_NORMAL (MB_OK | MB_SETFOREGROUND)

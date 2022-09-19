@@ -3288,15 +3288,7 @@ BIF_DECL(BIF_ComObjQuery);
 BIF_DECL(BIF_Click);
 BIF_DECL(BIF_Control);
 BIF_DECL(BIF_ControlClick);
-BIF_DECL(BIF_ControlFocus);
 BIF_DECL(BIF_ControlGet);
-BIF_DECL(BIF_ControlGetClassNN);
-BIF_DECL(BIF_ControlGetFocus);
-BIF_DECL(BIF_ControlGetPos);
-BIF_DECL(BIF_ControlGetText);
-BIF_DECL(BIF_ControlMove);
-BIF_DECL(BIF_ControlSend);
-BIF_DECL(BIF_ControlSetText);
 BIF_DECL(BIF_GroupActivate);
 BIF_DECL(BIF_MouseGetPos);
 BIF_DECL(BIF_Reg);
@@ -3367,13 +3359,31 @@ bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken,
 bool FileCreateDir(LPCTSTR aDirSpec);
 
 ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTokenType &aToken);
-FResult DetermineTargetHwnd(HWND &aWindow, bool &aDetermined, ExprTokenType &aToken);
 ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0);
 ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0, bool aThrowIfNotFound = true);
 #define DETERMINE_TARGET_CONTROL(param_offset) \
 	HWND target_window, control_window; \
 	if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam + param_offset, aParamCount - param_offset)) \
 		return;
+
+#define WINTITLE_PARAMETERS_DECL ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText
+#define WINTITLE_PARAMETERS aWinTitle, aWinText, aExcludeTitle, aExcludeText
+FResult DetermineTargetHwnd(HWND &aWindow, bool &aDetermined, ExprTokenType &aToken);
+FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL, bool aFindLastMatch = false);
+#define CONTROL_PARAMETERS_DECL ExprTokenType &aControlSpec, WINTITLE_PARAMETERS_DECL
+#define CONTROL_PARAMETERS_DECL_OPT ExprTokenType *aControlSpec, WINTITLE_PARAMETERS_DECL
+#define CONTROL_PARAMETERS aControlSpec, WINTITLE_PARAMETERS
+FResult DetermineTargetControl(HWND &aControl, HWND &aWindow, CONTROL_PARAMETERS_DECL, bool aThrowIfNotFound = true);
+FResult DetermineTargetControl(HWND &aControl, HWND &aWindow, CONTROL_PARAMETERS_DECL_OPT, bool aThrowIfNotFound = true);
+#define DETERMINE_TARGET_WINDOW do { \
+	auto fr = DetermineTargetWindow(target_window, aWinTitle, aWinText.value_or_null(), aExcludeTitle.value_or_null(), aExcludeText.value_or_null()); \
+	if (fr != OK) \
+		return fr; } while (0)
+#define DETERMINE_TARGET_CONTROL2 \
+	HWND target_window, control_window; \
+	{ auto fr = DetermineTargetControl(control_window, target_window, CONTROL_PARAMETERS); \
+	if (fr != OK) \
+		return fr; }
 
 LPTSTR GetExitReasonString(ExitReasons aExitReason);
 

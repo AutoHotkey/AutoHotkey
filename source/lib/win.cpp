@@ -23,17 +23,6 @@ GNU General Public License for more details.
 
 
 
-#define WINTITLE_PARAMETERS_DECL ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText
-#define WINTITLE_PARAMETERS aWinTitle, aWinText, aExcludeTitle, aExcludeText
-#define DETERMINE_TARGET_WINDOW do { \
-	auto fr = DetermineTargetWindow(target_window, aWinTitle, aWinText.value_or_null(), aExcludeTitle.value_or_null(), aExcludeText.value_or_null()); \
-	if (fr != OK) \
-		return fr; } while (0)
-
-FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL, bool aFindLastMatch = false);
-
-
-
 BIF_DECL(BIF_WinShow)
 {
 	auto action = _f_callee_id;
@@ -308,14 +297,22 @@ bif_impl FResult WinMove(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int>
 
 
 
-BIF_DECL(BIF_ControlSend) // ControlSend and ControlSendText.
+static FResult ControlSend(StrArg aKeys, CONTROL_PARAMETERS_DECL_OPT, SendRawModes aMode)
 {
-	DETERMINE_TARGET_CONTROL(1);
-
-	_f_param_string(aKeysToSend, 0);
-	SendKeys(aKeysToSend, (SendRawModes)_f_callee_id, SM_EVENT, control_window);
+	DETERMINE_TARGET_CONTROL2;
+	SendKeys(aKeys, aMode, SM_EVENT, control_window);
 	// But don't do WinDelay because KeyDelay should have been in effect for the above.
-	_f_return_empty;
+	return OK;
+}
+
+bif_impl FResult ControlSend(StrArg aKeys, CONTROL_PARAMETERS_DECL_OPT)
+{
+	return ControlSend(aKeys, CONTROL_PARAMETERS, SCM_NOT_RAW);
+}
+
+bif_impl FResult ControlSendText(StrArg aKeys, CONTROL_PARAMETERS_DECL_OPT)
+{
+	return ControlSend(aKeys, CONTROL_PARAMETERS, SCM_RAW_TEXT);
 }
 
 
@@ -589,9 +586,9 @@ control_error:
 
 
 
-BIF_DECL(BIF_ControlMove)
+bif_impl FResult ControlMove(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int> aHeight, CONTROL_PARAMETERS_DECL)
 {
-	DETERMINE_TARGET_CONTROL(4);
+	DETERMINE_TARGET_CONTROL2;
 	
 	// The following macro is used to keep ControlMove and ControlGetPos in sync:
 	#define CONTROL_COORD_PARENT(target, control) \
@@ -605,11 +602,9 @@ BIF_DECL(BIF_ControlMove)
 	RECT control_rect;
 	if (!GetWindowRect(control_window, &control_rect)
 		|| !MapWindowPoints(NULL, coord_parent, (LPPOINT)&control_rect, 2))
-		_f_throw_win32();
+		return FR_E_WIN32;
 	
-	POINT point;
-	point.x = ParamIndexToOptionalInt(0, control_rect.left);
-	point.y = ParamIndexToOptionalInt(1, control_rect.top);
+	POINT point { aX.value_or(control_rect.left), aY.value_or(control_rect.top) };
 
 	// MoveWindow accepts coordinates relative to the control's immediate parent, which might
 	// be different to coord_parent since controls can themselves have child controls.  So if
@@ -621,24 +616,19 @@ BIF_DECL(BIF_ControlMove)
 	MoveWindow(control_window
 		, point.x
 		, point.y
-		, ParamIndexToOptionalInt(2, control_rect.right - control_rect.left)
-		, ParamIndexToOptionalInt(3, control_rect.bottom - control_rect.top)
+		, aWidth.value_or(control_rect.right - control_rect.left)
+		, aHeight.value_or(control_rect.bottom - control_rect.top)
 		, TRUE);  // Do repaint.
 
 	DoControlDelay
-	_f_return_empty;
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_ControlGetPos)
+bif_impl FResult ControlGetPos(int *aX, int *aY, int *aWidth, int *aHeight, CONTROL_PARAMETERS_DECL)
 {
-	Var *output_var_x = ParamIndexToOutputVar(0);
-	Var *output_var_y = ParamIndexToOutputVar(1);
-	Var *output_var_width = ParamIndexToOutputVar(2);
-	Var *output_var_height = ParamIndexToOutputVar(3);
-
-	DETERMINE_TARGET_CONTROL(4);
+	DETERMINE_TARGET_CONTROL2;
 
 	// Determine which window the returned coordinates should be relative to:
 	HWND coord_parent = CONTROL_COORD_PARENT(target_window, control_window);
@@ -650,11 +640,11 @@ BIF_DECL(BIF_ControlGetPos)
 	// Map the screen coordinates returned by GetWindowRect to the client area of coord_parent.
 	MapWindowPoints(NULL, coord_parent, (LPPOINT)&child_rect, 2);
 
-	output_var_x && output_var_x->Assign(child_rect.left);
-	output_var_y && output_var_y->Assign(child_rect.top);
-	output_var_width && output_var_width->Assign(child_rect.right - child_rect.left);
-	output_var_height && output_var_height->Assign(child_rect.bottom - child_rect.top);
-	_f_return_empty;
+	if (aX) *aX = child_rect.left;
+	if (aY) *aY = child_rect.top;
+	if (aWidth) *aWidth = child_rect.right - child_rect.left;
+	if (aHeight) *aHeight = child_rect.bottom - child_rect.top;
+	return OK;
 }
 
 
@@ -681,9 +671,9 @@ bif_impl FResult ControlGetFocus(WINTITLE_PARAMETERS_DECL, UINT_PTR &aRetVal)
 
 
 
-BIF_DECL(BIF_ControlGetClassNN)
+bif_impl FResult ControlGetClassNN(CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
 {
-	DETERMINE_TARGET_CONTROL(0);
+	DETERMINE_TARGET_CONTROL2;
 
 	if (target_window == control_window)
 		target_window = GetNonChildParent(control_window);
@@ -693,16 +683,16 @@ BIF_DECL(BIF_ControlGetClassNN)
 	cah.hwnd = control_window;
 	cah.class_name = class_name;
 	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5)) // -5 to allow room for sequence number.
-		_f_throw_win32();
+		return FR_E_WIN32;
 	
 	cah.class_count = 0;  // Init for the below.
 	cah.is_found = false; // Same.
 	EnumChildWindows(target_window, EnumChildFindSeqNum, (LPARAM)&cah);
 	if (!cah.is_found)
-		_f_throw(ERR_FAILED);
+		return FR_E_FAILED;
 	// Append the class sequence number onto the class name:
 	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
-	_f_return(class_name);
+	return aRetVal.Copy(class_name) ? OK : FR_E_OUTOFMEM;
 }
 
 
@@ -727,9 +717,9 @@ BOOL CALLBACK EnumChildFindSeqNum(HWND aWnd, LPARAM lParam)
 
 
 
-BIF_DECL(BIF_ControlFocus)
+bif_impl FResult ControlFocus(CONTROL_PARAMETERS_DECL)
 {
-	DETERMINE_TARGET_CONTROL(0);
+	DETERMINE_TARGET_CONTROL2;
 
 	// Unlike many of the other Control commands, this one requires AttachThreadInput()
 	// to have any realistic chance of success (though sometimes it may work by pure
@@ -748,16 +738,14 @@ BIF_DECL(BIF_ControlFocus)
 	// undesirable effect:
 	DETACH_THREAD_INPUT
 
-	_f_return_empty;
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_ControlSetText)
+bif_impl FResult ControlSetText(StrArg aNewText, CONTROL_PARAMETERS_DECL)
 {
-	DETERMINE_TARGET_CONTROL(1);
-
-	_f_param_string(aNewText, 0);
+	DETERMINE_TARGET_CONTROL2;
 	// SendMessage must be used, not PostMessage(), at least for some (probably most) apps.
 	// Also: No need to call IsWindowHung() because SendMessageTimeout() should return
 	// immediately if the OS already "knows" the window is hung:
@@ -765,34 +753,33 @@ BIF_DECL(BIF_ControlSetText)
 	SendMessageTimeout(control_window, WM_SETTEXT, (WPARAM)0, (LPARAM)aNewText
 		, SMTO_ABORTIFHUNG, 5000, &result);
 	DoControlDelay;
-	_f_return_empty;
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_ControlGetText)
+bif_impl FResult ControlGetText(CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
 {
-	DETERMINE_TARGET_CONTROL(0);
-
-	// Even if control_window is NULL, we want to continue on so that the output
-	// param is set to be the empty string, which is the proper thing to do
-	// rather than leaving whatever was in there before.
+	DETERMINE_TARGET_CONTROL2;
 
 	// Handle the output parameter.  Note: Using GetWindowTextTimeout() vs. GetWindowText()
 	// because it is able to get text from more types of controls (e.g. large edit controls):
-	VarSizeType space_needed = GetWindowTextTimeout(control_window) + 1; // 1 for terminator.
+	size_t estimated_length = GetWindowTextTimeout(control_window);
 
 	// Allocate memory for the return value.
-	if (!TokenSetResult(aResultToken, NULL, space_needed - 1))
-		return;  // It already displayed the error.
-	aResultToken.symbol = SYM_STRING;
+	LPTSTR buf = aRetVal.Alloc(estimated_length);
+	if (!buf)
+		return FR_E_OUTOFMEM;
+
 	// Fetch the text directly into the buffer.  Also set the length explicitly
 	// in case actual size written was off from the estimated size (since
 	// GetWindowTextLength() can return more space that will actually be required
 	// in certain circumstances, see MS docs):
-	aResultToken.marker_length = GetWindowTextTimeout(control_window, aResultToken.marker, space_needed);
-	if (!aResultToken.marker_length) // There was no text to get or GetWindowTextTimeout() failed.
-		*aResultToken.marker = '\0';
+	auto actual_length = GetWindowTextTimeout(control_window, buf, estimated_length + 1);
+	aRetVal.SetLength(actual_length);
+	if (!actual_length) // There was no text to get or GetWindowTextTimeout() failed.
+		*buf = '\0';
+	return OK;
 }
 
 
@@ -2133,8 +2120,7 @@ FResult DetermineTargetHwnd(HWND &aWindow, bool &aDetermined, ExprTokenType &aTo
 	ResultToken result_token; // Only result_token.result is used.
 	result_token.SetResult(OK); // Must be initialized.
 	auto result = DetermineTargetHwnd(aWindow, result_token, aToken);
-	if (result == OK)
-		aDetermined = true;
+	aDetermined = result == OK;
 	return result ? OK : result_token.Exited() ? FR_FAIL : FR_ABORTED;
 }
 
@@ -2161,6 +2147,42 @@ FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL, bool aFin
 	if (aWindow)
 		return OK;
 	return FError(ERR_NO_WINDOW, title, ErrorPrototype::Target);
+}
+
+
+FResult DetermineTargetControl(HWND &aControl, HWND &aWindow, CONTROL_PARAMETERS_DECL, bool aThrowIfNotFound)
+{
+	return DetermineTargetControl(aControl, aWindow, &CONTROL_PARAMETERS, aThrowIfNotFound);
+}
+
+FResult DetermineTargetControl(HWND &aControl, HWND &aWindow, CONTROL_PARAMETERS_DECL_OPT, bool aThrowIfNotFound)
+{
+	aWindow = aControl = NULL;
+	TCHAR number_buf[MAX_NUMBER_SIZE];
+	LPCTSTR control_spec = nullptr;
+	if (aControlSpec)
+	{
+		bool hwnd_specified;
+		auto fr = DetermineTargetHwnd(aWindow, hwnd_specified, *aControlSpec);
+		if (fr != OK)
+			return fr;
+		if (hwnd_specified)
+		{
+			aControl = aWindow;
+			if (!aControl)
+				return FError(ERR_NO_WINDOW, nullptr, ErrorPrototype::Target);
+			return OK;
+		}
+		// Since above didn't return, it wasn't a pure Integer or object {Hwnd}.
+		control_spec = TokenToString(*aControlSpec, number_buf);
+	}
+	auto fr = DetermineTargetWindow(aWindow, WINTITLE_PARAMETERS);
+	if (fr != OK)
+		return fr;
+	aControl = control_spec ? ControlExist(aWindow, control_spec) : aWindow;
+	if (!aControl && aThrowIfNotFound)
+		return FError(ERR_NO_CONTROL, control_spec, ErrorPrototype::Target);
+	return OK;
 }
 
 
