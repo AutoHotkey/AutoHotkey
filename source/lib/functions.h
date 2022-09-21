@@ -12,6 +12,7 @@ md_func(CallbackCreate, (In, Object, Function), (In_Opt, String, Options), (In_O
 md_func(CallbackFree, (In, UIntPtr, Callback))
 #endif
 
+md_func(ControlClick, (In_Opt, Variant, Control), (In_Opt, Variant, WinTitle), (In_Opt, String, WinText), (In_Opt, String, Button), (In_Opt, Int32, Count), (In_Opt, String, Options), (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText))
 md_func(ControlFocus, MD_CONTROL_ARGS)
 md_func(ControlGetClassNN, MD_CONTROL_ARGS, (Ret, String, ClassNN))
 md_func(ControlGetFocus, MD_WINTITLE_ARGS, (Ret, UIntPtr, Hwnd))

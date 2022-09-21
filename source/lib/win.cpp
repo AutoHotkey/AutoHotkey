@@ -317,15 +317,13 @@ bif_impl FResult ControlSendText(StrArg aKeys, CONTROL_PARAMETERS_DECL_OPT)
 
 
 
-BIF_DECL(BIF_ControlClick)
+bif_impl FResult ControlClick(ExprTokenType *aControlSpec, ExprTokenType *aWinTitle, optl<StrArg> aWinText
+	, optl<StrArg> aWhichButton, optl<int> aClickCount, optl<StrArg> aOptions, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText)
 {
-	_f_param_string_opt(aControl, 0);
-	_f_param_string_opt(aWhichButton, 3);
-	int aVK = Line::ConvertMouseButton(aWhichButton);
+	int aVK = Line::ConvertMouseButton(aWhichButton.value_or_null());
 	if (!aVK)
-		_f_throw_param(3);
-	int aClickCount = ParamIndexToOptionalInt(4, 1);
-	_f_param_string_opt(aOptions, 5);
+		return FR_E_ARG(3);
+	int click_count = aClickCount.value_or(1);
 
 	// Set the defaults that will be in effect unless overridden by options:
 	KeyEventTypes event_type = KEYDOWNANDUP;
@@ -334,7 +332,7 @@ BIF_DECL(BIF_ControlClick)
 	// These default coords can be overridden either by aOptions or aControl's X/Y mode:
 	POINT click = {COORD_UNSPECIFIED, COORD_UNSPECIFIED};
 
-	for (LPTSTR cp = aOptions; *cp; ++cp)
+	for (auto cp = aOptions.value_or_empty(); *cp; ++cp)
 	{
 		switch(ctoupper(*cp))
 		{
@@ -385,15 +383,17 @@ BIF_DECL(BIF_ControlClick)
 	if (position_mode)
 	{
 		// Determine target window only.  Control will be found by position below.
-		if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1, 3))
-			return; // aResultToken.SetExitResult() or Error() was already called.
+		auto fr = DetermineTargetWindow(target_window, WINTITLE_PARAMETERS);
+		if (fr != OK)
+			return fr;
 		control_window = NULL;
 	}
 	else
 	{
 		// Determine target window and control.
-		if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam, aParamCount, 3, false))
-			return; // aResultToken.SetExitResult() or Error() was already called.
+		auto fr = DetermineTargetControl(control_window, target_window, CONTROL_PARAMETERS, false);
+		if (fr != OK)
+			return fr;
 	}
 	ASSERT(target_window != NULL);
 
@@ -401,7 +401,9 @@ BIF_DECL(BIF_ControlClick)
 	// be a control (at least for the position_mode handler below).  For example, the script may have called SetParent
 	// to make a top-level window the child of some other window, in which case this policy allows it to be seen like
 	// a non-child.
-	if (!control_window) // Even if position_mode is false, the below is still attempted, as documented.
+	TCHAR control_buf[MAX_NUMBER_SIZE];
+	LPCTSTR aControl = nullptr;
+	if (!control_window && aControlSpec) // Even if position_mode is false, the below is still attempted, as documented.
 	{
 		// New section for v1.0.24.  But only after the above fails to find a control do we consider
 		// whether aControl contains X and Y coordinates.  That way, if a control class happens to be
@@ -410,7 +412,7 @@ BIF_DECL(BIF_ControlClick)
 		pah.ignore_disabled_controls = true; // v1.1.20: Ignore disabled controls.
 		// Parse the X an Y coordinates in a strict way to reduce ambiguity with control names and also
 		// to keep the code simple.
-		LPTSTR cp = omit_leading_whitespace(aControl);
+		auto cp = aControl = omit_leading_whitespace(TokenToString(*aControlSpec, control_buf));
 		if (ctoupper(*cp) != 'X')
 			goto control_error;
 		++cp;
@@ -442,12 +444,14 @@ BIF_DECL(BIF_ControlClick)
 
 	// This is done this late because it seems better to throw an exception whenever the
 	// target window or control isn't found, or any other error condition occurs above:
-	if (aClickCount < 1)
+	if (click_count < 1)
 	{
+		if (click_count < 0)
+			return FR_E_ARG(4);
 		// Allow this to simply "do nothing", because it increases flexibility
 		// in the case where the number of clicks is a dereferenced script variable
 		// that may sometimes (by intent) resolve to zero or negative:
-		_f_return_empty;
+		return OK;
 	}
 
 	RECT rect;
@@ -458,7 +462,7 @@ BIF_DECL(BIF_ControlClick)
 		// My: In addition, this is probably better for some large controls (e.g. SysListView32) because
 		// clicking at 0,0 might activate a part of the control that is not even visible:
 		if (!GetWindowRect(control_window, &rect))
-			goto error;
+			return FR_E_WIN32;
 		if (click.x == COORD_UNSPECIFIED)
 			click.x = (rect.right - rect.left) / 2;
 		if (click.y == COORD_UNSPECIFIED)
@@ -473,7 +477,7 @@ BIF_DECL(BIF_ControlClick)
 	if (vk_is_wheel)
 	{
 		ClientToScreen(control_window, &click); // Wheel messages use screen coordinates.
-		wparam = (aClickCount * ((aVK == VK_WHEEL_UP) ? WHEEL_DELTA : -WHEEL_DELTA)) << 16;  // High order word contains the delta.
+		wparam = MAKEWPARAM(0, click_count * ((aVK == VK_WHEEL_UP) ? WHEEL_DELTA : -WHEEL_DELTA));
 		msg_down = WM_MOUSEWHEEL;
 		// Make the event more accurate by having the state of the keys reflected in the event.
 		// The logical state (not physical state) of the modifier keys is used so that something
@@ -500,7 +504,7 @@ BIF_DECL(BIF_ControlClick)
 	}
 	else if (vk_is_hwheel)	// Lexikos: Support horizontal scrolling in Windows Vista and later.
 	{
-		wparam = (aClickCount * ((aVK == VK_WHEEL_LEFT) ? -WHEEL_DELTA : WHEEL_DELTA)) << 16;
+		wparam = MAKEWPARAM(0, click_count * ((aVK == VK_WHEEL_LEFT) ? -WHEEL_DELTA : WHEEL_DELTA));
 		msg_down = WM_MOUSEHWHEEL;
 	}
 	else
@@ -541,18 +545,26 @@ BIF_DECL(BIF_ControlClick)
 	//    ControlGet, HWND, HWND,, OK, A  ; Get the HWND of the OK button.
 	//    ControlClick,, ahk_id %HWND%
 
+	FResult result = OK;
+
 	if (vk_is_wheel || vk_is_hwheel) // v1.0.48: Lexikos: Support horizontal scrolling in Windows Vista and later.
 	{
-		PostMessage(control_window, msg_down, wparam, lparam);
-		DoControlDelay;
+		if (!PostMessage(control_window, msg_down, wparam, lparam))
+			result = FR_E_WIN32;
+		else
+			DoControlDelay;
 	}
 	else
 	{
-		for (int i = 0; i < aClickCount; ++i)
+		for (int i = 0; i < click_count; ++i)
 		{
 			if (event_type != KEYUP) // It's either down-only or up-and-down so always to the down-event.
 			{
-				PostMessage(control_window, msg_down, wparam, lparam);
+				if (!PostMessage(control_window, msg_down, wparam, lparam))
+				{
+					result = FR_E_WIN32;
+					break;
+				}
 				// Seems best to do this one too, which is what AutoIt3 does also.  User can always reduce
 				// ControlDelay to 0 or -1.  Update: Jon says this delay might be causing it to fail in
 				// some cases.  Upon reflection, it seems best not to do this anyway because PostMessage()
@@ -567,7 +579,11 @@ BIF_DECL(BIF_ControlClick)
 			}
 			if (event_type != KEYDOWN) // It's either up-only or up-and-down so always to the up-event.
 			{
-				PostMessage(control_window, msg_up, wparam_up, lparam);
+				if (!PostMessage(control_window, msg_up, wparam_up, lparam))
+				{
+					result = FR_E_WIN32;
+					break;
+				}
 				DoControlDelay;
 			}
 		}
@@ -575,13 +591,10 @@ BIF_DECL(BIF_ControlClick)
 
 	DETACH_THREAD_INPUT  // Also takes into account do_activate, indirectly.
 
-	_f_return_empty;
-
-error:
-	_f_throw_win32();
+	return result;
 
 control_error:
-	_f_throw(ERR_NO_CONTROL, aControl, ErrorPrototype::Target);
+	return FError(ERR_NO_CONTROL, aControl, ErrorPrototype::Target);
 }
 
 

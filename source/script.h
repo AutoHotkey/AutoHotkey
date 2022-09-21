@@ -3287,7 +3287,6 @@ BIF_DECL(BIF_ComObjQuery);
 
 BIF_DECL(BIF_Click);
 BIF_DECL(BIF_Control);
-BIF_DECL(BIF_ControlClick);
 BIF_DECL(BIF_ControlGet);
 BIF_DECL(BIF_GroupActivate);
 BIF_DECL(BIF_MouseGetPos);
