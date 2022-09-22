@@ -362,6 +362,18 @@ bif_impl FResult ControlSetChecked(int aValue, CONTROL_PARAMETERS_DECL)
 
 
 
+bif_impl FResult ControlGetChecked(CONTROL_PARAMETERS_DECL, BOOL &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	DWORD_PTR dwResult;
+	if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return FR_E_WIN32;
+	aRetVal = dwResult == BST_CHECKED;
+	return OK;
+}
+
+
+
 static FResult ControlSetStyle(StrArg aValue, CONTROL_PARAMETERS_DECL, int style_index)
 {
 	if (!*aValue)
@@ -408,6 +420,25 @@ bif_impl FResult ControlSetStyle(StrArg aValue, CONTROL_PARAMETERS_DECL)
 bif_impl FResult ControlSetExStyle(StrArg aValue, CONTROL_PARAMETERS_DECL)
 {
 	return ControlSetStyle(aValue, CONTROL_PARAMETERS, GWL_EXSTYLE);
+}
+
+
+
+static FResult ControlGetLong(CONTROL_PARAMETERS_DECL, UINT &aRetVal, int nIndex)
+{
+	DETERMINE_TARGET_CONTROL2;
+	aRetVal = GetWindowLong(control_window, nIndex);
+	return OK;
+}
+
+bif_impl FResult ControlGetStyle(CONTROL_PARAMETERS_DECL, UINT &aRetVal)
+{
+	return ControlGetLong(CONTROL_PARAMETERS, aRetVal, GWL_STYLE);
+}
+
+bif_impl FResult ControlGetExStyle(CONTROL_PARAMETERS_DECL, UINT &aRetVal)
+{
+	return ControlGetLong(CONTROL_PARAMETERS, aRetVal, GWL_EXSTYLE);
 }
 
 
@@ -639,302 +670,293 @@ bif_impl FResult EditPaste(StrArg aValue, CONTROL_PARAMETERS_DECL)
 
 
 
-BIF_DECL(BIF_ControlGet)
+bif_impl FResult ControlFindItem(StrArg aString, CONTROL_PARAMETERS_DECL, INT_PTR &aRetVal)
 {
-	BuiltInFunctionID control_cmd = _f_callee_id;
-
-	// Retrieve and exclude the first parameter, if any.
-	LPTSTR aString;
-	int aNumber;
-	switch (control_cmd)
+	DETERMINE_TARGET_CONTROL2;
+	UINT msg;
+	FResult fr = FAIL;
+	switch (GetIndexControlType(control_window, fr))
 	{
-	case FID_ControlFindItem: // String (required).
-		if (aParamCount)
-		{
-			aString = ParamIndexToString(0, _f_number_buf);
-			++aParam;
-			--aParamCount;
-		}
-		else
-			aString = _T("");
-		break;
-	case FID_EditGetLine: // Line number (required).
-		// Load-time validation ensures aParamCount > 0.
-		aNumber = ParamIndexToInt(0);
-		++aParam;
-		--aParamCount;
-		break;
+	case IC_COMBO: msg = CB_FINDSTRINGEXACT; break;
+	case IC_LIST: msg = LB_FINDSTRINGEXACT; break;
+	default: return fr;
 	}
+	DWORD_PTR index;
+	if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aString, SMTO_ABORTIFHUNG, 2000, &index))
+		return FR_E_WIN32;
+	if (index == CB_ERR) // CBERR == LB_ERR
+		return FR_E_FAILED;
+	aRetVal = index + 1;
+	return OK;
+}
 
-	TCHAR classname[256 + 1];
-	// aControl might not be a ClassNN, so don't rely on it for class checks.
-	//LPTSTR aControl = ParamIndexToString(0, control_buf);
 
-	DETERMINE_TARGET_CONTROL(0);
 
-	DWORD_PTR dwResult, index, length, item_length, u, item_count;
-	DWORD start, end;
+bif_impl FResult ControlGetIndex(CONTROL_PARAMETERS_DECL, INT_PTR &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	UINT msg;
+	FResult fr = FAIL;
+	switch (GetIndexControlType(control_window, fr, true))
+	{
+	case IC_COMBO: msg = CB_GETCURSEL; break;
+	case IC_LIST: msg = LB_GETCURSEL; break;
+	case IC_TAB: msg = TCM_GETCURSEL; break;
+	default: return fr;
+	}
+	DWORD_PTR index;
+	if (!SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 2000, &index))
+		return FR_E_WIN32;
+	aRetVal = index + 1;
+	return OK;
+}
+
+
+
+bif_impl FResult ControlGetChoice(CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
 	UINT msg, x_msg, y_msg;
-	int control_index;
-	TCHAR *dyn_buf;
-
-	switch(control_cmd)
+	FResult fr = FAIL;
+	switch (GetIndexControlType(control_window, fr, true))
 	{
-	case FID_ControlGetChecked: //Must be a Button
-		if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		_f_return_b(dwResult == BST_CHECKED);
+	case IC_COMBO:
+		msg = CB_GETCURSEL;
+		x_msg = CB_GETLBTEXTLEN;
+		y_msg = CB_GETLBTEXT;
+		break;
+	case IC_LIST:
+		msg = LB_GETCURSEL;
+		x_msg = LB_GETTEXTLEN;
+		y_msg = LB_GETTEXT;
+		break;
+	default:
+		return fr;
+	}
+	DWORD_PTR index, estimated_length, actual_length;
+	if (!SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 2000, &index))
+		return FR_E_WIN32;
+	if (index == CB_ERR) // CBERR == LB_ERR
+		return FR_E_FAILED;
+	if (!SendMessageTimeout(control_window, x_msg, (WPARAM)index, 0, SMTO_ABORTIFHUNG, 2000, &estimated_length))
+		return FR_E_WIN32;
+	if (estimated_length == CB_ERR)
+		return FR_E_FAILED;
+	// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
+	// being when the item's text is retrieved.
+	auto buf = aRetVal.Alloc(estimated_length);
+	if (!buf)
+		return FR_E_OUTOFMEM;
+	if (!SendMessageTimeout(control_window, y_msg, (WPARAM)index, (LPARAM)buf, SMTO_ABORTIFHUNG, 2000, &actual_length))
+		return FR_E_WIN32;
+	if (actual_length > estimated_length) // Guard against bogus return values. Also covers actual_length == CB_ERR due to unsigned type.
+		return FR_E_FAILED;
+	aRetVal.SetLength(actual_length); // Update to actual vs. estimated length.
+	return OK;
+}
 
-	case FID_ControlGetEnabled:
-		_f_return_b(IsWindowEnabled(control_window));
 
-	case FID_ControlGetVisible:
-		_f_return_b(IsWindowVisible(control_window));
 
-	case FID_ControlFindItem:
-		GetClassName(control_window, classname, _countof(classname));
-		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
-			msg = CB_FINDSTRINGEXACT;
-		else if (tcscasestr(classname, _T("List")))
-			msg = LB_FINDSTRINGEXACT;
-		else // Must be ComboBox or ListBox
-			goto control_type_error;
-		if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aString, SMTO_ABORTIFHUNG, 2000, &index)
-			|| index == CB_ERR) // CB_ERR == LB_ERR
-			goto error;
-		_f_return(index + 1);
+static FResult ControlGetItems(Array *items, DWORD_PTR item_count, HWND control_window, UINT x_msg, UINT y_msg)
+{
+	DWORD_PTR length, u, item_length;
+	// Calculate the required buffer size for the largest string.
+	for (length = 0, u = 0; u < item_count; ++u)
+	{
+		if (!SendMessageTimeout(control_window, x_msg, u, 0, SMTO_ABORTIFHUNG, 5000, &item_length)
+			|| item_length == LB_ERR) // Note that item_length is legitimately zero for a blank item in the list.
+			return FR_E_FAILED;
+		if (length < item_length)
+			length = item_length;
+	}
+	// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
+	// being when the item's text is retrieved.
+	++length; // To include the null-terminator.
+	// Could use alloca when length is within a safe limit, but it seems unlikely to help
+	// performance much since the bottleneck is probably in message passing between processes.
+	// Although length is only the size of the largest item, not the total of all items,
+	// I don't know how large an item can be, so it's safest to just use malloc().
+	LPTSTR dyn_buf;
+	if (  !(dyn_buf = tmalloc(length))  )
+		return FR_E_OUTOFMEM;
+	for (u = 0; u < item_count; ++u)
+	{
+		if (!SendMessageTimeout(control_window, y_msg, (WPARAM)u, (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 5000, &item_length)
+			|| item_length > length) // Guard against bogus return values. Also covers item_length == CB_ERR due to unsigned type.
+			break;
+		dyn_buf[item_length] = '\0'; // Play it safe.
+		if (!items->Append(dyn_buf))
+			break;
+	}
+	free(dyn_buf);
+	return u < item_count ? FR_E_FAILED : OK;
+}
 
-	case FID_ControlGetIndex:
-		GetClassName(control_window, classname, _countof(classname));
-		if (tcscasestr(classname, _T("Combo")))
-			msg = CB_GETCURSEL;
-		else if (tcscasestr(classname, _T("List")))
-			msg = LB_GETCURSEL;
-		else if (tcscasestr(classname, _T("Tab")))
-			msg = TCM_GETCURSEL;
-		else // Must be ComboBox, ListBox or Tab control.
-			goto control_type_error;
-		if (!SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 2000, &index))
-			goto win32_error;
-		_f_return(index + 1);
+bif_impl FResult ControlGetItems(CONTROL_PARAMETERS_DECL, IObject *&aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	UINT msg, x_msg, y_msg;
+	FResult fr = FAIL;
+	switch (GetIndexControlType(control_window, fr, true))
+	{
+	case IC_COMBO:
+		msg = CB_GETCOUNT;
+		x_msg = CB_GETLBTEXTLEN;
+		y_msg = CB_GETLBTEXT;
+		break;
+	case IC_LIST:
+		msg = LB_GETCOUNT;
+		x_msg = LB_GETTEXTLEN;
+		y_msg = LB_GETTEXT;
+		break;
+	default:
+		return fr;
+	}
+	DWORD_PTR item_count;
+	if (!SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 5000, &item_count))
+		return FR_E_WIN32;
+	if (item_count == LB_ERR) // There was a problem getting the count.
+		return FR_E_FAILED;
+	Array *items;
+	if (  !(items = Array::Create())  )
+		return FR_E_OUTOFMEM;
+	fr = ControlGetItems(items, item_count, control_window, x_msg, y_msg);
+	if (fr != OK)
+	{
+		items->Release();
+		return fr;
+	}
+	aRetVal = items;
+	return OK;
+}
 
-	case FID_ControlGetChoice:
-		GetClassName(control_window, classname, _countof(classname));
-		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
-		{
-			msg = CB_GETCURSEL;
-			x_msg = CB_GETLBTEXTLEN;
-			y_msg = CB_GETLBTEXT;
-		}
-		else if (tcscasestr(classname, _T("List")))
-		{
-			msg = LB_GETCURSEL;
-			x_msg = LB_GETTEXTLEN;
-			y_msg = LB_GETTEXT;
-		}
-		else // Must be ComboBox or ListBox
-			goto control_type_error;
-		if (!SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 2000, &index)
-			|| index == CB_ERR  // CB_ERR == LB_ERR.  There is no selection (or very rarely, some other type of problem).
-			|| !SendMessageTimeout(control_window, x_msg, (WPARAM)index, 0, SMTO_ABORTIFHUNG, 2000, &length)
-			|| length == CB_ERR)  // CB_ERR == LB_ERR
-			goto error; // Above relies on short-circuit boolean order.
-		// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
-		// being when the item's text is retrieved.  This should be harmless, since there are many
-		// other precedents where a variable is sized to something larger than it winds up carrying.
-		if (!TokenSetResult(aResultToken, NULL, length)) // It already displayed the error.
-			return;
-		aResultToken.symbol = SYM_STRING;
-		if (!SendMessageTimeout(control_window, y_msg, (WPARAM)index, (LPARAM)aResultToken.marker
-			, SMTO_ABORTIFHUNG, 2000, &length)
-			|| length == CB_ERR) // Probably impossible given the way it was called above.  Also, CB_ERR == LB_ERR. Relies on short-circuit boolean order.
-		{
-			goto error;
-		}
-		aResultToken.marker_length = length;  // Update to actual vs. estimated length.
-		return;
 
-	case FID_ControlGetItems:
-		GetClassName(control_window, classname, _countof(classname));
-		// This is done here as the special LIST sub-command rather than just being built into
-		// ControlGetText because ControlGetText already has a function for ComboBoxes: it fetches
-		// the current selection.  Although ListBox does not have such a function, it seem best
-		// to consolidate both methods here.
-		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
-		{
-			msg = CB_GETCOUNT;
-			x_msg = CB_GETLBTEXTLEN;
-			y_msg = CB_GETLBTEXT;
-		}
-		else if (tcscasestr(classname, _T("List")))
-		{
-			msg = LB_GETCOUNT;
-			x_msg = LB_GETTEXTLEN;
-			y_msg = LB_GETTEXT;
-		}
-		else // Must be ComboBox or ListBox
-			goto control_type_error;
-		if (!(SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 5000, &item_count))
-			|| item_count == LB_ERR) // There was a problem getting the count.
-			goto error;
-		Array *items;
-		if (  !(items = Array::Create())  )
-			goto error;
-		if (!item_count)
-			_f_return(items);
-		// Calculate the required buffer size for the largest string.
-		for (length = 0, u = 0; u < item_count; ++u)
-		{
-			if (!SendMessageTimeout(control_window, x_msg, u, 0, SMTO_ABORTIFHUNG, 5000, &item_length)
-				|| item_length == LB_ERR) // Note that item_length is legitimately zero for a blank item in the list.
-			{
-				items->Release();
-				goto error;
-			}
-			if (length < item_length)
-				length = item_length;
-		}
-		// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
-		// being when the item's text is retrieved.  This should be harmless, since there are many
-		// other precedents where a variable is sized to something larger than it winds up carrying.
-		++length; // To include the null-terminator.
-		// Could use alloca when length is within a safe limit, but it seems unlikely to help
-		// performance much since the bottleneck is probably in message passing between processes.
-		// Although length is only the size of the largest item, not the total of all items,
-		// I don't know how large an item can be, so it's safest to just use malloc().
-		if (  !(dyn_buf = tmalloc(length))  )
-		{
-			items->Release();
-			goto error;
-		}
-		for (u = 0; u < item_count; ++u)
-		{
-			if (!SendMessageTimeout(control_window, y_msg, (WPARAM)u, (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 5000, &item_length)
-				|| item_length == LB_ERR)
-			{
-				// Just consider this to be a blank item so that the process can continue.
-				*dyn_buf = '\0';
-			}
-			if (!items->Append(dyn_buf))
-				break; // Insufficient memory.
-		}
+
+bif_impl FResult EditGetLineCount(CONTROL_PARAMETERS_DECL, UINT_PTR &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	// MSDN: "If the control has no text, the return value is 1. The return value will never be less than 1."
+	if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &aRetVal))
+		return FR_E_WIN32;
+	return OK;
+}
+
+
+
+bif_impl FResult EditGetCurrentLine(CONTROL_PARAMETERS_DECL, UINT_PTR &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	DWORD_PTR line_number;
+	if (!SendMessageTimeout(control_window, EM_LINEFROMCHAR, -1, 0, SMTO_ABORTIFHUNG, 2000, &line_number))
+		return FR_E_WIN32;
+	aRetVal = line_number + 1;
+	return OK;
+}
+
+
+
+bif_impl FResult EditGetCurrentCol(CONTROL_PARAMETERS_DECL, UINT_PTR &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	DWORD_PTR dwResult, line_number, start, end;
+	// The dwResult from the first msg below is not useful and is not checked.
+	if (   !SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult)
+		|| !SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &line_number)   )
+		return FR_E_WIN32;
+	if (!line_number) // Since we're on line zero, the column number is simply start+1.
+	{
+		aRetVal = start + 1;  // +1 to convert from zero based.
+		return OK;
+	}
+	// The original Au3 function repeatedly decremented the character index and called EM_LINEFROMCHAR
+	// until the row changed. Don't know why; the EM_LINEINDEX method is MUCH faster for long lines and
+	// probably has been available since the dawn of time, though I've only tested it on Windows 10.
+	DWORD_PTR line_start;
+	if (!SendMessageTimeout(control_window, EM_LINEINDEX, (WPARAM)line_number, 0, SMTO_ABORTIFHUNG, 2000, &line_start))
+		return FR_E_WIN32;
+	aRetVal = start - line_start + 1;
+	return OK;
+}
+
+
+
+bif_impl FResult EditGetLine(INT_PTR aIndex, CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	auto control_index = aIndex - 1;
+	if (control_index < 0)
+		return FR_E_ARG(0);
+	DWORD_PTR dwLineCount, dwResult;
+	// Lexikos: Not sure if the following comment is relevant (does the OS multiply by sizeof(wchar_t)?).
+	// jackieku: 32768 * sizeof(wchar_t) = 65536, which can not be stored in a unsigned 16bit integer.
+	TCHAR line_buf[32767];
+	*(LPWORD)line_buf = 32767; // EM_GETLINE requires first word of string to be set to its size.
+	if (!SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)line_buf, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return FR_E_WIN32;
+	if (!dwResult) // Line is empty or line number is invalid.
+	{
+		if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwLineCount))
+			return FR_E_WIN32;
+		if ((DWORD_PTR)control_index >= dwLineCount)
+			return FR_E_ARG(0);
+	}
+	return aRetVal.Copy(line_buf, dwResult) ? OK : FR_E_OUTOFMEM;
+}
+
+
+
+bif_impl FResult EditGetSelectedText(CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	DWORD_PTR start, end, length, dwResult;
+	// Note: The RichEdit controls of certain apps such as Metapad don't return the right selection
+	// with this technique.  Au3 has the same problem with them, so for now it's just documented here
+	// as a limitation.
+	if (!SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return FR_E_WIN32;
+	// The above sets start to be the zero-based position of the start of the selection (similar for end).
+	// If there is no selection, start and end will be equal, at least in the edit controls I tried it with.
+	// The dwResult from the above is not useful and is not checked.
+	if (start > end) // Later sections rely on this for safety with unsupported controls.
+		return FR_E_FAILED; // The most likely cause is that this isn't an Edit control, but that isn't certain.
+	if (start == end)
+	{
+		aRetVal.SetEmpty();
+		return OK;
+	}
+	if (   !SendMessageTimeout(control_window, WM_GETTEXTLENGTH, 0, 0, SMTO_ABORTIFHUNG, 2000, &length)
+		|| !length   ) // Since the above didn't return for start == end, this is an error because we have a selection of non-zero length, but no text to go with it!
+		return FR_E_FAILED;
+	// Dynamic memory is used because we must get all the control's text so that just the selected region
+	// can be cropped out and returned:
+	LPTSTR dyn_buf = tmalloc(length + 1);
+	if (!dyn_buf)
+		return FR_E_OUTOFMEM;
+	if (   !SendMessageTimeout(control_window, WM_GETTEXT, (WPARAM)(length + 1), (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &length)
+		|| !length || end > length   )
+	{
+		// The first check above implies failure since the length is unexpectedly zero
+		// (above implied it shouldn't be).  The second check is also a problem because the
+		// end of the selection should not be beyond the length of text that was retrieved.
 		free(dyn_buf);
-		if (u < item_count)
-		{
-			items->Release();
-			goto error;
-		}
-		_f_return(items);
-
-	case FID_EditGetLineCount:  // Must be an Edit
-		// MSDN: "If the control has no text, the return value is 1. The return value will never be less than 1."
-		if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		_f_return(dwResult);
-
-	case FID_EditGetCurrentLine:
-		if (!SendMessageTimeout(control_window, EM_LINEFROMCHAR, -1, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		_f_return(dwResult + 1);
-
-	case FID_EditGetCurrentCol:
-	{
-		DWORD_PTR line_number;
-		// The dwResult from the first msg below is not useful and is not checked.
-		if (   !SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult)
-			|| !SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &line_number)   )
-			goto win32_error;
-		if (!line_number) // Since we're on line zero, the column number is simply start+1.
-			_f_return(start + 1);  // +1 to convert from zero based.
-		// The original Au3 function repeatedly decremented the character index and called EM_LINEFROMCHAR
-		// until the row changed. Don't know why; the EM_LINEINDEX method is MUCH faster for long lines and
-		// probably has been available since the dawn of time, though I've only tested it on Windows 10.
-		DWORD_PTR line_start;
-		if (!SendMessageTimeout(control_window, EM_LINEINDEX, (WPARAM)line_number, 0, SMTO_ABORTIFHUNG, 2000, &line_start))
-			goto win32_error;
-		_f_return(start - line_start + 1);
+		return FR_E_FAILED;
 	}
+	dyn_buf[end] = '\0'; // Terminate the string at the end of the selection.
+	auto fr = aRetVal.Copy(dyn_buf + start, end - start) ? OK : FR_E_OUTOFMEM;
+	free(dyn_buf);
+	return fr;
+}
 
-	case FID_EditGetLine:
-	{
-		control_index = aNumber - 1;
-		if (control_index < 0)
-			_f_throw_param(0);
-		DWORD_PTR dwLineCount;
-		// Lexikos: Not sure if the following comment is relevant (does the OS multiply by sizeof(wchar_t)?).
-		// jackieku: 32768 * sizeof(wchar_t) = 65536, which can not be stored in a unsigned 16bit integer.
-		TCHAR line_buf[32767];
-		*(LPWORD)line_buf = 32767; // EM_GETLINE requires first word of string to be set to its size.
-		if (!SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)line_buf, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		if (!dwResult) // Line is empty or line number is invalid.
-		{
-			if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwLineCount))
-				goto win32_error;
-			if ((DWORD)aNumber > dwLineCount)
-				_f_throw_param(0);
-		}
-		line_buf[dwResult] = '\0'; // Ensure terminated since the API might not do it in some cases.
-		_f_return(line_buf, dwResult);
-	}
 
-	case FID_EditGetSelectedText: // Must be an Edit.
-		// Note: The RichEdit controls of certain apps such as Metapad don't return the right selection
-		// with this technique.  Au3 has the same problem with them, so for now it's just documented here
-		// as a limitation.
-		if (!SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		// The above sets start to be the zero-based position of the start of the selection (similar for end).
-		// If there is no selection, start and end will be equal, at least in the edit controls I tried it with.
-		// The dwResult from the above is not useful and is not checked.
-		if (start > end) // Later sections rely on this for safety with unsupported controls.
-			goto error; // The most likely cause is that this isn't an Edit control, but that isn't certain.
-		if (start == end)
-			_f_return_empty;
-		// Dynamic memory is used because we must get all the control's text so that just the selected region
-		// can be cropped out and returned:
-		if (   !SendMessageTimeout(control_window, WM_GETTEXTLENGTH, 0, 0, SMTO_ABORTIFHUNG, 2000, &length)
-			|| !length  // Since the above didn't return for start == end, this is an error because we have a selection of non-zero length, but no text to go with it!
-			|| !(dyn_buf = tmalloc(length + 1))   ) // Relies on short-circuit boolean order.
-			goto error;
-		if (   !SendMessageTimeout(control_window, WM_GETTEXT, (WPARAM)(length + 1), (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &length)
-			|| !length || end > length   )
-		{
-			// The first check above implies failure since the length is unexpectedly zero
-			// (above implied it shouldn't be).  The second check is also a problem because the
-			// end of the selection should not be beyond the length of text that was retrieved.
-			free(dyn_buf);
-			goto error;
-		}
-		dyn_buf[end] = '\0'; // Terminate the string at the end of the selection.
-		if (TokenSetResult(aResultToken, dyn_buf + start, end - start))
-			aResultToken.symbol = SYM_STRING;
-		//else: it already called Error().
-		free(dyn_buf);
-		return;
 
-	case FID_ControlGetStyle:
-		_f_return(GetWindowLong(control_window, GWL_STYLE));
-
-	case FID_ControlGetExStyle:
-		_f_return(GetWindowLong(control_window, GWL_EXSTYLE));
-
-	case FID_ControlGetHwnd:
-		// The terminology "HWND" was chosen rather than "ID" to avoid confusion with a control's
-		// dialog ID (as retrieved by GetDlgCtrlID).  This also reserves the word ID for possible
-		// use with the control's Dialog ID in future versions.
-		_f_return((size_t)control_window);
-	}
-	ASSERT(FALSE && "Should have returned");
-
-error: // GetLastError() might not be relevant in this case.
-	_f_throw(ERR_FAILED);
-
-win32_error:
-	_f_throw_win32();
-
-control_type_error:
-	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname, ErrorPrototype::Target);
+// The terminology "HWND" was chosen rather than "ID" to avoid confusion with a control's
+// dialog ID (as retrieved by GetDlgCtrlID).  This also reserves the word ID for possible
+// use with the control's Dialog ID in future versions.
+bif_impl FResult ControlGetHwnd(CONTROL_PARAMETERS_DECL, UINT &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	aRetVal = (UINT)(size_t)control_window;
+	return OK;
 }
 
 

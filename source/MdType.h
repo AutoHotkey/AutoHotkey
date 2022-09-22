@@ -14,7 +14,6 @@ enum class MdType : UINT8
 	UInt32		= TypeInt | Size32 | Unsigned,
 	Int64		= TypeInt | Size64,
 	UInt64		= TypeInt | Size64 | Unsigned,
-	UIntPtr		= Exp32or64(UInt32, UInt64),
 	Float64		= TypeFloat | Size64,
 	String		= 3,
 	Object,
@@ -32,6 +31,7 @@ enum class MdType : UINT8
 	// Only aliases from here on
 	FirstModifier = Optional,
 	BitsUpperBound = Optional,
+	UIntPtr = Exp32or64(UInt32, UInt64),
 	IntPtr = Exp32or64(Int32, Int64)
 };
 

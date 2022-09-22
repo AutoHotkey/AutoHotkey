@@ -619,6 +619,15 @@ bif_impl FResult ControlHide(CONTROL_PARAMETERS_DECL)
 
 
 
+bif_impl FResult ControlGetVisible(CONTROL_PARAMETERS_DECL, BOOL &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	aRetVal = IsWindowVisible(control_window);
+	return OK;
+}
+
+
+
 bif_impl FResult ControlMove(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int> aHeight, CONTROL_PARAMETERS_DECL)
 {
 	DETERMINE_TARGET_CONTROL2;
@@ -682,7 +691,7 @@ bif_impl FResult ControlGetPos(int *aX, int *aY, int *aWidth, int *aHeight, CONT
 
 
 
-bif_impl FResult ControlGetFocus(WINTITLE_PARAMETERS_DECL, UINT_PTR &aRetVal)
+bif_impl FResult ControlGetFocus(WINTITLE_PARAMETERS_DECL, UINT &aRetVal)
 {
 	HWND target_window;
 	DETERMINE_TARGET_WINDOW;
@@ -698,7 +707,7 @@ bif_impl FResult ControlGetFocus(WINTITLE_PARAMETERS_DECL, UINT_PTR &aRetVal)
 	if (!IsChild(target_window, guithreadInfo.hwndFocus))
 		aRetVal = 0; // As documented, if "none of the target window's controls has focus, the return value is 0".
 	else
-		aRetVal = (UINT_PTR)guithreadInfo.hwndFocus;
+		aRetVal = (UINT)(size_t)guithreadInfo.hwndFocus;
 	return OK;
 }
 
@@ -822,6 +831,15 @@ bif_impl FResult ControlSetEnabled(int aValue, CONTROL_PARAMETERS_DECL)
 	DETERMINE_TARGET_CONTROL2;
 	EnableWindow(control_window, aValue == -1 ? !IsWindowEnabled(control_window) : aValue);
 	DoControlDelay;
+	return OK;
+}
+
+
+
+bif_impl FResult ControlGetEnabled(CONTROL_PARAMETERS_DECL, BOOL &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	aRetVal = IsWindowEnabled(control_window);
 	return OK;
 }
 

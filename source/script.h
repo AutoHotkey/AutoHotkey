@@ -655,7 +655,6 @@ enum BuiltInFunctionID {
 	FID_WinMoveBottom = 0, FID_WinMoveTop,
 	FID_WinShow = 0, FID_WinHide, FID_WinMinimize, FID_WinMaximize, FID_WinRestore, FID_WinClose, FID_WinKill,
 	FID_WinActivate = 0, FID_WinActivateBottom,
-	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlFindItem, FID_ControlGetIndex, FID_ControlGetChoice, FID_ControlGetItems, FID_ListViewGetContent, FID_EditGetLineCount, FID_EditGetCurrentLine, FID_EditGetCurrentCol, FID_EditGetLine, FID_EditGetSelectedText, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSend = SCM_NOT_RAW, FID_ControlSendText = SCM_RAW_TEXT,
 	FID_PostMessage = 0, FID_SendMessage,
 	FID_RegRead = 0, FID_RegWrite, FID_RegCreateKey, FID_RegDelete, FID_RegDeleteKey,
