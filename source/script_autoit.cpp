@@ -328,304 +328,313 @@ error:
 
 
 
-BIF_DECL(BIF_Control)
-// ATTACH_THREAD_INPUT has been tested to see if they help any of these work with controls
-// in MSIE (whose Internet Explorer_TridentCmboBx2 does not respond to "Control Choose" but
-// does respond to "Control Focus").  But it didn't help.
+bif_impl FResult ControlSetChecked(int aValue, CONTROL_PARAMETERS_DECL)
 {
-	BuiltInFunctionID control_cmd = _f_callee_id;
-
-	// Retrieve and exclude the value parameter, if any.
-	ToggleValueType aToggle;
-	LPTSTR aValue;
-	int aNumber;
-	switch (control_cmd)
+	if (aValue < -1 || aValue > 1)
+		return FR_E_ARG(0);
+	DETERMINE_TARGET_CONTROL2;
+	DWORD_PTR dwResult;
+	if (aValue != -1)
 	{
-	// Boolean parameter:
-	case FID_ControlSetChecked:
-	case FID_ControlSetEnabled:
-		aToggle = ParamIndexToToggleValue(0);
-		if (aToggle == TOGGLE_INVALID)
-			_f_throw_param(0);
-		++aParam;
-		--aParamCount;
-		break;
-	// String parameter:
-	case FID_ControlSetStyle: // String for +/-/^ prefix.
-	case FID_ControlSetExStyle: // As above.
-	case FID_ControlAddItem:
-	case FID_ControlChooseString:
-	case FID_EditPaste:
-		aValue = ParamIndexToString(0, _f_number_buf);
-		++aParam;
-		--aParamCount;
-		break;
-	// Integer parameter:
-	case FID_ControlDeleteItem:
-	case FID_ControlChooseIndex:
-		Throw_if_Param_NaN(0);
-		aNumber = ParamIndexToInt(0);
-		++aParam;
-		--aParamCount;
-		break;
-	// No parameter:
-	//case FID_ControlShow:
-	//case FID_ControlHide:
-	//case FID_ControlShowDropDown:
-	//case FID_ControlHideDropDown:
+		if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
+			return FR_E_WIN32;
+		if (dwResult == (aValue ? BST_CHECKED : BST_UNCHECKED)) // It's already in the right state, so don't press it.
+			return OK;
 	}
-
-	TCHAR classname[256 + 1];
-	// aControl might not be a ClassNN, so don't rely on it for class checks.
-	//LPTSTR aControl = ParamIndexToString(0, control_buf);
-
-	DETERMINE_TARGET_CONTROL(0);
-
-	HWND immediate_parent;  // Possibly not the same as target_window since controls can themselves have children.
-	int control_id, control_index;
-	DWORD_PTR dwResult, new_button_state;
-	UINT msg, x_msg, y_msg;
+	// MSDN docs for BM_CLICK (and au3 author says it applies to this situation also):
+	// "If the button is in a dialog box and the dialog box is not active, the BM_CLICK message
+	// might fail. To ensure success in this situation, call the SetActiveWindow function to activate
+	// the dialog box before sending the BM_CLICK message to the button."
+	ATTACH_THREAD_INPUT
+	SetActiveWindow(target_window == control_window ? GetNonChildParent(control_window) : target_window); // v1.0.44.13: Fixed to allow for the fact that target_window might be the control itself (e.g. via ahk_id %ControlHWND%).
 	RECT rect;
-	LPARAM lparam;
+	if (!GetWindowRect(control_window, &rect))	// au3: Code to primary click the centre of the control
+		rect.bottom = rect.left = rect.right = rect.top = 0;
+	auto lparam = MAKELPARAM((rect.right - rect.left) / 2, (rect.bottom - rect.top) / 2);
+	FResult fr = (
+			PostMessage(control_window, WM_LBUTTONDOWN, MK_LBUTTON, lparam) &&
+			PostMessage(control_window, WM_LBUTTONUP, 0, lparam)
+		) ? OK : FR_E_WIN32(GetLastError());
+	DETACH_THREAD_INPUT
+	DoControlDelay;
+	return fr;
+}
 
-	switch(control_cmd)
+
+
+static FResult ControlSetStyle(StrArg aValue, CONTROL_PARAMETERS_DECL, int style_index)
+{
+	if (!*aValue)
+		return FR_E_ARG(0); // Seems best to treat an explicit blank as an error.
+	DETERMINE_TARGET_CONTROL2;
+	DWORD new_style, orig_style = GetWindowLong(control_window, style_index);
+	// +/-/^ are used instead of |&^ because the latter is confusing, namely that & really means &=~style, etc.
+	if (!_tcschr(_T("+-^"), *aValue))
+		new_style = ATOU(aValue); // No prefix, so this new style will entirely replace the current style.
+	else
 	{
-	case FID_ControlSetChecked: // au3: Must be a Button
-	{ // Need braces for ATTACH_THREAD_INPUT macro.
-		if (aToggle != TOGGLE)
+		++aValue; // Won't work combined with next line, due to next line being a macro that uses the arg twice.
+		DWORD style_change = ATOU(aValue);
+		switch(aValue[-1])
 		{
-			new_button_state = aToggle == TOGGLED_ON ? BST_CHECKED : BST_UNCHECKED;
-			if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				goto win32_error;
-			if (dwResult == new_button_state) // It's already in the right state, so don't press it.
-				break;
+		case '+': new_style = orig_style | style_change; break;
+		case '-': new_style = orig_style & ~style_change; break;
+		case '^': new_style = orig_style ^ style_change; break;
 		}
-		// MSDN docs for BM_CLICK (and au3 author says it applies to this situation also):
-		// "If the button is in a dialog box and the dialog box is not active, the BM_CLICK message
-		// might fail. To ensure success in this situation, call the SetActiveWindow function to activate
-		// the dialog box before sending the BM_CLICK message to the button."
-		ATTACH_THREAD_INPUT
-		SetActiveWindow(target_window == control_window ? GetNonChildParent(control_window) : target_window); // v1.0.44.13: Fixed to allow for the fact that target_window might be the control itself (e.g. via ahk_id %ControlHWND%).
-		if (!GetWindowRect(control_window, &rect))	// au3: Code to primary click the centre of the control
-			rect.bottom = rect.left = rect.right = rect.top = 0;
-		lparam = MAKELPARAM((rect.right - rect.left) / 2, (rect.bottom - rect.top) / 2);
-		PostMessage(control_window, WM_LBUTTONDOWN, MK_LBUTTON, lparam);
-		PostMessage(control_window, WM_LBUTTONUP, 0, lparam);
-		DETACH_THREAD_INPUT
+	}
+	if (new_style == orig_style) // v1.0.45.04: Ask for an unnecessary change (i.e. one that is already in effect) should not be considered an error.
+		return OK;
+	// Currently, BM_SETSTYLE is not done when GetClassName() says that the control is a button/checkbox/groupbox.
+	// This is because the docs for BM_SETSTYLE don't contain much, if anything, that anyone would ever
+	// want to change.
+	SetLastError(0); // Prior to SetWindowLong(), as recommended by MSDN.
+	if (SetWindowLong(control_window, style_index, new_style) || !GetLastError()) // This is the precise way to detect success according to MSDN.
+	{
+		// Even if it indicated success, sometimes it failed anyway.  Find out for sure:
+		if (GetWindowLong(control_window, style_index) != orig_style) // Even a partial change counts as a success.
+		{
+			InvalidateRect(control_window, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
+			return OK;
+		}
+	}
+	return FR_E_WIN32;
+}
+
+bif_impl FResult ControlSetStyle(StrArg aValue, CONTROL_PARAMETERS_DECL)
+{
+	return ControlSetStyle(aValue, CONTROL_PARAMETERS, GWL_STYLE);
+}
+
+bif_impl FResult ControlSetExStyle(StrArg aValue, CONTROL_PARAMETERS_DECL)
+{
+	return ControlSetStyle(aValue, CONTROL_PARAMETERS, GWL_EXSTYLE);
+}
+
+
+
+static FResult ControlShowDropDown(CONTROL_PARAMETERS_DECL, BOOL aShow)
+{
+	DETERMINE_TARGET_CONTROL2;
+	DWORD_PTR dwResult;
+	// CB_SHOWDROPDOWN: Although the return value (dwResult) is always TRUE, SendMessageTimeout()
+	// will return failure if it times out:
+	if (!SendMessageTimeout(control_window, CB_SHOWDROPDOWN
+		, (WPARAM)aShow, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return FR_E_WIN32;
+	DoControlDelay;
+	return OK;
+}
+
+bif_impl FResult ControlShowDropDown(CONTROL_PARAMETERS_DECL)
+{
+	return ControlShowDropDown(CONTROL_PARAMETERS, TRUE);
+}
+
+bif_impl FResult ControlHideDropDown(CONTROL_PARAMETERS_DECL)
+{
+	return ControlShowDropDown(CONTROL_PARAMETERS, FALSE);
+}
+
+
+
+enum IndexControlType {
+	IC_INVALID = 0,
+	IC_COMBO,
+	IC_LIST,
+	IC_TAB
+};
+
+static IndexControlType GetIndexControlType(HWND aControl, FResult &fr, bool aAllowTab = false)
+{
+	TCHAR classname[256 + 1];
+	GetClassName(aControl, classname, _countof(classname));
+	if (tcscasestr(classname, _T("Combo")))
+		return IC_COMBO;
+	else if (tcscasestr(classname, _T("List")))
+		return IC_LIST;
+	else if (aAllowTab && tcscasestr(classname, _T("Tab")))
+		return IC_TAB;
+	fr = FError(ERR_GUI_NOT_FOR_THIS_TYPE, classname, ErrorPrototype::Target);
+	return IC_INVALID;
+}
+
+
+
+bif_impl FResult ControlAddItem(StrArg aItem, CONTROL_PARAMETERS_DECL, INT_PTR &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	UINT msg;
+	FResult fr = FAIL;
+	switch (GetIndexControlType(control_window, fr))
+	{
+	case IC_COMBO: msg = CB_ADDSTRING; break;
+	case IC_LIST: msg = LB_ADDSTRING; break;
+	default: return fr;
+	}
+	DWORD_PTR dwResult;
+	if (!SendMessageTimeout(control_window, msg, 0, (LPARAM)aItem, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return FR_E_WIN32;
+	if (dwResult == CB_ERR || dwResult == CB_ERRSPACE) // General error or insufficient space to store it.
+		// CB_ERR == LB_ERR
+		return FR_E_FAILED;
+	DoControlDelay;
+	aRetVal = dwResult + 1; // Return the one-based index of the new item.
+	return OK;
+}
+
+
+
+bif_impl FResult ControlDeleteItem(INT_PTR aIndex, CONTROL_PARAMETERS_DECL)
+{
+	if (--aIndex < 0)
+		return FR_E_ARG(0);
+	DETERMINE_TARGET_CONTROL2;
+	UINT msg;
+	FResult fr = FAIL;
+	switch (GetIndexControlType(control_window, fr))
+	{
+	case IC_COMBO: msg = CB_DELETESTRING; break;
+	case IC_LIST: msg = LB_DELETESTRING; break;
+	default: return fr;
+	}
+	DWORD_PTR dwResult;
+	if (!SendMessageTimeout(control_window, msg, (WPARAM)aIndex, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return FR_E_WIN32;
+	if (dwResult == CB_ERR)  // CB_ERR == LB_ERR
+		return FR_E_FAILED;
+	DoControlDelay;
+	return OK;
+}
+
+
+
+static FResult ControlNotifyParent(HWND control_window, UINT x_msg, UINT y_msg)
+{
+	HWND immediate_parent;
+	if (   !(immediate_parent = GetParent(control_window))   )
+		return FR_E_WIN32;
+	SetLastError(0); // Must be done to differentiate between success and failure when control has ID 0.
+	auto control_id = GetDlgCtrlID(control_window);
+	if (!control_id && GetLastError()) // Both conditions must be checked (see above).
+		return FR_E_WIN32; // Avoid sending the notification in case some other control has ID 0.
+	// Proceed even if control_id == 0, since some applications are known to
+	// utilize the notification in that case (e.g. Notepad's Save As dialog).
+	DWORD_PTR dwResult;
+	if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg)
+		, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return FR_E_WIN32;
+	if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg)
+		, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return FR_E_WIN32;
+	DoControlDelay;
+	return OK;
+}
+
+
+
+bif_impl FResult ControlChooseIndex(INT_PTR aIndex, CONTROL_PARAMETERS_DECL)
+{
+	if (--aIndex < -1)
+		return FR_E_ARG(0);
+	DETERMINE_TARGET_CONTROL2;
+	UINT msg, x_msg, y_msg;
+	FResult fr = FAIL;
+	switch (GetIndexControlType(control_window, fr, true))
+	{
+	case IC_COMBO:
+		msg = CB_SETCURSEL;
+		x_msg = CBN_SELCHANGE;
+		y_msg = CBN_SELENDOK;
 		break;
+	case IC_LIST:
+		if (GetWindowLong(control_window, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
+			msg = LB_SETSEL;
+		else // single-select listbox
+			msg = LB_SETCURSEL;
+		x_msg = LBN_SELCHANGE;
+		y_msg = LBN_DBLCLK;
+		break;
+	case IC_TAB:
+		if (aIndex < 0)
+			return FR_E_ARG(0);
+		return ControlSetTab(control_window, (DWORD)aIndex);
+	default:
+		return fr;
 	}
 
-	case FID_ControlSetEnabled:
-		EnableWindow(control_window, aToggle == TOGGLE ? !IsWindowEnabled(control_window) : aToggle == TOGGLED_ON);
-		break;
-
-	case FID_ControlShow:
-		ShowWindow(control_window, SW_SHOWNOACTIVATE); // SW_SHOWNOACTIVATE has been seen in some example code for this purpose.
-		break;
-
-	case FID_ControlHide:
-		ShowWindow(control_window, SW_HIDE);
-		break;
-
-	case FID_ControlSetStyle:
-	case FID_ControlSetExStyle:
+	DWORD_PTR dwResult;
+	if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 	{
-		if (!*aValue)
-			_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK); // Seems best not to treat an explicit blank as zero.
-		int style_index = (control_cmd == FID_ControlSetStyle) ? GWL_STYLE : GWL_EXSTYLE;
-		DWORD new_style, orig_style = GetWindowLong(control_window, style_index);
-		// +/-/^ are used instead of |&^ because the latter is confusing, namely that & really means &=~style, etc.
-		if (!_tcschr(_T("+-^"), *aValue))
-			new_style = ATOU(aValue); // No prefix, so this new style will entirely replace the current style.
-		else
-		{
-			++aValue; // Won't work combined with next line, due to next line being a macro that uses the arg twice.
-			DWORD style_change = ATOU(aValue);
-			switch(aValue[-1])
-			{
-			case '+': new_style = orig_style | style_change; break;
-			case '-': new_style = orig_style & ~style_change; break;
-			case '^': new_style = orig_style ^ style_change; break;
-			}
-		}
-		if (new_style == orig_style) // v1.0.45.04: Ask for an unnecessary change (i.e. one that is already in effect) should not be considered an error.
-			goto success; // As documented, DoControlDelay is not done for these.
-		// Currently, BM_SETSTYLE is not done when GetClassName() says that the control is a button/checkbox/groupbox.
-		// This is because the docs for BM_SETSTYLE don't contain much, if anything, that anyone would ever
-		// want to change.
-		SetLastError(0); // Prior to SetWindowLong(), as recommended by MSDN.
-		if (SetWindowLong(control_window, style_index, new_style) || !GetLastError()) // This is the precise way to detect success according to MSDN.
-		{
-			// Even if it indicated success, sometimes it failed anyway.  Find out for sure:
-			if (GetWindowLong(control_window, style_index) != orig_style) // Even a partial change counts as a success.
-			{
-				InvalidateRect(control_window, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
-				goto success;
-			}
-		}
-		goto win32_error; // As documented, DoControlDelay is not done for these.
+		if (!SendMessageTimeout(control_window, msg, aIndex != -1, aIndex, SMTO_ABORTIFHUNG, 2000, &dwResult))
+			return FR_E_WIN32;
 	}
+	else // ComboBox or single-select ListBox.
+		if (!SendMessageTimeout(control_window, msg, aIndex, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
+			return FR_E_WIN32;
+	if (dwResult == CB_ERR && aIndex != -1)  // CB_ERR == LB_ERR
+		return FR_E_FAILED;
 
-	case FID_ControlShowDropDown:
-	case FID_ControlHideDropDown:
-		// CB_SHOWDROPDOWN: Although the return value (dwResult) is always TRUE, SendMessageTimeout()
-		// will return failure if it times out:
-		if (!SendMessageTimeout(control_window, CB_SHOWDROPDOWN
-			, (WPARAM)(control_cmd == FID_ControlShowDropDown)
-			, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
+	return ControlNotifyParent(control_window, x_msg, y_msg);
+}
+
+
+
+bif_impl FResult ControlChooseString(StrArg aValue, CONTROL_PARAMETERS_DECL, INT_PTR &aRetVal)
+{
+	DETERMINE_TARGET_CONTROL2;
+	UINT msg, x_msg, y_msg;
+	FResult fr = FAIL;
+	switch (GetIndexControlType(control_window, fr))
+	{
+	case IC_COMBO:
+		msg = CB_SELECTSTRING;
+		x_msg = CBN_SELCHANGE;
+		y_msg = CBN_SELENDOK;
 		break;
-
-	case FID_ControlAddItem:
-		GetClassName(control_window, classname, _countof(classname));
-		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. !strnicmp for TListBox/TComboBox.
-			msg = CB_ADDSTRING;
-		else if (tcscasestr(classname, _T("List")))
-			msg = LB_ADDSTRING;
-		else
-			goto control_type_error;  // Must be ComboBox or ListBox.
-		if (!SendMessageTimeout(control_window, msg, 0, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		if (dwResult == CB_ERR || dwResult == CB_ERRSPACE) // General error or insufficient space to store it.
-			// CB_ERR == LB_ERR
-			goto error;
-		_f_return(dwResult + 1); // Return the one-based index of the new item.
-
-	case FID_ControlDeleteItem:
-		control_index = aNumber - 1;
-		if (control_index < 0)
-			_f_throw_param(0);
-		GetClassName(control_window, classname, _countof(classname));
-		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
-			msg = CB_DELETESTRING;
-		else if (tcscasestr(classname, _T("List")))
-			msg = LB_DELETESTRING;
-		else
-			goto control_type_error; // Must be ComboBox or ListBox.
-		if (!SendMessageTimeout(control_window, msg, (WPARAM)control_index, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		if (dwResult == CB_ERR)  // CB_ERR == LB_ERR
-			goto error;
+	case IC_LIST:
+		if (GetWindowLong(control_window, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
+			msg = LB_FINDSTRING;
+		else // single-select listbox
+			msg = LB_SELECTSTRING;
+		x_msg = LBN_SELCHANGE;
+		y_msg = LBN_DBLCLK;
 		break;
+	default:
+		return fr;
+	}
+	DWORD_PTR dwResult, item_index;
+	if (msg == LB_FINDSTRING) // Multi-select ListBox (LB_SELECTSTRING is not supported by these).
+	{
+		if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index))
+			return FR_E_WIN32;
+		if (item_index == LB_ERR)
+			return FR_E_FAILED;
+		if (!SendMessageTimeout(control_window, LB_SETSEL, TRUE, item_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
+			return FR_E_WIN32;
+		if (dwResult == LB_ERR)
+			return FR_E_FAILED;
+	}
+	else // ComboBox or single-select ListBox.
+	{
+		if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index))
+			return FR_E_WIN32;
+		if (item_index == CB_ERR) // CB_ERR == LB_ERR
+			return FR_E_FAILED;
+	}
+	aRetVal = item_index + 1; // Return the index chosen.  Might have some use if the string was ambiguous.
+	return ControlNotifyParent(control_window, x_msg, y_msg);
+}
 
-	case FID_ControlChooseIndex:
-		control_index = aNumber - 1;
-		if (control_index < -1)
-			_f_throw_param(0);
-		GetClassName(control_window, classname, _countof(classname));
-		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
-		{
-			msg = CB_SETCURSEL;
-			x_msg = CBN_SELCHANGE;
-			y_msg = CBN_SELENDOK;
-		}
-		else if (tcscasestr(classname, _T("List")))
-		{
-			if (GetWindowLong(control_window, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
-				msg = LB_SETSEL;
-			else // single-select listbox
-				msg = LB_SETCURSEL;
-			x_msg = LBN_SELCHANGE;
-			y_msg = LBN_DBLCLK;
-		}
-		else if (tcscasestr(classname, _T("Tab")))
-		{
-			if (control_index < 0)
-				_f_throw_param(0);
-			if (!ControlSetTab(aResultToken, control_window, (DWORD)control_index))
-				goto win32_error;
-			goto success;
-		}
-		else
-			goto control_type_error; // Must be ComboBox, ListBox or Tab control.
-		if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
-		{
-			if (!SendMessageTimeout(control_window, msg, control_index != -1, control_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				goto win32_error;
-		}
-		else // ComboBox or single-select ListBox.
-			if (!SendMessageTimeout(control_window, msg, control_index, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				goto win32_error;
-		if (dwResult == CB_ERR && control_index != -1)  // CB_ERR == LB_ERR
-			goto error;
-		_f_set_retval_p(_T(""), 0);
-		goto notify_parent;
 
-	case FID_ControlChooseString:
-		GetClassName(control_window, classname, _countof(classname));
-		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
-		{
-			msg = CB_SELECTSTRING;
-			x_msg = CBN_SELCHANGE;
-			y_msg = CBN_SELENDOK;
-		}
-		else if (tcscasestr(classname, _T("List")))
-		{
-			if (GetWindowLong(control_window, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
-				msg = LB_FINDSTRING;
-			else // single-select listbox
-				msg = LB_SELECTSTRING;
-			x_msg = LBN_SELCHANGE;
-			y_msg = LBN_DBLCLK;
-		}
-		else
-			goto control_type_error; // Must be ComboBox or ListBox.
-		DWORD_PTR item_index;
-		if (msg == LB_FINDSTRING) // Multi-select ListBox (LB_SELECTSTRING is not supported by these).
-		{
-			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index))
-				goto win32_error;
-			if (item_index == LB_ERR)
-				goto error;
-			if (!SendMessageTimeout(control_window, LB_SETSEL, TRUE, item_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				goto win32_error;
-			if (dwResult == LB_ERR)
-				goto error;
-		}
-		else // ComboBox or single-select ListBox.
-		{
-			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index))
-				goto win32_error;
-			if (item_index == CB_ERR) // CB_ERR == LB_ERR
-				goto error;
-		}
-		_f_set_retval_i(item_index + 1); // Return the index chosen.  Might have some use if the string was ambiguous.
-	notify_parent:
-		if (   !(immediate_parent = GetParent(control_window))   )
-			goto win32_error;
-		SetLastError(0); // Must be done to differentiate between success and failure when control has ID 0.
-		control_id = GetDlgCtrlID(control_window);
-		if (!control_id && GetLastError()) // Both conditions must be checked (see above).
-			goto win32_error; // Avoid sending the notification in case some other control has ID 0.
-		// Proceed even if control_id == 0, since some applications are known to
-		// utilize the notification in that case (e.g. Notepad's Save As dialog).
-		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg)
-			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg)
-			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		_f_return_retval;
 
-	case FID_EditPaste:
-		if (!SendMessageTimeout(control_window, EM_REPLACESEL, TRUE, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto win32_error;
-		// Note: dwResult is not used by EM_REPLACESEL since it doesn't return a value.
-		break;
-	} // switch()
-
-	DoControlDelay;  // Seems safest to do this for all of these commands.
-success:
-	_f_return_empty;
-
-win32_error:
-	_f_throw_win32();
-
-error: // GetLastError() is no use in this case.
-	_f_throw(ERR_FAILED);
-
-control_type_error:
-	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname, ErrorPrototype::Target);
+bif_impl FResult EditPaste(StrArg aValue, CONTROL_PARAMETERS_DECL)
+{
+	DETERMINE_TARGET_CONTROL2;
+	DWORD_PTR dwResult;
+	if (!SendMessageTimeout(control_window, EM_REPLACESEL, TRUE, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return FR_E_WIN32;
+	DoControlDelay;
+	return OK;
 }
 
 

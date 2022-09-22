@@ -12,16 +12,28 @@ md_func(CallbackCreate, (In, Object, Function), (In_Opt, String, Options), (In_O
 md_func(CallbackFree, (In, UIntPtr, Callback))
 #endif
 
+md_func(ControlAddItem, (In, String, Value), MD_CONTROL_ARGS, (Ret, IntPtr, Index))
+md_func(ControlChooseIndex, (In, IntPtr, Index), MD_CONTROL_ARGS)
+md_func(ControlChooseString, (In, String, Value), MD_CONTROL_ARGS, (Ret, IntPtr, Index))
 md_func(ControlClick, (In_Opt, Variant, Control), (In_Opt, Variant, WinTitle), (In_Opt, String, WinText), (In_Opt, String, Button), (In_Opt, Int32, Count), (In_Opt, String, Options), (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText))
+md_func(ControlDeleteItem, (In, IntPtr, Index), MD_CONTROL_ARGS)
 md_func(ControlFocus, MD_CONTROL_ARGS)
 md_func(ControlGetClassNN, MD_CONTROL_ARGS, (Ret, String, ClassNN))
 md_func(ControlGetFocus, MD_WINTITLE_ARGS, (Ret, UIntPtr, Hwnd))
 md_func(ControlGetPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height), MD_CONTROL_ARGS)
 md_func(ControlGetText, MD_CONTROL_ARGS, (Ret, String, Text))
+md_func(ControlHide, MD_CONTROL_ARGS)
+md_func(ControlHideDropDown, MD_CONTROL_ARGS)
 md_func(ControlMove, (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Width), (In_Opt, Int32, Height), MD_CONTROL_ARGS)
 md_func(ControlSend, (In, String, Keys), MD_CONTROL_ARGS_OPT)
 md_func(ControlSendText, (In, String, Keys), MD_CONTROL_ARGS_OPT)
+md_func(ControlSetChecked, (In, Int32, Value), MD_CONTROL_ARGS)
+md_func(ControlSetEnabled, (In, Int32, Value), MD_CONTROL_ARGS)
+md_func(ControlSetExStyle, (In, String, Value), MD_CONTROL_ARGS)
+md_func(ControlSetStyle, (In, String, Value), MD_CONTROL_ARGS)
 md_func(ControlSetText, (In, String, NewText), MD_CONTROL_ARGS)
+md_func(ControlShow, MD_CONTROL_ARGS)
+md_func(ControlShowDropDown, MD_CONTROL_ARGS)
 
 md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
 md_func_v(Critical, (In_Opt, String, OnOffNumber))
@@ -51,6 +63,8 @@ md_func(DriveSetLabel, (In, String, Drive), (In_Opt, String, Label))
 md_func(DriveUnlock, (In, String, Drive))
 
 md_func_v(Edit, md_arg_none)
+
+md_func(EditPaste, (In, String, Value), MD_CONTROL_ARGS)
 
 md_func(EnvGet, (In, String, VarName), (Ret, String, RetVal))
 md_func_x(EnvSet, EnvSet, NzIntWin32, (In, String, VarName), (In_Opt, String, Value))

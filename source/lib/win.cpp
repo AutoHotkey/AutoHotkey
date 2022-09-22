@@ -599,6 +599,26 @@ control_error:
 
 
 
+static FResult ControlShow(CONTROL_PARAMETERS_DECL, int aShow)
+{
+	DETERMINE_TARGET_CONTROL2;
+	ShowWindow(control_window, aShow);
+	DoControlDelay;
+	return OK;
+}
+
+bif_impl FResult ControlShow(CONTROL_PARAMETERS_DECL)
+{
+	return ControlShow(CONTROL_PARAMETERS, SW_SHOWNOACTIVATE);
+}
+
+bif_impl FResult ControlHide(CONTROL_PARAMETERS_DECL)
+{
+	return ControlShow(CONTROL_PARAMETERS, SW_HIDE);
+}
+
+
+
 bif_impl FResult ControlMove(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int> aHeight, CONTROL_PARAMETERS_DECL)
 {
 	DETERMINE_TARGET_CONTROL2;
@@ -792,6 +812,16 @@ bif_impl FResult ControlGetText(CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
 	aRetVal.SetLength(actual_length);
 	if (!actual_length) // There was no text to get or GetWindowTextTimeout() failed.
 		*buf = '\0';
+	return OK;
+}
+
+
+
+bif_impl FResult ControlSetEnabled(int aValue, CONTROL_PARAMETERS_DECL)
+{
+	DETERMINE_TARGET_CONTROL2;
+	EnableWindow(control_window, aValue == -1 ? !IsWindowEnabled(control_window) : aValue);
+	DoControlDelay;
 	return OK;
 }
 
@@ -1083,14 +1113,14 @@ error:
 
 
 
-bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex)
+FResult ControlSetTab(HWND aHwnd, DWORD aTabIndex)
 {
 	DWORD_PTR dwResult;
 	// MSDN: "If the tab control does not have the TCS_BUTTONS style, changing the focus also changes
 	// the selected tab. In this case, the tab control sends the TCN_SELCHANGING and TCN_SELCHANGE
 	// notification codes to its parent window."
 	if (!SendMessageTimeout(aHwnd, TCM_SETCURFOCUS, aTabIndex, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-		return false;
+		return FR_E_WIN32;
 	// Tab controls with the TCS_BUTTONS style need additional work:
 	if (GetWindowLong(aHwnd, GWL_STYLE) & TCS_BUTTONS)
 	{
@@ -1126,7 +1156,7 @@ bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex)
 		PostMessage(aHwnd, WM_KEYDOWN, VK_SPACE, 0x00000001);
 		PostMessage(aHwnd, WM_KEYUP, VK_SPACE, 0xC0000001);
 	}
-	return true;
+	return OK;
 }
 
 

@@ -4,3 +4,9 @@
 #define _T(x) (x)
 #define Exp32or64(a, b) (b)
 #define bif_impl
+
+#define WINTITLE_PARAMETERS_DECL ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText
+#define WINTITLE_PARAMETERS aWinTitle, aWinText, aExcludeTitle, aExcludeText
+#define CONTROL_PARAMETERS_DECL ExprTokenType &aControlSpec, WINTITLE_PARAMETERS_DECL
+#define CONTROL_PARAMETERS_DECL_OPT ExprTokenType *aControlSpec, WINTITLE_PARAMETERS_DECL
+#define CONTROL_PARAMETERS aControlSpec, WINTITLE_PARAMETERS
