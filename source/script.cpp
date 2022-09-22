@@ -106,7 +106,6 @@ FuncEntry g_BIF[] =
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
 	BIFi(IsXDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_XDIGIT),
 	BIFn(KeyWait, 1, 2, BIF_Wait),
-	BIFn(ListViewGetContent, 0, 6, BIF_ControlGet),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
 	BIFn(LTrim, 1, 2, BIF_Trim),

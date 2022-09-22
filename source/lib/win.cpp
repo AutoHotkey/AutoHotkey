@@ -827,13 +827,16 @@ bif_impl FResult ControlSetEnabled(int aValue, CONTROL_PARAMETERS_DECL)
 
 
 
-void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions)
-// Called by ControlGet() below.  It has ensured that aHwnd is a valid handle to a ListView.
+bif_impl FResult ListViewGetContent(optl<StrArg> aOpt, CONTROL_PARAMETERS_DECL, ResultToken &aResultToken)
 {
+	DETERMINE_TARGET_CONTROL2;
+	auto aHwnd = control_window;
+	auto aOptions = aOpt.value_or_empty();
+
 	// GET ROW COUNT
 	LRESULT row_count;
 	if (!SendMessageTimeout(aHwnd, LVM_GETITEMCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&row_count)) // Timed out or failed.
-		goto error;
+		return FR_E_WIN32;
 
 	// GET COLUMN COUNT
 	// Through testing, could probably get to a level of 90% certainty that a ListView for which
@@ -879,7 +882,7 @@ void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions)
 	int requested_col = col_option ? ATOI(col_option + 3) - 1 : -1;
 	if (col_option && (get_count ? col_option[3] && !IS_SPACE_OR_TAB(col_option[3]) // "Col" has a suffix.
 		: (requested_col < 0 || col_count > -1 && requested_col >= col_count))) // Specified column does not exist.
-		_f_throw_value(ERR_PARAM1_INVALID, col_option);
+		return FR_E_ARG(0);
 
 	// IF THE "COUNT" OPTION IS PRESENT, FULLY HANDLE THAT AND RETURN
 	if (get_count)
@@ -888,24 +891,25 @@ void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions)
 		if (include_focused_only) // Listed first so that it takes precedence over include_selected_only.
 		{
 			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, -1, LVNI_FOCUSED, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
-				goto error;
+				return FR_E_WIN32;
 			++result; // i.e. Set it to 0 if not found, or the 1-based row-number otherwise.
 		}
 		else if (include_selected_only)
 		{
 			if (!SendMessageTimeout(aHwnd, LVM_GETSELECTEDCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
-				goto error;
+				return FR_E_WIN32;
 		}
 		else if (col_option) // "Count Col" returns the number of columns.
 			result = (int)col_count;
 		else // Total row count.
 			result = (int)row_count;
-		_f_return(result);
+		aResultToken.SetValue(result);
+		return OK;
 	}
 
 	// FINAL CHECKS
 	if (row_count < 1 || !col_count) // But don't return when col_count == -1 (i.e. always make the attempt when col count is undetermined).
-		_f_return_empty;  // No text in the control, so indicate success.
+		return OK;  // No text in the control, so indicate success.
 	
 	// Notes about the following struct definitions:  The layout of LVITEM depends on
 	// which platform THIS executable was compiled for, but we need it to match what
@@ -958,7 +962,7 @@ void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions)
 	HANDLE handle;
 	LPVOID p_remote_lvi; // Not of type LPLVITEM to help catch bugs where p_remote_lvi->member is wrongly accessed here in our process.
 	if (   !(p_remote_lvi = AllocInterProcMem(handle, sizeof(local_lvi) + _TSIZE(LV_REMOTE_BUF_SIZE), aHwnd, PROCESS_QUERY_INFORMATION))   ) // Allocate both the LVITEM struct and its internal string buffer in one go because VirtualAllocEx() is probably a high overhead call.
-		goto error;
+		return FR_E_WIN32;
 	LPVOID p_remote_text = (LPVOID)((UINT_PTR)p_remote_lvi + sizeof(local_lvi)); // The next buffer is the memory area adjacent to, but after the struct.
 	
 	// PREPARE LVI STRUCT MEMBERS FOR TEXT RETRIEVAL
@@ -1026,7 +1030,10 @@ void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions)
 
 	// SET UP THE OUTPUT BUFFER
 	if (!TokenSetResult(aResultToken, NULL, (size_t)total_length))
-		goto cleanup_and_return; // Error() was already called.
+	{
+		FreeInterProcMem(handle, p_remote_lvi);
+		return aResultToken.Exited() ? FR_FAIL : FR_ABORTED;
+	}
 	aResultToken.symbol = SYM_STRING;
 	
 	LPTSTR contents = aResultToken.marker;
@@ -1102,13 +1109,8 @@ break_both:
 	*contents = '\0'; // Final termination.  Above has reserved room for this one byte.
 	aResultToken.marker_length = (size_t)total_length; // Update to actual vs. estimated length.
 
-	// CLEAN UP
-cleanup_and_return: // This is "called" if a memory allocation failed above
 	FreeInterProcMem(handle, p_remote_lvi);
-	return;
-
-error:
-	_f_throw_win32();
+	return OK;
 }
 
 

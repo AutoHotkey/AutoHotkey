@@ -3384,7 +3384,6 @@ FResult DetermineTargetControl(HWND &aControl, HWND &aWindow, CONTROL_PARAMETERS
 
 LPTSTR GetExitReasonString(ExitReasons aExitReason);
 
-void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions);
 FResult ControlSetTab(HWND aHwnd, DWORD aTabIndex);
 
 FResult PixelSearch(BOOL *aFound, ResultToken *aFoundX, ResultToken *aFoundY
