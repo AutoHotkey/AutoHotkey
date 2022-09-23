@@ -1181,39 +1181,34 @@ FResult ControlSetTab(HWND aHwnd, DWORD aTabIndex)
 
 
 
-BIF_DECL(BIF_StatusBarGetText)//(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
-	//, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+bif_impl FResult StatusBarGetText(optl<int> aPart, WINTITLE_PARAMETERS_DECL, StrRet &aRetVal)
 {
-	int part = ParamIndexToOptionalInt(0, 1);
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
-		return;
-	HWND control_window = ControlExist(target_window, _T("msctls_statusbar321"));
+	DETERMINE_TARGET_WINDOW;
 	// StatusBarUtil will handle any NULL control_window or zero part# for us.
-	StatusBarUtil(aResultToken, control_window, part);
+	return StatusBarUtil(target_window, aPart.value_or(1), &aRetVal);
 }
 
 
 
-BIF_DECL(BIF_StatusBarWait)
+bif_impl FResult StatusBarWait(optl<StrArg> aText, optl<double> aTimeout, optl<int> aPart
+	, ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<int> aInterval
+	, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText, int &aRetVal)
 {
 	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 3, aParamCount - 3, 1))
-		return;
-
-	LPTSTR aTextToWaitFor = ParamIndexToOptionalString(0, _f_number_buf);
-	int aSeconds = ParamIndexIsOmittedOrEmpty(1) ? -1 : int(ParamIndexToDouble(1) * 1000);
-	int aPart = ParamIndexToOptionalInt(2, 0);
-	int aInterval = ParamIndexToOptionalInt(5, 50);
-
+	DETERMINE_TARGET_WINDOW;
 	// Make a copy of any memory areas that are volatile (due to caller passing a variable,
 	// which could be reassigned by a new hotkey subroutine launched while we are waiting)
 	// but whose contents we need to refer to while we are waiting:
 	TCHAR text_to_wait_for[4096];
-	tcslcpy(text_to_wait_for, aTextToWaitFor, _countof(text_to_wait_for));
-	HWND control_window = ControlExist(target_window, _T("msctls_statusbar321"));
+	tcslcpy(text_to_wait_for, aText.value_or_empty(), _countof(text_to_wait_for));
 	// StatusBarUtil will handle any NULL control_window or zero part# for us.
-	StatusBarUtil(aResultToken, control_window, aPart, text_to_wait_for, aSeconds, aInterval);
+	auto fr = StatusBarUtil(target_window, aPart.value_or(0), nullptr, text_to_wait_for
+		, aTimeout.has_value() ? int(aTimeout.value() * 1000) : -1, aInterval.value_or(50));
+	if (fr != TRUE && fr != FALSE)
+		return fr;
+	aRetVal = fr;
+	return OK;
 }
 
 

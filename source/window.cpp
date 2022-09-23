@@ -733,12 +733,13 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 
 
 
-void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
-	, LPTSTR aTextToWaitFor, int aWaitTime, int aCheckInterval)
+FResult StatusBarUtil(HWND aWindow, int aPartNumber, StrRet *aRetVal
+	, LPCTSTR aTextToWaitFor, int aWaitTime, int aCheckInterval)
 // aBarHwnd is allowed to be NULL because in that case, the caller wants us to set aresultToken appropriately.
 {
+	HWND aBarHwnd = ControlExist(aWindow, _T("msctls_statusbar321"));
 	if (!aBarHwnd)
-		_f_throw(ERR_NO_STATUSBAR, ErrorPrototype::Target);
+		return FError(ERR_NO_STATUSBAR, nullptr, ErrorPrototype::Target);
 
 	if (aCheckInterval < 1)
 		aCheckInterval = SB_DEFAULT_CHECK_INTERVAL; // Caller relies on us doing this.
@@ -762,11 +763,11 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 	LPVOID remote_buf;
 	LRESULT part_count; // The number of parts this status bar has.
 	if (!SendMessageTimeout(aBarHwnd, SB_GETPARTS, 0, 0, SMTO_ABORTIFHUNG, SB_TIMEOUT, (PDWORD_PTR)&part_count)) // It failed or timed out.
-		goto error;
+		return FR_E_WIN32;
 	if (aPartNumber > part_count)
-		_f_throw_value(ERR_PARAM1_INVALID);
+		return FR_E_ARG(aTextToWaitFor ? 2 : 0);
 	if (  !(remote_buf = AllocInterProcMem(handle, _TSIZE(WINDOW_TEXT_SIZE + 1), aBarHwnd))  )
-		goto error;
+		return FR_E_WIN32;
 
 	TCHAR local_buf[WINDOW_TEXT_SIZE + 1]; // The local counterpart to the buf allocated remotely above.
 
@@ -798,10 +799,7 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 				// normal/intuitive matching, a match is also achieved if both are empty strings.
 				// In fact, IsTextMatch() yields "true" whenever aTextToWaitFor is the empty string:
 				if (aTextToWaitFor && IsTextMatch(local_buf, aTextToWaitFor))
-				{
-					aResultToken.value_int64 = TRUE; // Indicate "match found".
-					break;
-				}
+					return TRUE; // Indicate "match found".
 			}
 			//else SB_GETTEXT msg timed out or failed.  Leave local_buf unaltered.  See comment below.
 		}
@@ -823,20 +821,14 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 			&& (aWaitTime < 0 || (int)(aWaitTime - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)   )
 			MsgSleep(aCheckInterval);
 		else // Timed out.
-		{
-			aResultToken.value_int64 = FALSE; // Indicate "timeout".
-			break;
-		}
+			return FALSE; // Indicate "timeout".
 	} // for()
 
 	FreeInterProcMem(handle, remote_buf);
 	// Consider this to be always successful, even if aBarHwnd == NULL.
-	if (!aTextToWaitFor)
-		aResultToken.Return(local_buf);
-	return;
-
-error:
-	_f_throw_win32();
+	if (aRetVal && !aRetVal->Copy(local_buf))
+		return FR_E_OUTOFMEM;
+	return OK;
 }
 
 

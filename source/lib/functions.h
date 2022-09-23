@@ -234,6 +234,9 @@ md_func_x(Sleep, ScriptSleep, Void, (In, Int32, Delay))
 md_func_v(SoundBeep, (In_Opt, Int32, Duration), (In_Opt, Int32, Frequency))
 md_func(SoundPlay, (In, String, Path), (In_Opt, String, Wait))
 
+md_func(StatusBarGetText, (In_Opt, Int32, Part), MD_WINTITLE_ARGS, (Ret, String, RetVal))
+md_func(StatusBarWait, (In_Opt, String, Text), (In_Opt, Float64, Timeout), (In_Opt, Int32, Part), (In_Opt, Variant, WinTitle), (In_Opt, String, WinText), (In_Opt, Int32, Interval), (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText), (Ret, Bool32, RetVal))
+
 md_func(Suspend, (In_Opt, Int32, Mode))
 
 md_func_x(SysGet, SysGet, Int32, (In, Int32, Index))

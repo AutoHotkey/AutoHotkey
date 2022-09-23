@@ -3292,8 +3292,6 @@ BIF_DECL(BIF_Random);
 BIF_DECL(BIF_Run);
 BIF_DECL(BIF_Sound);
 BIF_DECL(BIF_SplitPath);
-BIF_DECL(BIF_StatusBarGetText);
-BIF_DECL(BIF_StatusBarWait);
 BIF_DECL(BIF_CaretGetPos);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
