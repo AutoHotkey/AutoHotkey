@@ -194,6 +194,9 @@ md_func_v(Persistent, (In_Opt, Bool32, NewValue), (Ret, Bool32, OldValue))
 md_func(PixelGetColor, (In, Int32, X), (In, Int32, Y), (In_Opt, String, Mode), (Ret, String, Color))
 md_func(PixelSearch, (Ret, Bool32, Found), (Out, Variant, X), (Out, Variant, Y), (In, Int32, X1), (In, Int32, Y1), (In, Int32, X2), (In, Int32, Y2), (In, UInt32, Color), (In_Opt, Int32, Variation))
 
+#undef PostMessage
+md_func_x(PostMessage, ScriptPostMessage, FResult, (In, UInt32, Msg), (In_Opt, Variant, wParam), (In_Opt, Variant, lParam), MD_CONTROL_ARGS_OPT)
+
 md_func(ProcessClose, (In, String, Process), (Ret, UInt32, ClosedPID))
 md_func_x(ProcessExist, ProcessExist, UInt32, (In_Opt, String, Process))
 md_func(ProcessGetName, (In_Opt, String, Process), (Ret, String, Name))
@@ -210,6 +213,10 @@ md_func_v(Send, (In, String, Keys))
 md_func_v(SendEvent, (In, String, Keys))
 md_func_v(SendInput, (In, String, Keys))
 md_func(SendLevel, (In, Int32, Level))
+
+#undef SendMessage
+md_func_x(SendMessage, ScriptSendMessage, FResult, (In, UInt32, Msg), (In_Opt, Variant, wParam), (In_Opt, Variant, lParam), MD_CONTROL_ARGS_OPT, (In_Opt, Int32, Timeout), (Ret, UIntPtr, RetVal))
+
 md_func(SendMode, (In, String, Mode))
 md_func_v(SendPlay, (In, String, Keys))
 md_func_v(SendText, (In, String, Text))

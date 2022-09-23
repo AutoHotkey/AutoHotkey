@@ -1213,42 +1213,18 @@ bif_impl FResult StatusBarWait(optl<StrArg> aText, optl<double> aTimeout, optl<i
 
 
 
-BIF_DECL(BIF_PostSendMessage)
-// Arg list:
-// sArgDeref[0]: Msg number
-// sArgDeref[1]: wParam
-// sArgDeref[2]: lParam
-// sArgDeref[3]: Control
-// sArgDeref[4]: WinTitle
-// sArgDeref[5]: WinText
-// sArgDeref[6]: ExcludeTitle
-// sArgDeref[7]: ExcludeText
-// sArgDeref[8]: Timeout
+static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType *aLParam
+	, CONTROL_PARAMETERS_DECL_OPT, optl<int> aTimeout = nullptr, UINT_PTR *aSendRetVal = nullptr)
 {
-	bool aUseSend = _f_callee_id == FID_SendMessage;
 	bool successful = false;
 
-	DETERMINE_TARGET_CONTROL(3);
+	DETERMINE_TARGET_CONTROL2;
 
-	UINT msg = ParamIndexToInt(0);
-	// Timeout increased from 2000 to 5000 in v1.0.27:
-	// jackieku: specify timeout by the parameter.
-	UINT timeout = ParamIndexToOptionalInt(8, 5000);
-
-	// Fixed for v1.0.48.04: Make copies of the wParam and lParam variables (if eligible for updating) prior
-	// to sending the message in case the message triggers a callback or OnMessage function, which would be
-	// likely to change the contents of the mArg array before we're doing using them after the Post/SendMsg.
-	// Seems best to do the above EVEN for PostMessage in case it can ever trigger a SendMessage internally
-	// (I seem to remember that the OS sometimes converts a PostMessage call into a SendMessage if the
-	// origin and destination are the same thread.)
-	// v1.0.43.06: If either wParam or lParam contained the address of a variable, update the mLength
-	// member after sending the message in case the receiver of the message wrote something to the buffer.
-	// This is similar to the way "Str" parameters work in DllCall.
 	INT_PTR param[2] = { 0, 0 };
-	int i;
-	for (i = 1; i < 3; ++i) // Two iterations: wParam and lParam.
+	ExprTokenType *aParam[] = { aWParam, aLParam };
+	for (int i = 0; i < 2; ++i) // Two iterations: wParam and lParam.
 	{
-		if (ParamIndexIsOmitted(i))
+		if (!aParam[i])
 			continue;
 		ExprTokenType &this_param = *aParam[i];
 		if (this_param.symbol == SYM_VAR)
@@ -1256,46 +1232,61 @@ BIF_DECL(BIF_PostSendMessage)
 		switch (this_param.symbol)
 		{
 		case SYM_INTEGER:
-			param[i-1] = (INT_PTR)this_param.value_int64;
+			param[i] = (INT_PTR)this_param.value_int64;
 			break;
 		case SYM_OBJECT: // Support Buffer-like objects, i.e, objects with a "Ptr" property.
+		{
 			size_t ptr_property_value;
-			GetBufferObjectPtr(aResultToken, this_param.object, ptr_property_value);
-			if (aResultToken.Exited())
-				return;
-			param[i - 1] = ptr_property_value;
+			ResultToken result_token;
+			result_token.SetResult(OK);
+			GetBufferObjectPtr(result_token, this_param.object, ptr_property_value);
+			if (result_token.Exited())
+				return FR_FAIL;
+			param[i] = ptr_property_value;
 			break;
+		}
 		case SYM_STRING:
 			LPTSTR error_marker;
-			param[i - 1] = (INT_PTR)istrtoi64(this_param.marker, &error_marker);
+			param[i] = (INT_PTR)istrtoi64(this_param.marker, &error_marker);
 			if (!*error_marker) // Valid number or empty string.
 				break;
-			//else: It's a non-numeric string; maybe the caller forgot the &address-of operator.
+			//else: It's a non-numeric string; maybe the caller forgot StrPtr().
 			// Note that an empty string would satisfy the check above.
 			// Fall through:
 		default:
 			// SYM_FLOAT: Seems best to treat it as an error rather than truncating the value.
-			_f_throw(i == 1 ? ERR_PARAM2_INVALID : ERR_PARAM3_INVALID, ErrorPrototype::Type);
+			return FR_E_ARG(1 + i);
 		}
 	}
 
 	DWORD_PTR dwResult;
-	if (aUseSend)
-		successful = SendMessageTimeout(control_window, msg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, timeout, &dwResult);
+	if (aSendRetVal)
+		successful = SendMessageTimeout(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, aTimeout.value_or(5000), &dwResult);
 	else
-		successful = PostMessage(control_window, msg, (WPARAM)param[0], (LPARAM)param[1]);
+		successful = PostMessage(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1]);
 
 	if (!successful)
 	{
 		auto last_error = GetLastError();
-		if (aUseSend && last_error == ERROR_TIMEOUT)
-			_f_throw(ERR_TIMEOUT, ErrorPrototype::Timeout);
-		_f_throw_win32(last_error); // Passing last_error reduces code size due to the implied additional GetLastError() call when omitting this parameter.
+		if (aSendRetVal && last_error == ERROR_TIMEOUT)
+			return FError(ERR_TIMEOUT, nullptr, ErrorPrototype::Timeout);
+		return FR_E_WIN32(last_error);
 	}
-	if (aUseSend)
-		_f_return_i((__int64)dwResult);
-	else
-		_f_return_empty;
+	if (aSendRetVal)
+		*aSendRetVal = dwResult;
+	return OK;
+}
+
+bif_impl FResult ScriptSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType *aLParam
+	, CONTROL_PARAMETERS_DECL_OPT, optl<int> aTimeout, UINT_PTR &aRetVal)
+{
+	return PostSendMessage(aMsg, aWParam, aLParam, CONTROL_PARAMETERS, aTimeout, &aRetVal);
+}
+
+bif_impl FResult ScriptPostMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType *aLParam
+	, CONTROL_PARAMETERS_DECL_OPT)
+{
+	return PostSendMessage(aMsg, aWParam, aLParam, CONTROL_PARAMETERS);
 }
 
 
