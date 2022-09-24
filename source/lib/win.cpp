@@ -23,21 +23,16 @@ GNU General Public License for more details.
 
 
 
-BIF_DECL(BIF_WinShow)
+static FResult WinAct(WINTITLE_PARAMETERS_DECL, BuiltInFunctionID action, optl<double> aWaitTime = nullptr)
 {
-	auto action = _f_callee_id;
-
-	_f_set_retval_p(_T(""), 0);
-
-	_f_param_string_opt(aTitle, 0);
-	_f_param_string_opt(aText, 1);
-	// The remaining parameters depend on which function this is.
-
+	TCHAR title_buf[MAX_NUMBER_SIZE];
+	auto aTitle = TokenToString(*aWinTitle, title_buf);
+	auto aText = aWinText.value_or_empty();
 	// Set initial guess for is_ahk_group (further refined later).  For ahk_group, WinText,
 	// ExcludeTitle, and ExcludeText must be blank so that they are reserved for future use
 	// (i.e. they're currently not supported since the group's own criteria take precedence):
-	bool is_ahk_group = !_tcsnicmp(aTitle, _T("ahk_group"), 9)
-		&& ParamIndexIsOmittedOrEmpty(1) && ParamIndexIsOmittedOrEmpty(3);
+	bool is_ahk_group = !_tcsnicmp(aTitle, _T("ahk_group"), 9) && !*aText
+		&& aExcludeTitle.is_blank_or_omitted() && aExcludeText.is_blank_or_omitted();
 	// The following is not quite accurate since is_ahk_group is only a guess at this stage, but
 	// given the extreme rarity of the guess being wrong, this shortcut seems justified to reduce
 	// the code size/complexity.  A wait_time of zero seems best for group closing because it's
@@ -45,35 +40,26 @@ BIF_DECL(BIF_WinShow)
 	// this makes "WinClose ahk_group GroupName" behave identically to "GroupClose GroupName",
 	// which seems best, for consistency:
 	int wait_time = is_ahk_group ? 0 : DEFAULT_WINCLOSE_WAIT;
-	if (action == FID_WinClose || action == FID_WinKill) // aParam[2] contains the wait time.
-	{
-		if (!ParamIndexIsOmittedOrEmpty(2))
-			wait_time = (int)(1000 * ParamIndexToDouble(2));
-		if (!ParamIndexIsOmittedOrEmpty(4))
-			is_ahk_group = false;  // Override the default.
-	}
-	else
-		if (!ParamIndexIsOmittedOrEmpty(2))
-			is_ahk_group = false;  // Override the default.
+	if (aWaitTime.has_value()) // Implies (action == FID_WinClose || action == FID_WinKill)
+		wait_time = (int)(1000 * aWaitTime.value());
 	if (is_ahk_group)
 		if (WinGroup *group = g_script.FindGroup(omit_leading_whitespace(aTitle + 9)))
 		{
 			group->ActUponAll(action, wait_time); // It will do DoWinDelay if appropriate.
-			_f_return_retval;
+			return OK;
 		}
 	// Since above didn't return, either the group doesn't exist or it's paired with other
 	// criteria, such as "ahk_group G ahk_class C", so do the normal single-window behavior.
 
 	HWND target_window = NULL;
-	if (aParamCount > 0)
+	if (aWinTitle)
 	{
-		switch (DetermineTargetHwnd(target_window, aResultToken, *aParam[0]))
-		{
-		case FAIL: return;
-		case OK:
-			if (!target_window) // Specified a HWND of 0, or IsWindow() returned false.
-				_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
-		}
+		bool hwnd_specified;
+		auto fr = DetermineTargetHwnd(target_window, hwnd_specified, *aWinTitle);
+		if (fr != OK)
+			return fr;
+		if (hwnd_specified && !target_window) // Specified a HWND of 0, or IsWindow() returned false.
+			return FError(ERR_NO_WINDOW, nullptr, ErrorPrototype::Target);
 	}
 
 	if (action == FID_WinClose || action == FID_WinKill)
@@ -82,32 +68,28 @@ BIF_DECL(BIF_WinShow)
 		{
 			WinClose(target_window, wait_time, action == FID_WinKill);
 			DoWinDelay;
-			_f_return_retval;
+			return OK;
 		}
-		_f_param_string_opt(aExcludeTitle, 3);
-		_f_param_string_opt(aExcludeText, 4);
-		if (!WinClose(*g, aTitle, aText, wait_time, aExcludeTitle, aExcludeText, action == FID_WinKill))
+		if (!WinClose(*g, aTitle, aText, wait_time, aExcludeTitle.value_or_empty(), aExcludeText.value_or_empty(), action == FID_WinKill))
 			// Currently WinClose returns NULL only for this case; it doesn't confirm the window closed.
-			_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
+			return FError(ERR_NO_WINDOW, nullptr, ErrorPrototype::Target);
 		DoWinDelay;
-		_f_return_retval;
+		return OK;
 	}
 
 	if (!target_window)
 	{
-		_f_param_string_opt(aExcludeTitle, 2);
-		_f_param_string_opt(aExcludeText, 3);
 		// By design, the WinShow command must always unhide a hidden window, even if the user has
 		// specified that hidden windows should not be detected.  So set this now so that
 		// DetermineTargetWindow() will make its calls in the right mode:
-		bool need_restore = (_f_callee_id == FID_WinShow && !g->DetectHiddenWindows);
+		bool need_restore = (action == FID_WinShow && !g->DetectHiddenWindows);
 		if (need_restore)
 			g->DetectHiddenWindows = true;
-		target_window = Line::DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+		target_window = Line::DetermineTargetWindow(aTitle, aText, aExcludeTitle.value_or_empty(), aExcludeText.value_or_empty());
 		if (need_restore)
 			g->DetectHiddenWindows = false;
 		if (!target_window)
-			_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
+			return FError(ERR_NO_WINDOW, nullptr, ErrorPrototype::Target);
 	}
 
 	// WinGroup's EnumParentActUponAll() is quite similar to the following, so the two should be
@@ -166,7 +148,42 @@ BIF_DECL(BIF_WinShow)
 		//	ShowWindowAsync(target_window, nCmdShow);
 		DoWinDelay;
 	}
-	_f_return_retval;
+	return OK;
+}
+
+bif_impl FResult WinClose(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aWaitTime, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText)
+{
+	return WinAct(WINTITLE_PARAMETERS, FID_WinClose, aWaitTime);
+}
+
+bif_impl FResult WinKill(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aWaitTime, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText)
+{
+	return WinAct(WINTITLE_PARAMETERS, FID_WinKill, aWaitTime);
+}
+
+bif_impl FResult WinShow(WINTITLE_PARAMETERS_DECL)
+{
+	return WinAct(WINTITLE_PARAMETERS, FID_WinShow);
+}
+
+bif_impl FResult WinHide(WINTITLE_PARAMETERS_DECL)
+{
+	return WinAct(WINTITLE_PARAMETERS, FID_WinHide);
+}
+
+bif_impl FResult WinMaximize(WINTITLE_PARAMETERS_DECL)
+{
+	return WinAct(WINTITLE_PARAMETERS, FID_WinMaximize);
+}
+
+bif_impl FResult WinMinimize(WINTITLE_PARAMETERS_DECL)
+{
+	return WinAct(WINTITLE_PARAMETERS, FID_WinMinimize);
+}
+
+bif_impl FResult WinRestore(WINTITLE_PARAMETERS_DECL)
+{
+	return WinAct(WINTITLE_PARAMETERS, FID_WinRestore);
 }
 
 

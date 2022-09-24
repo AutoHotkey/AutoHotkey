@@ -379,8 +379,8 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 
 
 
-HWND WinClose(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, int aTimeToWaitForClose
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText, bool aKillIfHung)
+HWND WinClose(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, int aTimeToWaitForClose
+	, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText, bool aKillIfHung)
 // Return the HWND of any found-window to the caller so that it has the option of waiting
 // for it to become an invalid (closed) window.
 {
@@ -492,7 +492,7 @@ HWND WinClose(HWND aWnd, int aTimeToWaitForClose, bool aKillIfHung)
 
 
 	
-HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
+HWND WinActive(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText
 	, bool aUpdateLastUsed)
 // This function must be kept thread-safe because it may be called (indirectly) by hook thread too.
 // In addition, it must not change the value of anything in aSettings except when aUpdateLastUsed==true.

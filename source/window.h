@@ -220,11 +220,11 @@ HWND SetForegroundWindowEx(HWND aTargetWindow);
 // Defaulting to a non-zero wait-time solves a lot of script problems that would otherwise
 // require the user to specify the last param (or use WinWaitClose):
 #define DEFAULT_WINCLOSE_WAIT 20
-HWND WinClose(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, int aTimeToWaitForClose = DEFAULT_WINCLOSE_WAIT
-	, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""), bool aKillIfHung = false);
+HWND WinClose(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, int aTimeToWaitForClose = DEFAULT_WINCLOSE_WAIT
+	, LPCTSTR aExcludeTitle = _T(""), LPCTSTR aExcludeText = _T(""), bool aKillIfHung = false);
 HWND WinClose(HWND aWnd, int aTimeToWaitForClose = DEFAULT_WINCLOSE_WAIT, bool aKillIfHung = false);
 
-HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
+HWND WinActive(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText
 	, bool aUpdateLastUsed = false);
 
 HWND WinExist(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText
