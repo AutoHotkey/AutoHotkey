@@ -283,6 +283,7 @@ md_func(WinMove, (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Width),
 md_func(WinMoveBottom, MD_WINTITLE_ARGS)
 md_func(WinMoveTop, MD_WINTITLE_ARGS)
 md_func(WinSetAlwaysOnTop, (In_Opt, Int32, Value), MD_WINTITLE_ARGS)
+md_func(WinSetEnabled, (In, Int32, Value), MD_WINTITLE_ARGS)
 md_func(WinSetExStyle, (In, String, Style), MD_WINTITLE_ARGS)
 md_func(WinSetStyle, (In, String, Style), MD_WINTITLE_ARGS)
 md_func(WinSetTitle, (In, String, NewTitle), MD_WINTITLE_ARGS)

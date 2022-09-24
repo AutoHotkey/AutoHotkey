@@ -826,12 +826,33 @@ bif_impl FResult ControlGetText(CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
 
 
 
+static FResult WinSetEnabled(int aValue, CONTROL_PARAMETERS_DECL_OPT)
+{
+	if (aValue < -1 || aValue > 1)
+		return FR_E_ARG(0);
+	DETERMINE_TARGET_CONTROL2;
+	// If this is WinSetEnabled rather than ControlSetEnabled, control_window == target_window.
+	if (aValue == -1)
+		aValue = IsWindowEnabled(control_window) ? 0 : 1;
+	EnableWindow(control_window, aValue);
+	bool success = !IsWindowEnabled(control_window) == !aValue;
+	if (aControlSpec)
+		DoControlDelay;
+	return success ? OK : FR_E_FAILED;
+}
+
+
+
+bif_impl FResult WinSetEnabled(int aValue, WINTITLE_PARAMETERS_DECL)
+{
+	return WinSetEnabled(aValue, nullptr, WINTITLE_PARAMETERS);
+}
+
+
+
 bif_impl FResult ControlSetEnabled(int aValue, CONTROL_PARAMETERS_DECL)
 {
-	DETERMINE_TARGET_CONTROL2;
-	EnableWindow(control_window, aValue == -1 ? !IsWindowEnabled(control_window) : aValue);
-	DoControlDelay;
-	return OK;
+	return WinSetEnabled(aValue, &CONTROL_PARAMETERS);
 }
 
 
@@ -1487,25 +1508,10 @@ BIF_DECL(BIF_WinSet)
 	BuiltInFunctionID cmd = _f_callee_id;
 
 	LPTSTR aValue;
-	ToggleValueType toggle = TOGGLE_INVALID;
-	if (cmd == FID_WinSetAlwaysOnTop || cmd == FID_WinSetEnabled)
-	{
-		toggle = ParamIndexToToggleValue(0);
-		if (toggle == TOGGLE_INVALID)
-			_f_throw_param(0);
-	}
-	else
 		aValue = ParamIndexToString(0, _f_number_buf);
 
 	switch (cmd)
 	{
-	case FID_WinSetEnabled:
-		if (toggle == TOGGLE)
-			toggle = IsWindowEnabled(target_window) ? TOGGLED_OFF : TOGGLED_ON;
-		EnableWindow(target_window, toggle == TOGGLED_ON); // Return value is based on previous state, not success/failure.
-		success = bool(IsWindowEnabled(target_window)) == (toggle == TOGGLED_ON);
-		break;
-
 	case FID_WinSetRegion:
 		WinSetRegion(target_window, aValue, aResultToken);
 		return;
