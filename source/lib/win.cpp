@@ -1451,6 +1451,32 @@ error:
 
 
 
+bif_impl FResult WinSetAlwaysOnTop(optl<int> aValue, WINTITLE_PARAMETERS_DECL)
+{
+	HWND target_window, topmost_or_not;
+	DETERMINE_TARGET_WINDOW;
+	switch (aValue.value_or(1))
+	{
+	case 1: topmost_or_not = HWND_TOPMOST; break;
+	case 0: topmost_or_not = HWND_NOTOPMOST; break;
+	case -1:
+		topmost_or_not = (GetWindowLong(target_window, GWL_EXSTYLE) & WS_EX_TOPMOST)
+			? HWND_NOTOPMOST : HWND_TOPMOST;
+		break;
+	default:
+		return FR_E_ARG(0);
+	}
+	// SetWindowLong() didn't seem to work, at least not on some windows.  But this does.
+	// As of v1.0.25.14, SWP_NOACTIVATE is also specified, though its absence does not actually
+	// seem to activate the window, at least on XP (perhaps due to anti-focus-stealing measure
+	// in Win98/2000 and beyond).  Or perhaps its something to do with the presence of
+	// topmost_or_not (HWND_TOPMOST/HWND_NOTOPMOST), which might always avoid activating the
+	// window.
+	return SetWindowPos(target_window, topmost_or_not, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) ? OK : FR_E_WIN32;
+}
+
+
+
 BIF_DECL(BIF_WinSet)
 {
 	HWND target_window;
@@ -1475,28 +1501,6 @@ BIF_DECL(BIF_WinSet)
 
 	switch (cmd)
 	{
-	case FID_WinSetAlwaysOnTop:
-	{
-		HWND topmost_or_not;
-		switch (toggle)
-		{
-		case TOGGLED_ON: topmost_or_not = HWND_TOPMOST; break;
-		case TOGGLED_OFF: topmost_or_not = HWND_NOTOPMOST; break;
-		case TOGGLE:
-			exstyle = GetWindowLong(target_window, GWL_EXSTYLE);
-			topmost_or_not = (exstyle & WS_EX_TOPMOST) ? HWND_NOTOPMOST : HWND_TOPMOST;
-			break;
-		}
-		// SetWindowLong() didn't seem to work, at least not on some windows.  But this does.
-		// As of v1.0.25.14, SWP_NOACTIVATE is also specified, though its absence does not actually
-		// seem to activate the window, at least on XP (perhaps due to anti-focus-stealing measure
-		// in Win98/2000 and beyond).  Or perhaps its something to do with the presence of
-		// topmost_or_not (HWND_TOPMOST/HWND_NOTOPMOST), which might always avoid activating the
-		// window.
-		success = SetWindowPos(target_window, topmost_or_not, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-		break;
-	}
-
 	case FID_WinSetTransparent:
 	case FID_WinSetTransColor:
 	{

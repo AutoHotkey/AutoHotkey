@@ -164,7 +164,6 @@ FuncEntry g_BIF[] =
 	BIFn(WinMaximize, 0, 4, BIF_WinShow),
 	BIFn(WinMinimize, 0, 4, BIF_WinShow),
 	BIFn(WinRestore, 0, 4, BIF_WinShow),
-	BIFn(WinSetAlwaysOnTop, 0, 5, BIF_WinSet),
 	BIFn(WinSetEnabled, 1, 5, BIF_WinSet),
 	BIFn(WinSetExStyle, 1, 5, BIF_WinSet),
 	BIFn(WinSetRegion, 0, 5, BIF_WinSet),
