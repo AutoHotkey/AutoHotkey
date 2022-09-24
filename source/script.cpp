@@ -168,8 +168,6 @@ FuncEntry g_BIF[] =
 	BIFn(WinSetExStyle, 1, 5, BIF_WinSet),
 	BIFn(WinSetRegion, 0, 5, BIF_WinSet),
 	BIFn(WinSetStyle, 1, 5, BIF_WinSet),
-	BIFn(WinSetTransColor, 1, 5, BIF_WinSet),
-	BIFn(WinSetTransparent, 1, 5, BIF_WinSet),
 	BIFn(WinShow, 0, 4, BIF_WinShow),
 	BIFn(WinWait, 0, 5, BIF_Wait),
 	BIFn(WinWaitActive, 0, 5, BIF_Wait),

@@ -1483,9 +1483,7 @@ BIF_DECL(BIF_WinSet)
 	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
 		return;
 
-	int value;
 	BOOL success = FALSE;
-	DWORD exstyle;
 	BuiltInFunctionID cmd = _f_callee_id;
 
 	LPTSTR aValue;
@@ -1501,94 +1499,6 @@ BIF_DECL(BIF_WinSet)
 
 	switch (cmd)
 	{
-	case FID_WinSetTransparent:
-	case FID_WinSetTransColor:
-	{
-		// IMPORTANT (when considering future enhancements to these commands): Unlike
-		// SetLayeredWindowAttributes(), which works on Windows 2000, GetLayeredWindowAttributes()
-		// is supported only on XP or later.
-
-		// It appears that turning on WS_EX_LAYERED in an attempt to retrieve the window's
-		// former transparency setting does not work.  The OS probably does not store the
-		// former transparency level (i.e. it forgets it the moment the WS_EX_LAYERED exstyle
-		// is turned off).  This is true even if the following are done after the SetWindowLong():
-		//MySetLayeredWindowAttributes(target_window, 0, 0, 0)
-		// or:
-		//if (MyGetLayeredWindowAttributes(target_window, &color, &alpha, &flags))
-		//	MySetLayeredWindowAttributes(target_window, color, alpha, flags);
-		// The above is why there is currently no "on" or "toggle" sub-command, just "Off".
-
-		// Since the color of an HBRUSH can't be easily determined (since it can be a pattern and
-		// since there seem to be no easy API calls to discover the colors of pixels in an HBRUSH),
-		// the following is not yet implemented: Use window's own class background color (via
-		// GetClassLong) if aValue is entirely blank.
-
-		exstyle = GetWindowLong(target_window, GWL_EXSTYLE);
-		if (!_tcsicmp(aValue, _T("Off")) || !*aValue)
-			// One user reported that turning off the attribute helps window's scrolling performance.
-			success = SetWindowLong(target_window, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED);
-		else
-		{
-			if (cmd == FID_WinSetTransparent)
-			{
-				if (!IsNumeric(aValue, FALSE, FALSE))
-					_f_throw_param(0);
-
-				// Update to the below for v1.0.23: WS_EX_LAYERED can now be removed via the above:
-				// NOTE: It seems best never to remove the WS_EX_LAYERED attribute, even if the value is 255
-				// (non-transparent), since the window might have had that attribute previously and may need
-				// it to function properly.  For example, an app may support making its own windows transparent
-				// but might not expect to have to turn WS_EX_LAYERED back on if we turned it off.  One drawback
-				// of this is a quote from somewhere that might or might not be accurate: "To make this window
-				// completely opaque again, remove the WS_EX_LAYERED bit by calling SetWindowLong and then ask
-				// the window to repaint. Removing the bit is desired to let the system know that it can free up
-				// some memory associated with layering and redirection."
-				value = ATOI(aValue);
-				// A little debatable, but this behavior seems best, at least in some cases:
-				if (value < 0)
-					value = 0;
-				else if (value > 255)
-					value = 255;
-				SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
-				success = SetLayeredWindowAttributes(target_window, 0, value, LWA_ALPHA);
-			}
-			else // cmd == FID_WinSetTransColor
-			{
-				// The reason WINSET_TRANSCOLOR accepts both the color and an optional transparency settings
-				// is that calling SetLayeredWindowAttributes() with only the LWA_COLORKEY flag causes the
-				// window to lose its current transparency setting in favor of the transparent color.  This
-				// is true even though the LWA_ALPHA flag was not specified, which seems odd and is a little
-				// disappointing, but that's the way it is on XP at least.
-				TCHAR aValue_copy[256];
-				tcslcpy(aValue_copy, aValue, _countof(aValue_copy)); // Make a modifiable copy.
-				LPTSTR space_pos = StrChrAny(aValue_copy, _T(" \t")); // Space or tab.
-				if (space_pos)
-				{
-					*space_pos = '\0';
-					++space_pos;  // Point it to the second substring.
-				}
-				COLORREF color = ColorNameToBGR(aValue_copy);
-				if (color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
-					// It seems _tcstol() automatically handles the optional leading "0x" if present:
-					color = rgb_to_bgr(_tcstol(aValue_copy, NULL, 16));
-				DWORD flags;
-				if (   space_pos && *(space_pos = omit_leading_whitespace(space_pos))   ) // Relies on short-circuit boolean.
-				{
-					value = ATOI(space_pos);  // To keep it simple, don't bother with 0 to 255 range validation in this case.
-					flags = LWA_COLORKEY|LWA_ALPHA;  // i.e. set both the trans-color and the transparency level.
-				}
-				else // No translucency value is present, only a trans-color.
-				{
-					value = 0;  // Init to avoid possible compiler warning.
-					flags = LWA_COLORKEY;
-				}
-				SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
-				success = SetLayeredWindowAttributes(target_window, color, value, flags);
-			}
-		}
-		break;
-	}
-
 	case FID_WinSetStyle:
 	case FID_WinSetExStyle:
 	{
@@ -1935,6 +1845,112 @@ bif_impl FResult WinGetTransColor(WINTITLE_PARAMETERS_DECL, StrRet &aRetVal)
 	// Otherwise, this window does not have a transparent color (or it's not accessible to us,
 	// perhaps for reasons described at MSDN GetLayeredWindowAttributes()).
 	return OK;
+}
+
+
+
+static FResult WinSetTrans(COLORREF color, LPCTSTR aAlpha, WINTITLE_PARAMETERS_DECL)
+{
+	// It appears that turning on WS_EX_LAYERED in an attempt to retrieve the window's
+	// former transparency setting does not work.  The OS probably does not store the
+	// former transparency level (i.e. it forgets it the moment the WS_EX_LAYERED exstyle
+	// is turned off).  This is true even if the following are done after the SetWindowLong():
+	//MySetLayeredWindowAttributes(target_window, 0, 0, 0)
+	// or:
+	//if (MyGetLayeredWindowAttributes(target_window, &color, &alpha, &flags))
+	//	MySetLayeredWindowAttributes(target_window, color, alpha, flags);
+	// The above is why there is currently no "on" or "toggle" sub-command, just "Off".
+
+	// Since the color of an HBRUSH can't be easily determined (since it can be a pattern and
+	// since there seem to be no easy API calls to discover the colors of pixels in an HBRUSH),
+	// the following is not yet implemented: Use window's own class background color (via
+	// GetClassLong) if aValue is entirely blank.
+
+	DWORD flags = color == CLR_NONE ? 0 : LWA_COLORKEY;
+	BYTE alpha;
+	if (aAlpha && *aAlpha)
+	{
+		flags |= LWA_ALPHA;
+		LPCTSTR endptr;
+		auto n = istrtoi64(aAlpha, &endptr);
+		if (*endptr || n < 0 || n > 255)
+			return FR_E_ARG(0);
+		alpha = (BYTE)n;
+	}
+
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+
+	BOOL success;
+	DWORD exstyle = GetWindowLong(target_window, GWL_EXSTYLE);
+	if (!flags)
+		// One user reported that turning off the attribute helps window's scrolling performance.
+		success = SetWindowLong(target_window, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED);
+	else
+	{
+		SetWindowLong(target_window, GWL_EXSTYLE, exstyle | WS_EX_LAYERED);
+		success = SetLayeredWindowAttributes(target_window, color, alpha, flags);
+	}
+	return success ? OK : FR_E_WIN32;
+}
+
+
+
+bif_impl FResult WinSetTransparent(StrArg aAlpha, WINTITLE_PARAMETERS_DECL)
+{
+	if (!_tcsicmp(aAlpha, _T("Off")))
+		aAlpha = nullptr;
+	return WinSetTrans(CLR_NONE, aAlpha, WINTITLE_PARAMETERS);
+}
+
+
+
+bif_impl FResult WinSetTransColor(ExprTokenType &aValue, WINTITLE_PARAMETERS_DECL)
+{
+	TCHAR aValue_copy[256];
+	COLORREF color = CLR_NONE;
+	LPTSTR alpha = nullptr;
+	switch (TypeOfToken(aValue))
+	{
+	case SYM_INTEGER:
+		// Handle pure numeric values this way rather than allowing them to be implicitly converted
+		// to string, since the conversion would use decimal formatting, but the string is assumed
+		// to use hexadecimal.
+		color = rgb_to_bgr((DWORD)TokenToInt64(aValue));
+		break;
+	default: // SYM_FLOAT, SYM_OBJECT
+		return FR_E_ARG(0);
+	case SYM_STRING:
+		// The reason WinSetTransColor accepts both the color and an optional transparency settings
+		// is that calling SetLayeredWindowAttributes() with only the LWA_COLORKEY flag causes the
+		// window to lose its current transparency setting in favor of the transparent color.  This
+		// is true even though the LWA_ALPHA flag was not specified, which seems odd and is a little
+		// disappointing, but that's the way it is on XP at least.
+		tcslcpy(aValue_copy, TokenToString(aValue), _countof(aValue_copy)); // Make a modifiable copy.
+		if (!_tcsicmp(aValue_copy, _T("Off")))
+			break;
+		alpha = StrChrAny(aValue_copy, _T(" \t")); // Space or tab.
+		if (alpha)
+		{
+			*alpha = '\0';
+			alpha = omit_leading_whitespace(alpha + 1); // Point it to the second substring.
+		}
+		if (*aValue_copy) // Seems more flexible to allow a leading space to omit the color key, rather than interpreting it as black or an error.
+		{
+			color = ColorNameToBGR(aValue_copy);
+			if (color == CLR_NONE)
+			{
+				// A matching color name was not found, so assume it's in hex format.
+				// _tcstol() automatically handles the optional leading "0x" if present:
+				LPTSTR endptr;
+				color = rgb_to_bgr(_tcstol(aValue_copy, &endptr, 16));
+				if (*endptr) // Invalid color name/number.
+					return FR_E_ARG(0);
+			}
+		}
+		break;
+	}
+	return WinSetTrans(color, alpha, WINTITLE_PARAMETERS);
 }
 
 
