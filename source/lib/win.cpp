@@ -1312,9 +1312,12 @@ bif_impl FResult ScriptPostMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenT
 
 
 
-void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
+bif_impl FResult WinSetRegion(optl<StrArg> aOptions, WINTITLE_PARAMETERS_DECL)
 {
-	if (!*aPoints) // Attempt to restore the window's normal/correct region.
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+
+	if (aOptions.is_blank_or_omitted()) // Attempt to restore the window's normal/correct region.
 	{
 		// Fix for v1.0.31.07: The old method used the following, but apparently it's not the correct
 		// way to restore a window's proper/normal region because when such a window is later maximized,
@@ -1340,15 +1343,15 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 
 		// It's undocumented by MSDN, but apparently setting the Window's region to NULL restores it
 		// to proper working order:
-		if (!SetWindowRgn(aWnd, NULL, TRUE))
-			_f_throw_win32();
-		_f_return_empty;
+		if (!SetWindowRgn(target_window, NULL, TRUE))
+			return FR_E_WIN32;
+		return OK;
 	}
 
 	#define MAX_REGION_POINTS 2000  // 2000 requires 16 KB of stack space.
 	POINT pt[MAX_REGION_POINTS];
 	int pt_count;
-	LPTSTR cp;
+	LPCTSTR cp;
 
 	// Set defaults prior to parsing options in case any options are absent:
 	int width = COORD_UNSPECIFIED;
@@ -1366,11 +1369,11 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 	// region within the polygon (that is, the points of the star), but WINDING mode fills all regions
 	// (that is, the points and the pentagon)."
 
-	for (pt_count = 0, cp = aPoints; *(cp = omit_leading_whitespace(cp));)
+	for (pt_count = 0, cp = aOptions.value(); *(cp = omit_leading_whitespace(cp));)
 	{
 		// To allow the MAX to be increased in the future with less chance of breaking existing scripts, consider this an error.
 		if (pt_count >= MAX_REGION_POINTS)
-			goto arg_error;
+			return FR_E_ARG(0);
 
 		if (isdigit(*cp) || *cp == '-' || *cp == '+') // v1.0.38.02: Recognize leading minus/plus sign so that the X-coord is just as tolerant as the Y.
 		{
@@ -1384,7 +1387,7 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 			// "x" is not used to avoid detecting "x" inside hex numbers.
 			#define REGION_DELIMITER '-'
 			if (   !(cp = _tcschr(cp + 1, REGION_DELIMITER))   ) // v1.0.38.02: cp + 1 to omit any leading minus sign.
-				goto arg_error;
+				return FR_E_ARG(0);
 			pt[pt_count].y = ATOI(++cp);  // Increment cp by only 1 to support negative Y-coord.
 			++pt_count; // Move on to the next element of the pt array.
 		}
@@ -1408,7 +1411,7 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 					if (cp = _tcschr(cp, REGION_DELIMITER)) // Assign
 						rr_height = ATOI(++cp);
 					else // Avoid problems with going beyond the end of the string.
-						goto arg_error;
+						return FR_E_ARG(0);
 				}
 				break;
 			case 'W':
@@ -1421,7 +1424,7 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 				height = ATOI(cp);
 				break;
 			default: // For simplicity and to reserve other letters for future use, unknown options result in failure.
-				goto arg_error;
+				return FR_E_ARG(0);
 			} // switch()
 		} // else
 
@@ -1430,7 +1433,7 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 	}
 
 	if (!pt_count)
-		goto arg_error;
+		return FR_E_ARG(0);
 
 	bool width_and_height_were_both_specified = !(width == COORD_UNSPECIFIED || height == COORD_UNSPECIFIED);
 	if (width_and_height_were_both_specified)
@@ -1449,25 +1452,19 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 	else // Polygon
 		hrgn = CreatePolygonRgn(pt, pt_count, fill_mode);
 	if (!hrgn)
-		goto error;
+		return FR_E_WIN32;
 	// Since above didn't return, hrgn is now a non-NULL region ready to be assigned to the window.
 
 	// Presumably, the system deletes the window's former region upon a successful call to SetWindowRgn():
-	if (!SetWindowRgn(aWnd, hrgn, TRUE))
+	if (!SetWindowRgn(target_window, hrgn, TRUE))
 	{
 		DeleteObject(hrgn);
-		goto error;
+		return FR_E_WIN32;
 	}
 	//else don't delete hrgn since the system has taken ownership of it.
 
 	// Since above didn't return, it's a success.
-	_f_return_empty;
-
-arg_error:
-	_f_throw_value(ERR_PARAM1_INVALID);
-
-error:
-	_f_throw_win32();
+	return OK;
 }
 
 
@@ -1494,32 +1491,6 @@ bif_impl FResult WinSetAlwaysOnTop(optl<int> aValue, WINTITLE_PARAMETERS_DECL)
 	// topmost_or_not (HWND_TOPMOST/HWND_NOTOPMOST), which might always avoid activating the
 	// window.
 	return SetWindowPos(target_window, topmost_or_not, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) ? OK : FR_E_WIN32;
-}
-
-
-
-BIF_DECL(BIF_WinSet)
-{
-	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
-		return;
-
-	BOOL success = FALSE;
-	BuiltInFunctionID cmd = _f_callee_id;
-
-	LPTSTR aValue;
-		aValue = ParamIndexToString(0, _f_number_buf);
-
-	switch (cmd)
-	{
-	case FID_WinSetRegion:
-		WinSetRegion(target_window, aValue, aResultToken);
-		return;
-
-	} // switch()
-	if (!success)
-		_f_throw_win32();
-	_f_return_empty;
 }
 
 

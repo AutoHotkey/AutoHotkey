@@ -651,7 +651,6 @@ enum BuiltInFunctionID {
 	FID_ObjGetBase = 0, FID_ObjSetBase,
 	FID_ObjPtr = 0, FID_ObjPtrAddRef, FID_ObjFromPtr, FID_ObjFromPtrAddRef,
 	FID_WinGetPos = 0, FID_WinGetClientPos,
-	FID_WinSetTransparent = 0, FID_WinSetTransColor, FID_WinSetAlwaysOnTop, FID_WinSetStyle, FID_WinSetExStyle, FID_WinSetEnabled, FID_WinSetRegion,
 	FID_WinMoveBottom = 0, FID_WinMoveTop,
 	FID_WinShow = 0, FID_WinHide, FID_WinMinimize, FID_WinMaximize, FID_WinRestore, FID_WinClose, FID_WinKill,
 	FID_WinActivate = 0, FID_WinActivateBottom,
@@ -3297,7 +3296,6 @@ BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
 BIF_DECL(BIF_WinGetTitle);
 BIF_DECL(BIF_WinGetPos);
-BIF_DECL(BIF_WinSet);
 BIF_DECL(BIF_WinRedraw);
 BIF_DECL(BIF_WinMoveTopBottom);
 BIF_DECL(BIF_WinShow);
