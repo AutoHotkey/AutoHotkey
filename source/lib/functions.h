@@ -74,7 +74,7 @@ md_func(DriveUnlock, (In, String, Drive))
 
 md_func_v(Edit, md_arg_none)
 
-md_func(EditGetCurrentCol, MD_CONTROL_ARGS, (Ret, UIntPtr, Index))
+md_func(EditGetCurrentCol, MD_CONTROL_ARGS, (Ret, UInt32, Index))
 md_func(EditGetCurrentLine, MD_CONTROL_ARGS, (Ret, UIntPtr, Index))
 md_func(EditGetLine, (In, IntPtr, Index), MD_CONTROL_ARGS, (Ret, String, RetVal))
 md_func(EditGetLineCount, MD_CONTROL_ARGS, (Ret, UIntPtr, Index))

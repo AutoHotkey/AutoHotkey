@@ -819,10 +819,11 @@ bif_impl FResult EditGetCurrentLine(CONTROL_PARAMETERS_DECL, UINT_PTR &aRetVal)
 
 
 
-bif_impl FResult EditGetCurrentCol(CONTROL_PARAMETERS_DECL, UINT_PTR &aRetVal)
+bif_impl FResult EditGetCurrentCol(CONTROL_PARAMETERS_DECL, UINT &aRetVal)
 {
 	DETERMINE_TARGET_CONTROL2;
-	DWORD_PTR dwResult, line_number, start, end;
+	DWORD_PTR dwResult, line_number;
+	DWORD start = 0, end = 0;
 	// The dwResult from the first msg below is not useful and is not checked.
 	if (   !SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult)
 		|| !SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &line_number)   )
@@ -838,7 +839,7 @@ bif_impl FResult EditGetCurrentCol(CONTROL_PARAMETERS_DECL, UINT_PTR &aRetVal)
 	DWORD_PTR line_start;
 	if (!SendMessageTimeout(control_window, EM_LINEINDEX, (WPARAM)line_number, 0, SMTO_ABORTIFHUNG, 2000, &line_start))
 		return FR_E_WIN32;
-	aRetVal = start - line_start + 1;
+	aRetVal = start - (UINT)line_start + 1;
 	return OK;
 }
 
@@ -872,7 +873,8 @@ bif_impl FResult EditGetLine(INT_PTR aIndex, CONTROL_PARAMETERS_DECL, StrRet &aR
 bif_impl FResult EditGetSelectedText(CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
 {
 	DETERMINE_TARGET_CONTROL2;
-	DWORD_PTR start, end, length, dwResult;
+	DWORD_PTR length, dwResult;
+	DWORD start = 0, end = 0;
 	// Note: The RichEdit controls of certain apps such as Metapad don't return the right selection
 	// with this technique.  Au3 has the same problem with them, so for now it's just documented here
 	// as a limitation.
