@@ -1499,49 +1499,6 @@ BIF_DECL(BIF_WinSet)
 
 	switch (cmd)
 	{
-	case FID_WinSetStyle:
-	case FID_WinSetExStyle:
-	{
-		if (!*aValue)
-		{
-			// Seems best not to treat an explicit blank as zero.
-			_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);
-		}
-		int style_index = (cmd == FID_WinSetStyle) ? GWL_STYLE : GWL_EXSTYLE;
-		DWORD new_style, orig_style = GetWindowLong(target_window, style_index);
-		if (!_tcschr(_T("+-^"), *aValue))
-			new_style = ATOU(aValue); // No prefix, so this new style will entirely replace the current style.
-		else
-		{
-			++aValue; // Won't work combined with next line, due to next line being a macro that uses the arg twice.
-			DWORD style_change = ATOU(aValue);
-			// +/-/^ are used instead of |&^ because the latter is confusing, namely that
-			// "&" really means &=~style, etc.
-			switch(aValue[-1])
-			{
-			case '+': new_style = orig_style | style_change; break;
-			case '-': new_style = orig_style & ~style_change; break;
-			case '^': new_style = orig_style ^ style_change; break;
-			}
-		}
-		SetLastError(0); // Prior to SetWindowLong(), as recommended by MSDN.
-		if (SetWindowLong(target_window, style_index, new_style) || !GetLastError()) // This is the precise way to detect success according to MSDN.
-		{
-			// Even if it indicated success, sometimes it failed anyway.  Find out for sure:
-			if (new_style == orig_style || GetWindowLong(target_window, style_index) != orig_style) // Even a partial change counts as a success.
-			{
-				// SetWindowPos is also necessary, otherwise the frame thickness entirely around the window
-				// does not get updated (just parts of it):
-				SetWindowPos(target_window, NULL, 0, 0, 0, 0, SWP_DRAWFRAME|SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
-				// Since SetWindowPos() probably doesn't know that the style changed, below is probably necessary
-				// too, at least in some cases:
-				InvalidateRect(target_window, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
-				success = TRUE;
-			}
-		}
-		break;
-	}
-
 	case FID_WinSetEnabled:
 		if (toggle == TOGGLE)
 			toggle = IsWindowEnabled(target_window) ? TOGGLED_OFF : TOGGLED_ON;
@@ -1807,6 +1764,66 @@ bif_impl FResult WinGetStyle(WINTITLE_PARAMETERS_DECL, UINT &aRetVal)
 bif_impl FResult WinGetExStyle(WINTITLE_PARAMETERS_DECL, UINT &aRetVal)
 {
 	return WinGetLong(WINTITLE_PARAMETERS, aRetVal, GWL_EXSTYLE);
+}
+
+
+
+// Shared by WinSetStyle, ControlSetStyle and the Ex variants.
+FResult WinSetStyle(StrArg aValue, CONTROL_PARAMETERS_DECL_OPT, int style_index)
+{
+	if (!*aValue)
+		return FR_E_ARG(0); // Seems best to treat an explicit blank as an error.
+	DETERMINE_TARGET_CONTROL2;
+	// If this is WinSetStyle rather than ControlSetStyle, control_window == target_window.
+	DWORD new_style, orig_style = GetWindowLong(control_window, style_index);
+	// +/-/^ are used instead of |&^ because the latter is confusing, namely that & really means &=~style, etc.
+	if (!_tcschr(_T("+-^"), *aValue))
+		new_style = ATOU(aValue); // No prefix, so this new style will entirely replace the current style.
+	else
+	{
+		++aValue;
+		DWORD style_change = ATOU(aValue);
+		switch(aValue[-1])
+		{
+		case '+': new_style = orig_style | style_change; break;
+		case '-': new_style = orig_style & ~style_change; break;
+		case '^': new_style = orig_style ^ style_change; break;
+		}
+	}
+	if (new_style == orig_style) // No change needed.  Detection of success below relies on this check.
+		return OK;
+	// Currently, BM_SETSTYLE is not done when GetClassName() says that the control is a button/checkbox/groupbox.
+	// This is because the docs for BM_SETSTYLE don't contain much, if anything, that anyone would ever
+	// want to change.
+	SetLastError(0); // Prior to SetWindowLong(), as recommended by MSDN.
+	if (SetWindowLong(control_window, style_index, new_style) || !GetLastError()) // This is the precise way to detect success according to MSDN.
+	{
+		// Even if it indicated success, sometimes it failed anyway.  Find out for sure:
+		if (GetWindowLong(control_window, style_index) != orig_style) // Even a partial change counts as a success.
+		{
+			if (control_window == target_window) // WinSetStyle/WinSetExStyle
+			{
+				// SetWindowPos is also necessary, otherwise the frame thickness entirely around the window
+				// does not get updated (just parts of it):
+				SetWindowPos(target_window, NULL, 0, 0, 0, 0, SWP_DRAWFRAME|SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+				// Since SetWindowPos() probably doesn't know that the style changed, below is probably necessary
+				// too, at least in some cases:
+			}
+			InvalidateRect(control_window, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
+			return OK;
+		}
+	}
+	return FR_E_WIN32;
+}
+
+bif_impl FResult WinSetStyle(StrArg aValue, WINTITLE_PARAMETERS_DECL)
+{
+	return WinSetStyle(aValue, nullptr, WINTITLE_PARAMETERS, GWL_STYLE);
+}
+
+bif_impl FResult WinSetExStyle(StrArg aValue, WINTITLE_PARAMETERS_DECL)
+{
+	return WinSetStyle(aValue, nullptr, WINTITLE_PARAMETERS, GWL_EXSTYLE);
 }
 
 

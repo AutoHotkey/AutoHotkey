@@ -374,52 +374,16 @@ bif_impl FResult ControlGetChecked(CONTROL_PARAMETERS_DECL, BOOL &aRetVal)
 
 
 
-static FResult ControlSetStyle(StrArg aValue, CONTROL_PARAMETERS_DECL, int style_index)
-{
-	if (!*aValue)
-		return FR_E_ARG(0); // Seems best to treat an explicit blank as an error.
-	DETERMINE_TARGET_CONTROL2;
-	DWORD new_style, orig_style = GetWindowLong(control_window, style_index);
-	// +/-/^ are used instead of |&^ because the latter is confusing, namely that & really means &=~style, etc.
-	if (!_tcschr(_T("+-^"), *aValue))
-		new_style = ATOU(aValue); // No prefix, so this new style will entirely replace the current style.
-	else
-	{
-		++aValue; // Won't work combined with next line, due to next line being a macro that uses the arg twice.
-		DWORD style_change = ATOU(aValue);
-		switch(aValue[-1])
-		{
-		case '+': new_style = orig_style | style_change; break;
-		case '-': new_style = orig_style & ~style_change; break;
-		case '^': new_style = orig_style ^ style_change; break;
-		}
-	}
-	if (new_style == orig_style) // v1.0.45.04: Ask for an unnecessary change (i.e. one that is already in effect) should not be considered an error.
-		return OK;
-	// Currently, BM_SETSTYLE is not done when GetClassName() says that the control is a button/checkbox/groupbox.
-	// This is because the docs for BM_SETSTYLE don't contain much, if anything, that anyone would ever
-	// want to change.
-	SetLastError(0); // Prior to SetWindowLong(), as recommended by MSDN.
-	if (SetWindowLong(control_window, style_index, new_style) || !GetLastError()) // This is the precise way to detect success according to MSDN.
-	{
-		// Even if it indicated success, sometimes it failed anyway.  Find out for sure:
-		if (GetWindowLong(control_window, style_index) != orig_style) // Even a partial change counts as a success.
-		{
-			InvalidateRect(control_window, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
-			return OK;
-		}
-	}
-	return FR_E_WIN32;
-}
+FResult WinSetStyle(StrArg aValue, CONTROL_PARAMETERS_DECL_OPT, int style_index);
 
 bif_impl FResult ControlSetStyle(StrArg aValue, CONTROL_PARAMETERS_DECL)
 {
-	return ControlSetStyle(aValue, CONTROL_PARAMETERS, GWL_STYLE);
+	return WinSetStyle(aValue, &CONTROL_PARAMETERS, GWL_STYLE);
 }
 
 bif_impl FResult ControlSetExStyle(StrArg aValue, CONTROL_PARAMETERS_DECL)
 {
-	return ControlSetStyle(aValue, CONTROL_PARAMETERS, GWL_EXSTYLE);
+	return WinSetStyle(aValue, &CONTROL_PARAMETERS, GWL_EXSTYLE);
 }
 
 
