@@ -617,7 +617,7 @@ ObjectMember GuiControlType::sMembersLV[] =
 	FUN1(GetText, 1, 2, LV_GetText),
 	FUNn(Add, 0, MAXP_VARIADIC, LV_AddInsertModify, LV),
 	FUNn(Insert, 1, MAXP_VARIADIC, LV_AddInsertModify, LV),
-	FUNn(Modify, 2, MAXP_VARIADIC, LV_AddInsertModify, LV),
+	FUNn(Modify, 1, MAXP_VARIADIC, LV_AddInsertModify, LV),
 	FUN1(Delete, 0, 1, LV_Delete),
 	FUNn(InsertCol, 1, 3, LV_InsertModifyDeleteCol, LV),
 	FUNn(ModifyCol, 0, 3, LV_InsertModifyDeleteCol, LV),
