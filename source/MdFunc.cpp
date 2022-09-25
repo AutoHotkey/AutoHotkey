@@ -354,6 +354,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	rup = DynaCall(mArgSlots, args, mMcFunc, mThisCall);
 
 	// Convert the return value
+	bool aborted = false;
 	switch (mRetType)
 	{
 	case MdType::Int32: aResultToken.SetValue(ri32); break;
@@ -367,10 +368,10 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		if (FAILED(res))
 		{
 			FResultToError(aResultToken, aParam, aParamCount, res);
-			retval_index = -1; // Leave aResultToken empty.
+			aborted = true;
 		}
-		else if (res == FR_ABORTED)
-			retval_index = -1; // Leave aResultToken set to its default value.
+		else
+			aborted = (res == FR_ABORTED);
 		break;
 	case MdType::NzIntWin32:
 		if (!(BOOL)rup)
@@ -391,6 +392,12 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		}
 		else if (retval_arg_type != MdType::Variant) // Variant type passes aResultToken directly.
 			TypedPtrToToken(retval_arg_type, (void*)args[retval_index], aResultToken);
+	}
+	if (aborted)
+	{
+		aResultToken.Free(); // In case memory was allocated or an object was returned, despite the return value indicating failure.
+		aResultToken.mem_to_free = nullptr; // Because Free() doesn't clear it.
+		aResultToken.SetValue(_T(""), 0);
 	}
 
 	// Copy output parameters
