@@ -715,8 +715,6 @@ private:
 	ResultType PerformAssign();
 	bool CatchThis(ExprTokenType &aThrown);
 
-	static FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
-
 public:
 	#define SET_S_DEREF_BUF(ptr, size) Line::sDerefBuf = ptr, Line::sDerefBufSize = size
 
@@ -3238,10 +3236,7 @@ BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_MinMax);
 BIF_DECL(BIF_DateAdd);
 BIF_DECL(BIF_DateDiff);
-BIF_DECL(BIF_PostSendMessage);
 BIF_DECL(BIF_Hotkey);
-
-BIF_DECL(BIF_LoadPicture);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 BIF_DECL(BIF_VerCompare);
@@ -3283,25 +3278,12 @@ BIF_DECL(BIF_ComObjQuery);
 
 
 BIF_DECL(BIF_Click);
-BIF_DECL(BIF_ControlGet);
-BIF_DECL(BIF_GroupActivate);
-BIF_DECL(BIF_MouseGetPos);
 BIF_DECL(BIF_Reg);
 BIF_DECL(BIF_Random);
-BIF_DECL(BIF_Run);
 BIF_DECL(BIF_Sound);
 BIF_DECL(BIF_SplitPath);
 BIF_DECL(BIF_CaretGetPos);
-BIF_DECL(BIF_WinGetClass);
-BIF_DECL(BIF_WinGetText);
-BIF_DECL(BIF_WinGetTitle);
-BIF_DECL(BIF_WinGetPos);
-BIF_DECL(BIF_WinRedraw);
-BIF_DECL(BIF_WinMoveTopBottom);
-BIF_DECL(BIF_WinShow);
-BIF_DECL(BIF_WinActivate);
 BIF_DECL(BIF_MenuSelect);
-BIF_DECL(BIF_Process);
 BIF_DECL(BIF_RunWait);
 
 BIF_DECL(BIF_SetBIV);
