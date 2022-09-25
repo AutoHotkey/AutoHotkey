@@ -12,6 +12,8 @@ md_func(CallbackCreate, (In, Object, Function), (In_Opt, String, Options), (In_O
 md_func(CallbackFree, (In, UIntPtr, Callback))
 #endif
 
+md_func(ClipWait, (In_Opt, Float64, Timeout), (In_Opt, Int32, AnyType), (Ret, Bool32, RetVal))
+
 md_func(ControlAddItem, (In, String, Value), MD_CONTROL_ARGS, (Ret, IntPtr, Index))
 md_func(ControlChooseIndex, (In, IntPtr, Index), MD_CONTROL_ARGS)
 md_func(ControlChooseString, (In, String, Value), MD_CONTROL_ARGS, (Ret, IntPtr, Index))
@@ -143,6 +145,9 @@ md_func_v(InstallMouseHook, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 md_func_x(IsLabel, IsLabel, Bool32, (In, String, Name))
 
 md_func(KeyHistory, (In_Opt, Int32, MaxEvents))
+
+md_func(KeyWait, (In, String, KeyName), (In_Opt, String, Options), (Ret, Bool32, RetVal))
+
 md_func_v(ListHotkeys, md_arg_none)
 md_func_v(ListLines, (In_Opt, Int32, Mode))
 md_func_v(ListVars, md_arg_none)

@@ -40,7 +40,6 @@ FuncEntry g_BIF[] =
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
 	BIF1(Click, 0, 6),
-	BIFn(ClipWait, 0, 2, BIF_Wait),
 #ifdef ENABLE_DLLCALL
 	BIFn(ComCall, 2, NA, BIF_DllCall),
 #endif
@@ -90,7 +89,6 @@ FuncEntry g_BIF[] =
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
 	BIFi(IsXDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_XDIGIT),
-	BIFn(KeyWait, 1, 2, BIF_Wait),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
 	BIFn(LTrim, 1, 2, BIF_Trim),
