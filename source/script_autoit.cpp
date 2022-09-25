@@ -798,7 +798,7 @@ bif_impl FResult EditGetLineCount(CONTROL_PARAMETERS_DECL, UINT_PTR &aRetVal)
 {
 	DETERMINE_TARGET_CONTROL2;
 	// MSDN: "If the control has no text, the return value is 1. The return value will never be less than 1."
-	if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &aRetVal))
+	if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&aRetVal))
 		return FR_E_WIN32;
 	return OK;
 }
