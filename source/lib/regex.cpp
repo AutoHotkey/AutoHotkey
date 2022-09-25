@@ -1114,7 +1114,7 @@ BIF_DECL(BIF_RegEx)
 	else
 	{
 		starting_offset = ParamIndexToInt(param_index);
-		if (starting_offset < 0) // Same convention as SubStr(): Treat negative StartingPos as a position relative to the end of the string.
+		if (starting_offset <= 0) // Same convention as SubStr(): Treat negative StartingPos as a position relative to the end of the string.
 		{
 			starting_offset += haystack_length;
 			if (starting_offset < 0)
