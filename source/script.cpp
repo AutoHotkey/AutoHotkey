@@ -123,8 +123,7 @@ FuncEntry g_BIF[] =
 	BIFn(RegWrite, 0, 4, BIF_Reg),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
-	BIF1(Run, 1, 4, {4}),
-	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
+	BIF1(RunWait, 1, 4, {4}),
 	BIFn(SetRegView, 1, 1, BIF_SetBIV),
 	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
@@ -12187,8 +12186,8 @@ LPTSTR Script::ListKeyHistory(LPTSTR aBuf, int aBufSize) // aBufSize should be a
 
 
 
-ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir, bool aDisplayErrors
-	, LPTSTR aRunShowMode, HANDLE *aProcess, bool aUpdateLastError, bool aUseRunAs, Var *aOutputVar)
+ResultType Script::ActionExec(LPCTSTR aAction, LPCTSTR aParams, LPCTSTR aWorkingDir, bool aDisplayErrors
+	, LPCTSTR aRunShowMode, HANDLE *aProcess, bool aUpdateLastError, bool aUseRunAs)
 // Caller should specify NULL for aParams if it wants us to attempt to parse out params from
 // within aAction.  Caller may specify empty string ("") instead to specify no params at all.
 // Remember that aAction and aParams can both be NULL, so don't dereference without checking first.
@@ -12199,8 +12198,6 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	HANDLE hprocess_local;
 	HANDLE &hprocess = aProcess ? *aProcess : hprocess_local; // To simplify other things.
 	hprocess = NULL; // Init output param if the caller gave us memory to store it.  Even if caller didn't, other things below may rely on this being initialized.
-	if (aOutputVar) // Same
-		aOutputVar->Assign();
 
 	// Launching nothing is always a success:
 	if (!aAction || !*aAction) return OK;
@@ -12229,9 +12226,9 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	// Set default items to be run by ShellExecute().  These are also used by the error
 	// reporting at the end, which is why they're initialized even if CreateProcess() works
 	// and there's no need to use ShellExecute():
-	LPTSTR shell_verb = NULL;
-	LPTSTR shell_action = aAction;
-	LPTSTR shell_params = NULL;
+	LPCTSTR shell_verb = NULL;
+	LPCTSTR shell_action = aAction;
+	LPCTSTR shell_params = NULL;
 	
 	///////////////////////////////////////////////////////////////////////////////////
 	// This next section is done prior to CreateProcess() because when aParams is NULL,
@@ -12253,7 +12250,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		LPTSTR phrase;
 		size_t phrase_len;
 		// Set phrase_end to be the location of the first whitespace char, if one exists:
-		LPTSTR phrase_end = StrChrAny(shell_action, _T(" \t")); // Find space or tab.
+		LPCTSTR phrase_end = StrChrAny(shell_action, _T(" \t")); // Find space or tab.
 		if (phrase_end) // i.e. there is a second phrase.
 		{
 			phrase_len = phrase_end - shell_action;
@@ -12330,7 +12327,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		if (use_runas)
 		{
 			if (!DoRunAs(command_line, aWorkingDir, aDisplayErrors, si.wShowWindow  // wShowWindow (min/max/hide).
-				, aOutputVar, pi, success, hprocess, last_error)) // These are output parameters it will set for us.
+				, pi, success, hprocess, last_error)) // These are output parameters it will set for us.
 				return FAIL; // It already displayed the error, if appropriate.
 		}
 		else
@@ -12357,8 +12354,6 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 				if (pi.hThread)
 					CloseHandle(pi.hThread); // Required to avoid memory leak.
 				hprocess = pi.hProcess;
-				if (aOutputVar)
-					aOutputVar->Assign(pi.dwProcessId);
 			}
 			else
 				last_error = GetLastError();
@@ -12473,12 +12468,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		
 		if (ShellExecuteEx(&sei)) // Relies on short-circuit boolean order.
 		{
-			if (hprocess = sei.hProcess)
-			{
-				// A new process was created, so get its ID if possible.
-				if (aOutputVar)
-					aOutputVar->Assign(GetProcessId(hprocess));
-			}
+			hprocess = sei.hProcess;
 			// Even if there's no process handle, it's considered a success because some
 			// system verbs and file associations do not create a new process, by design.
 			success = true;

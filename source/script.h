@@ -1198,7 +1198,7 @@ public:
 		}
 	}
 
-	static int ConvertRunMode(LPTSTR aBuf)
+	static int ConvertRunMode(LPCTSTR aBuf)
 	// Returns the matching WinShow mode, or SW_SHOWNORMAL if none.
 	// These are also the modes that AutoIt3 uses.
 	{
@@ -3022,11 +3022,11 @@ public:
 	ResultType AddGroup(LPCTSTR aGroupName);
 	Label *FindLabel(LPCTSTR aLabelName);
 
-	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
-		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, DWORD &aLastError);
-	ResultType ActionExec(LPTSTR aAction, LPTSTR aParams = NULL, LPTSTR aWorkingDir = NULL
-		, bool aDisplayErrors = true, LPTSTR aRunShowMode = NULL, HANDLE *aProcess = NULL
-		, bool aUpdateLastError = false, bool aUseRunAs = false, Var *aOutputVar = NULL);
+	ResultType DoRunAs(LPTSTR aCommandLine, LPCTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
+		, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, DWORD &aLastError);
+	ResultType ActionExec(LPCTSTR aAction, LPCTSTR aParams = NULL, LPCTSTR aWorkingDir = NULL
+		, bool aDisplayErrors = true, LPCTSTR aRunShowMode = NULL, HANDLE *aProcess = NULL
+		, bool aUpdateLastError = false, bool aUseRunAs = false);
 
 	LPTSTR ListVars(LPTSTR aBuf, int aBufSize);
 	LPTSTR ListKeyHistory(LPTSTR aBuf, int aBufSize);
@@ -3302,7 +3302,7 @@ BIF_DECL(BIF_WinShow);
 BIF_DECL(BIF_WinActivate);
 BIF_DECL(BIF_MenuSelect);
 BIF_DECL(BIF_Process);
-BIF_DECL(BIF_Wait);
+BIF_DECL(BIF_RunWait);
 
 BIF_DECL(BIF_SetBIV);
 

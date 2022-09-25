@@ -161,15 +161,14 @@ bif_impl FResult ProcessSetPriority(StrArg aPriority, optl<StrArg> aProcess, UIN
 
 
 
-BIF_DECL(BIF_Run)
+bif_impl FResult Run(StrArg aTarget, optl<StrArg> aWorkingDir, optl<StrArg> aOptions, ResultToken *aOutPID)
 {
-	_f_param_string(target, 0);
-	_f_param_string_opt(working_dir, 1);
-	_f_param_string_opt(options, 2);
-	Var *output_var_pid = ParamIndexToOutputVar(3);
-	if (!g_script.ActionExec(target, nullptr, working_dir, true, options, nullptr, true, true, output_var_pid))
-		_f_return_FAIL;
-	_f_return_empty;
+	HANDLE hprocess;
+	auto result = g_script.ActionExec(aTarget, nullptr, aWorkingDir.value_or_null(), true
+		, aOptions.value_or_null(), &hprocess, true, true);
+	if (aOutPID && hprocess)
+		aOutPID->SetValue((UINT)GetProcessId(hprocess));
+	return result ? OK : FR_FAIL;
 }
 
 

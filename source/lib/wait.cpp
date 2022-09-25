@@ -302,104 +302,48 @@ bif_impl FResult WinWaitNotActive(ExprTokenType *aWinTitle, optl<StrArg> aWinTex
 
 
 
-BIF_DECL(BIF_Wait)
-// Since other script threads can interrupt these commands while they're running, it's important that
-// these commands not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
-// This is because an interrupting thread usually changes the values to something inappropriate for this thread.
-// fincs: it seems best that this function not throw an exception if the wait timeouts.
+// RunWait is still a "BIF" for now because the OutputVarPID parameter can only be used
+// by another thread, while the function is running, and there's currently no means for
+// a function implemented via MdFunc to assign to the output var directly.
+BIF_DECL(BIF_RunWait)
 {
-	bool wait_indefinitely;
-	int sleep_duration;
-	DWORD start_time;
-
-	HANDLE running_process; // For RUNWAIT
-	DWORD exit_code; // For RUNWAIT
-
 	Line *waiting_line = g_script.mCurrLine;
-
-	_f_set_retval_i(TRUE); // Set default return value to be possibly overridden later on.
 
 	_f_param_string_opt(arg1, 0);
 	_f_param_string_opt(arg2, 1);
 	_f_param_string_opt(arg3, 2);
+	Var *output_var = ParamIndexToOutputVar(3);
+	if (output_var)
+		output_var->Assign();
 
-	switch (_f_callee_id)
-	{
-	case FID_RunWait:
-		if (!g_script.ActionExec(arg1, NULL, arg2, true, arg3, &running_process, true, true
-			, ParamIndexToOutputVar(4-1)))
-			_f_return_FAIL;
-		//else fall through to the waiting-phase of the operation.
-		break;
-	}
+	HANDLE running_process;
+	if (!g_script.ActionExec(arg1, NULL, arg2, true, arg3, &running_process, true, true))
+		_f_return_FAIL;
 	
-	{
-		wait_indefinitely = true;
-		sleep_duration = 0; // Just to catch any bugs.
-	}
+	// For the output var to be useful, it must be assigned before we wait:
+	if (output_var && running_process)
+		output_var->Assign(GetProcessId(running_process));
 
-	for (start_time = GetTickCount();;) // start_time is initialized unconditionally for use with v1.0.30.02's new logging feature further below.
-	{ // Always do the first iteration so that at least one check is done.
-		switch (_f_callee_id)
-		{
-		case FID_RunWait:
-			// Pretty nasty, but for now, nothing is done to prevent an infinite loop.
-			// In the future, maybe OpenProcess() can be used to detect if a process still
-			// exists (is there any other way?):
-			// MSDN: "Warning: If a process happens to return STILL_ACTIVE (259) as an error code,
-			// applications that test for this value could end up in an infinite loop."
-			if (running_process)
-				GetExitCodeProcess(running_process, &exit_code);
-			else // it can be NULL in the case of launching things like "find D:\" or "www.yahoo.com"
-				exit_code = 0;
-			if (exit_code != STATUS_PENDING) // STATUS_PENDING == STILL_ACTIVE
-			{
-				if (running_process)
-					CloseHandle(running_process);
-				// Use signed vs. unsigned, since that is more typical?  No, it seems better
-				// to use unsigned now that script variables store 64-bit ints.  This is because
-				// GetExitCodeProcess() yields a DWORD, implying that the value should be unsigned.
-				// Unsigned also is more useful in cases where an app returns a (potentially large)
-				// count of something as its result.  However, if this is done, it won't be easy
-				// to check against a return value of -1, for example, which I suspect many apps
-				// return.  AutoIt3 (and probably 2) use a signed int as well, so that is another
-				// reason to keep it this way:
-				_f_return_i((int)exit_code);
-			}
-			break;
-		}
+	if (!running_process) // Nothing to wait for (rare?).
+		_f_return_i(0);
 
-		// Must cast to int or any negative result will be lost due to DWORD type:
-		if (wait_indefinitely || (int)(sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
+	Wait(-1, (void*)running_process, [](void *p)
 		{
-			if (MsgSleep(INTERVAL_UNSPECIFIED)) // INTERVAL_UNSPECIFIED performs better.
-			{
-				// v1.0.30.02: Since MsgSleep() launched and returned from at least one new thread, put the
-				// current waiting line into the line-log again to make it easy to see what the current
-				// thread is doing.  This is especially useful for figuring out which subroutine is holding
-				// another thread interrupted beneath it.  For example, if a timer gets interrupted by
-				// a hotkey that has an indefinite WinWait, and that window never appears, this will allow
-				// the user to find out the culprit thread by showing its line in the log (and usually
-				// it will appear as the very last line, since usually the script is idle and thus the
-				// currently active thread is the one that's still waiting for the window).
-				if (g->ListLinesIsEnabled)
-				{
-					// ListLines is enabled in this thread, but if it was disabled in the interrupting thread,
-					// the very last log entry will be ours.  In that case, we don't want to duplicate it.
-					int previous_log_index = (Line::sLogNext ? Line::sLogNext : LINE_LOG_SIZE) - 1; // Wrap around if needed (the entry can be NULL in that case).
-					if (Line::sLog[previous_log_index] != waiting_line || Line::sLogTick[previous_log_index] != start_time) // The previously logged line was not this one, or it was added by the interrupting thread (different start_time).
-					{
-						Line::sLog[Line::sLogNext] = waiting_line;
-						Line::sLogTick[Line::sLogNext++] = start_time; // Store a special value so that Line::LogToText() can report that its "still waiting" from earlier.
-						if (Line::sLogNext >= LINE_LOG_SIZE)
-							Line::sLogNext = 0;
-						// The lines above are the similar to those used in ExecUntil(), so the two should be
-						// maintained together.
-					}
-				}
-			}
-		}
-		else // Done waiting.
-			_f_return_i(FALSE); // Since it timed out, we override the default with this.
-	} // for()
+			// Using WaitForSingleObject() rather than GetExitCodeProcess() avoids an
+			// infinite loop if a process returns 259 (STILL_ACTIVE) as its exit code.
+			return WaitForSingleObject((HANDLE)p, 0) != WAIT_TIMEOUT;
+		});
+
+	DWORD exit_code = 0;
+	GetExitCodeProcess(running_process, &exit_code);
+	CloseHandle(running_process);
+	// Use signed vs. unsigned, since that is more typical?  No, it seems better
+	// to use unsigned now that script variables store 64-bit ints.  This is because
+	// GetExitCodeProcess() yields a DWORD, implying that the value should be unsigned.
+	// Unsigned also is more useful in cases where an app returns a (potentially large)
+	// count of something as its result.  However, if this is done, it won't be easy
+	// to check against a return value of -1, for example, which I suspect many apps
+	// return.  AutoIt3 (and probably 2) use a signed int as well, so that is another
+	// reason to keep it this way:
+	_f_return_i((int)exit_code);
 }

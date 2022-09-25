@@ -28,9 +28,9 @@
 #include "abi.h"
 
 
-ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
-	, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess // Output parameters we set for caller, but caller must have initialized aSuccess to false.
-	, HANDLE &aNewProcess, DWORD &aLastError)                   // Same, but initialize to NULL.
+ResultType Script::DoRunAs(LPTSTR aCommandLine, LPCTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
+	, PROCESS_INFORMATION &aPI, bool &aSuccess // Output parameters we set for caller, but caller must have initialized aSuccess to false.
+	, HANDLE &aNewProcess, DWORD &aLastError)  // Same, but initialize to NULL.
 {
 	typedef BOOL (WINAPI *MyCreateProcessWithLogonW)(
 		LPCWSTR lpUsername,                 // user's name
@@ -78,8 +78,6 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 		if (aPI.hThread)
 			CloseHandle(aPI.hThread); // Required to avoid memory leak.
 		aNewProcess = aPI.hProcess;
-		if (aOutputVar)
-			aOutputVar->Assign(aPI.dwProcessId);
 	}
 	else
 		aLastError = GetLastError(); // Caller will use this to get an error message and set g->LastError if needed.
