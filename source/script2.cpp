@@ -3291,7 +3291,7 @@ BOOL ResultToBOOL(LPTSTR aResult)
 	switch (IsNumeric(aResult, true, false, true)) // It's purely numeric and not all whitespace (and due to earlier check, it's not blank).
 	{
 	case PURE_INTEGER: return ATOI64(aResult) != 0; // Could call ATOF() for both integers and floats; but ATOI64() probably performs better, and a float comparison to 0.0 might be a slower than an integer comparison to 0.
-	case PURE_FLOAT:   return _tstof(aResult) != 0.0; // atof() vs. ATOF() because PURE_FLOAT is never hexadecimal.
+	case PURE_FLOAT:   return _tstof(aResult) != 0.0; // _tstof() vs. ATOF() because PURE_FLOAT is never hexadecimal.
 	default: // PURE_NOT_NUMERIC.
 		// Even a string containing all whitespace would be considered non-numeric since it's a non-blank string
 		// that isn't equal to 0.
@@ -3543,7 +3543,7 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 		aOutput.value_int64 = ATOI64(str);
 		break;
 	case PURE_FLOAT:
-		aOutput.value_double = ATOF(str);
+		aOutput.value_double = _tstof(str); // _tstof() vs. ATOF() because PURE_FLOAT is never hexadecimal.
 		break;
 	default: // Not a pure number.
 		return FAIL;

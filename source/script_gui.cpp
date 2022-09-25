@@ -6275,7 +6275,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					option_float = float(option_int = ATOI(option_value)); // 'E' depends on this supporting the full range of DWORD.
 					break;
 				case PURE_FLOAT:
-					option_int = int(option_float = (float)ATOF(option_value));
+					option_int = int(option_float = (float)_tstof(option_value)); // _tstof() vs. ATOF() because PURE_FLOAT is never hexadecimal.
 					break;
 				default:
 					if (*option_value || !option_char2) // i.e. allow blank option_value if option_char2 was recognized above.

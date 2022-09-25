@@ -505,7 +505,7 @@ inline double ATOF(LPCTSTR buf)
 // such as "0xFF" automatically.  So this macro must check for hex because some callers rely on that.
 // Also, it uses _strtoi64() vs. strtol() so that more of a double's capacity can be utilized:
 {
-	return IsHex(buf) ? (double)_tcstoi64(buf, NULL, 16) : _tstof(buf);
+	return IsHex(buf) ? (double)nstrtoi64(buf) : _tstof(buf);
 }
 
 int FTOA(double aValue, LPTSTR aBuf, int aBufSize);
