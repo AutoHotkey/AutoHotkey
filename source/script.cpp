@@ -156,10 +156,6 @@ FuncEntry g_BIF[] =
 	BIF1(VerCompare, 2, 2),
 	BIFn(WinActive, 0, 4, BIF_WinExistActive),
 	BIFn(WinExist, 0, 4, BIF_WinExistActive),
-	BIFn(WinWait, 0, 5, BIF_Wait),
-	BIFn(WinWaitActive, 0, 5, BIF_Wait),
-	BIFn(WinWaitClose, 0, 5, BIF_Wait),
-	BIFn(WinWaitNotActive, 0, 5, BIF_Wait),
 };
 #undef NA
 #undef BIFn

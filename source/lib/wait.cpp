@@ -159,6 +159,149 @@ bif_impl FResult KeyWait(StrArg aKeyName, optl<StrArg> aOptions, BOOL &aRetVal)
 
 
 
+static FResult WinWait(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText
+	, UINT &aRetVal, BuiltInFunctionID aCondition)
+{
+	int timeout = -1;
+	if (aTimeout.has_value())
+	{
+		timeout = (int)(aTimeout.value() * 1000);
+		if (timeout < 0)
+			return FR_E_ARG(2);
+	}
+	
+	TCHAR title_buf[MAX_NUMBER_SIZE];
+	WaitCompletedPredicate predicate;
+	struct Params {
+		BuiltInFunctionID condition;
+		bool hwnd_specified;
+		HWND hwnd;
+		LPCTSTR title, text, exclude_title, exclude_text;
+	} p;
+	
+	p.condition = aCondition;
+	p.hwnd_specified = false;
+	p.hwnd = NULL;
+	p.title = _T("");
+	p.text = aWinText.value_or_empty();
+	p.exclude_title = aExcludeTitle.value_or_empty();
+	p.exclude_text = aExcludeText.value_or_empty();
+
+	if (aWinTitle)
+	{
+		auto fr = DetermineTargetHwnd(p.hwnd, p.hwnd_specified, *aWinTitle);
+		if (fr != OK)
+			return fr;
+		if (p.hwnd_specified && !p.hwnd)
+		{
+			// Caller may have specified a NULL HWND or it may be NULL due to an IsWindow() check.
+			// In either case, it isn't meaningful to wait (see !IsWindow(p.hwnd) comments below).
+			aRetVal = (aCondition == FID_WinWaitClose || aCondition == FID_WinWaitNotActive);
+			if (aRetVal)
+				DoWinDelay;
+			return OK;
+		}
+		if (!p.hwnd_specified)
+			p.title = TokenToString(*aWinTitle, title_buf);
+	}
+
+	if (p.hwnd_specified)
+	{
+		predicate = [](void *pp)
+		{
+			auto &p = *(Params*)pp;
+			if (!IsWindow(p.hwnd))
+			{
+				// It's not meaningful to wait for another window to be created with this
+				// same HWND, so return now regardless of whether the wait condition was met.
+				// Let the return value be 1 for WinWaitClose/WinWaitNotActive to indicate the
+				// condition was met, and 0 for WinWait/WinWaitActive to indicate that it wasn't.
+				p.hwnd = NULL;
+				return true;
+			}
+			if (p.condition == FID_WinWait || p.condition == FID_WinWaitClose)
+				// Wait for the window to become visible/hidden.  Most functions ignore
+				// DetectHiddenWindows when given a pure HWND/object (because it's more
+				// useful that way), but in this case it seems more useful and intuitive
+				// to respect DetectHiddenWindows.
+				return (g->DetectWindow(p.hwnd) == (p.condition == FID_WinWait));
+			else
+				return (GetForegroundWindow() == p.hwnd) == (p.condition == FID_WinWaitActive);
+		};
+	}
+	else // hwnd_specified == false
+	switch (aCondition)
+	{
+	default:
+#ifdef _DEBUG
+		ASSERT(!"Unhandled case");
+		break;
+#endif
+	case FID_WinWait:
+	case FID_WinWaitClose:
+		predicate = [](void *pp)
+		{
+			auto &p = *(Params*)pp;
+			HWND found = WinExist(*g, p.title, p.text, p.exclude_title, p.exclude_text, false, true);
+			if ((found != NULL) == (p.condition == FID_WinWait))
+			{
+				p.hwnd = found;
+				return true;
+			}
+			return false;
+		};
+		break;
+	case FID_WinWaitActive:
+	case FID_WinWaitNotActive:
+		predicate = [](void *pp)
+		{
+			auto &p = *(Params*)pp;
+			HWND found = WinActive(*g, p.title, p.text, p.exclude_title, p.exclude_text, true);
+			if ((found != NULL) == (p.condition == FID_WinWaitActive))
+			{
+				p.hwnd = found;
+				return true;
+			}
+			return false;
+		};
+		break;
+	}
+
+	if (Wait(timeout, &p, predicate))
+	{
+		DoWinDelay;
+		if (aCondition == FID_WinWaitClose || aCondition == FID_WinWaitNotActive)
+			aRetVal = 1;
+		else
+			aRetVal = (UINT)(size_t)p.hwnd;
+	}
+	else
+		aRetVal = 0;
+	return OK;
+}
+
+bif_impl FResult WinWait(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText, UINT &aRetVal)
+{
+	return WinWait(aWinTitle, aWinText, aTimeout, aExcludeTitle, aExcludeText, aRetVal, FID_WinWait);
+}
+
+bif_impl FResult WinWaitClose(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText, UINT &aRetVal)
+{
+	return WinWait(aWinTitle, aWinText, aTimeout, aExcludeTitle, aExcludeText, aRetVal, FID_WinWaitClose);
+}
+
+bif_impl FResult WinWaitActive(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText, UINT &aRetVal)
+{
+	return WinWait(aWinTitle, aWinText, aTimeout, aExcludeTitle, aExcludeText, aRetVal, FID_WinWaitActive);
+}
+
+bif_impl FResult WinWaitNotActive(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText, UINT &aRetVal)
+{
+	return WinWait(aWinTitle, aWinText, aTimeout, aExcludeTitle, aExcludeText, aRetVal, FID_WinWaitNotActive);
+}
+
+
+
 BIF_DECL(BIF_Wait)
 // Since other script threads can interrupt these commands while they're running, it's important that
 // these commands not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
@@ -180,8 +323,6 @@ BIF_DECL(BIF_Wait)
 	_f_param_string_opt(arg2, 1);
 	_f_param_string_opt(arg3, 2);
 
-	HWND target_hwnd = NULL;
-
 	switch (_f_callee_id)
 	{
 	case FID_RunWait:
@@ -190,52 +331,8 @@ BIF_DECL(BIF_Wait)
 			_f_return_FAIL;
 		//else fall through to the waiting-phase of the operation.
 		break;
-	case FID_WinWait:
-	case FID_WinWaitClose:
-	case FID_WinWaitActive:
-	case FID_WinWaitNotActive:
-		if (ParamIndexIsOmitted(0))
-			break;
-		// The following supports pure HWND or {Hwnd:HWND} as in other WinTitle parameters,
-		// in lieu of saving aParam[] and evaluating them vs. arg1,2,4,5 on each iteration.
-		switch (DetermineTargetHwnd(target_hwnd, aResultToken, *aParam[0]))
-		{
-		case FAIL: return;
-		case OK:
-			if (!target_hwnd) // Caller passed 0 or a value that failed an IsWindow() check.
-			{
-				// If it's 0 due to failing IsWindow(), there's no way to determine whether
-				// it was ever valid, so assume it was but that the window has been closed.
-				DoWinDelay;
-				if (_f_callee_id == FID_WinWaitClose || _f_callee_id == FID_WinWaitNotActive)
-					_f_return_retval;
-				// Otherwise, this window will never exist or be active again, so abort early.
-				// It might be more correct to just wait the timeout (or stall indefinitely),
-				// but that's probably not the user's intention.
-				_f_return_i(FALSE);
-			}
-		}
-		break;
 	}
-
-	// These are declared/accessed after "case FID_RunWait:" to avoid a UseUnset warning.
-	_f_param_string_opt(arg4, 3);
-	_f_param_string_opt(arg5, 4);
 	
-	// Must NOT use ELSE-IF in line below due to ELSE further down needing to execute for RunWait.
-	if (_f_callee_id == FID_KeyWait)
-	{
-		
-	}
-	else if (   (_f_callee_id != FID_RunWait && _f_callee_id != FID_ClipWait && *arg3)
-		|| (_f_callee_id == FID_ClipWait && *arg1)   )
-	{
-		// Since the param containing the timeout value isn't blank, it must be numeric,
-		// otherwise, the loading validation would have prevented the script from loading.
-		wait_indefinitely = false;
-		sleep_duration = (int)(ATOF(_f_callee_id == FID_ClipWait ? arg1 : arg3) * 1000); // Can be zero.
-	}
-	else
 	{
 		wait_indefinitely = true;
 		sleep_duration = 0; // Just to catch any bugs.
@@ -243,76 +340,8 @@ BIF_DECL(BIF_Wait)
 
 	for (start_time = GetTickCount();;) // start_time is initialized unconditionally for use with v1.0.30.02's new logging feature further below.
 	{ // Always do the first iteration so that at least one check is done.
-		if (target_hwnd) // Caller passed a pure HWND or {Hwnd:HWND}.
+		switch (_f_callee_id)
 		{
-			// Change the behaviour a little since we know that once the HWND is destroyed,
-			// it is not meaningful to wait for another window with that same HWND.
-			if (!IsWindow(target_hwnd))
-			{
-				DoWinDelay;
-				if (_f_callee_id == FID_WinWaitClose || _f_callee_id == FID_WinWaitNotActive)
-					_f_return_retval; // Condition met.
-				// Otherwise, it would not be meaningful to wait for another window to be
-				// created with the same HWND.  It seems more useful to abort immediately
-				// but report timeout/failure than to wait for the timeout to elapse.
-				_f_return_i(FALSE);
-			}
-			if (_f_callee_id == FID_WinWait || _f_callee_id == FID_WinWaitClose)
-			{
-				// Wait for the window to become visible/hidden.  Most functions ignore
-				// DetectHiddenWindows when given a pure HWND/object (because it's more
-				// useful that way), but in this case it seems more useful and intuitive
-				// to respect DetectHiddenWindows.
-				if (g->DetectWindow(target_hwnd) == (_f_callee_id == FID_WinWait))
-				{
-					DoWinDelay;
-					if (_f_callee_id == FID_WinWaitClose)
-						_f_return_retval;
-					_f_return_i((size_t)target_hwnd);
-				}
-			}
-			else
-			{
-				if ((GetForegroundWindow() == target_hwnd) == (_f_callee_id == FID_WinWaitActive))
-				{
-					DoWinDelay;
-					if (_f_callee_id == FID_WinWaitNotActive)
-						_f_return_retval;
-					_f_return_i((size_t)target_hwnd);
-				}
-			}
-		}
-		else switch (_f_callee_id)
-		{
-		case FID_WinWait:
-			#define SAVED_WIN_ARGS arg1, arg2, arg4, arg5
-			if (HWND found = WinExist(*g, SAVED_WIN_ARGS, false, true))
-			{
-				DoWinDelay;
-				_f_return_i((size_t)found);
-			}
-			break;
-		case FID_WinWaitClose:
-			if (!WinExist(*g, SAVED_WIN_ARGS, false, true))
-			{
-				DoWinDelay;
-				_f_return_retval;
-			}
-			break;
-		case FID_WinWaitActive:
-			if (HWND found = WinActive(*g, SAVED_WIN_ARGS, true))
-			{
-				DoWinDelay;
-				_f_return_i((size_t)found);
-			}
-			break;
-		case FID_WinWaitNotActive:
-			if (!WinActive(*g, SAVED_WIN_ARGS, true))
-			{
-				DoWinDelay;
-				_f_return_retval;
-			}
-			break;
 		case FID_RunWait:
 			// Pretty nasty, but for now, nothing is done to prevent an infinite loop.
 			// In the future, maybe OpenProcess() can be used to detect if a process still
