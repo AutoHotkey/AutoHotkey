@@ -1960,25 +1960,26 @@ break_both:
 
 
 
-FResult PerformMouse(ActionTypeType aActionType, LPCTSTR aButton, int *aX1, int *aY1, int *aX2, int *aY2
-	, int *aSpeed, LPCTSTR aOffsetMode, int *aRepeatCount, LPCTSTR aDownUp)
+FResult PerformMouse(ActionTypeType aActionType, optl<StrArg> aButton
+	, optl<int> aX1, optl<int> aY1, optl<int> aX2, optl<int> aY2
+	, optl<int> aSpeed, optl<StrArg> aOffsetMode, optl<int> aRepeatCount, optl<StrArg> aDownUp)
 {
 	vk_type vk;
 	if (aActionType == ACT_MOUSEMOVE)
 		vk = 0;
 	else
 		// ConvertMouseButton() treats omitted/blank as "Left":
-		if (   !(vk = Line::ConvertMouseButton(aButton, aActionType == ACT_MOUSECLICK))   )
+		if (   !(vk = Line::ConvertMouseButton(aButton.value_or_null(), aActionType == ACT_MOUSECLICK)))
 			return FR_E_ARG(0); // of MouseClick/MouseClickDrag
 
 	KeyEventTypes event_type = KEYDOWNANDUP;  // Set defaults.
-	int repeat_count = aRepeatCount ? *aRepeatCount : 1;
+	int repeat_count = aRepeatCount.has_value() ? *aRepeatCount : 1;
 	if (repeat_count < 0)
 		return FR_E_ARG(2); // of MouseClick
 
-	if (aDownUp)
+	if (aDownUp.has_value())
 	{
-		switch(*aDownUp)
+		switch (*aDownUp.value())
 		{
 		case 'u':
 		case 'U':
@@ -1996,21 +1997,21 @@ FResult PerformMouse(ActionTypeType aActionType, LPCTSTR aButton, int *aX1, int 
 	}
 
 	bool move_offset = false;
-	if (aOffsetMode && *aOffsetMode)
+	if (aOffsetMode.has_nonempty_value())
 	{
-		if (ctoupper(*aOffsetMode) == 'R')
+		if (ctoupper(*aOffsetMode.value()) == 'R')
 			move_offset = true;
 		else
 			return FR_E_ARG(aActionType == ACT_MOUSEMOVE ? 3 : 6);
 	}
 
 	PerformMouseCommon(aActionType, vk
-		, aX1 ? *aX1 : COORD_UNSPECIFIED  // If no starting coords are specified, mark it as "use the
-		, aY1 ? *aY1 : COORD_UNSPECIFIED  // current mouse position":
-		, aX2 ? *aX2 : COORD_UNSPECIFIED  // These two are non-null only for MouseClickDrag.
-		, aY2 ? *aY2 : COORD_UNSPECIFIED  //
+		, aX1.value_or(COORD_UNSPECIFIED)  // If no starting coords are specified, mark it as "use the
+		, aY1.value_or(COORD_UNSPECIFIED)  // current mouse position":
+		, aX2.value_or(COORD_UNSPECIFIED)  // These two are non-null only for MouseClickDrag.
+		, aY2.value_or(COORD_UNSPECIFIED)  //
 		, repeat_count, event_type
-		, aSpeed ? *aSpeed : g->DefaultMouseSpeed
+		, aSpeed.value_or(g->DefaultMouseSpeed)
 		, move_offset);
 
 	return OK;
@@ -4468,59 +4469,59 @@ vk_type sc_to_vk(sc_type aSC)
 
 #pragma region Top-level Functions
 
-bif_impl void Send(LPCTSTR aKeys)
+bif_impl void Send(StrArg aKeys)
 {
 	SendKeys(aKeys, SCM_NOT_RAW, g->SendMode);
 }
 
-bif_impl void SendText(LPCTSTR aText)
+bif_impl void SendText(StrArg aText)
 {
 	SendKeys(aText, SCM_RAW_TEXT, g->SendMode);
 }
 
-bif_impl void SendInput(LPCTSTR aKeys)
+bif_impl void SendInput(StrArg aKeys)
 {
 	SendKeys(aKeys, SCM_NOT_RAW, g->SendMode == SM_INPUT_FALLBACK_TO_PLAY ? SM_INPUT_FALLBACK_TO_PLAY : SM_INPUT);
 }
 
-bif_impl void SendPlay(LPCTSTR aKeys)
+bif_impl void SendPlay(StrArg aKeys)
 {
 	SendKeys(aKeys, SCM_NOT_RAW, SM_PLAY);
 }
 
-bif_impl void SendEvent(LPCTSTR aKeys)
+bif_impl void SendEvent(StrArg aKeys)
 {
 	SendKeys(aKeys, SCM_NOT_RAW, SM_EVENT);
 }
 
-bif_impl FResult SetNumLockState(LPCTSTR aState)
+bif_impl FResult SetNumLockState(optl<StrArg> aState)
 {
 	return SetToggleState(VK_NUMLOCK, g_ForceNumLock, aState);
 }
 
-bif_impl FResult SetCapsLockState(LPCTSTR aState)
+bif_impl FResult SetCapsLockState(optl<StrArg> aState)
 {
 	return SetToggleState(VK_CAPITAL, g_ForceCapsLock, aState);
 }
 
-bif_impl FResult SetScrollLockState(LPCTSTR aState)
+bif_impl FResult SetScrollLockState(optl<StrArg> aState)
 {
 	return SetToggleState(VK_SCROLL, g_ForceScrollLock, aState);
 }
 
-bif_impl FResult MouseClick(LPCTSTR aButton, int *aX, int *aY, int *aClickCount, int *aSpeed, LPCTSTR aDownOrUp, LPCTSTR aRelative)
+bif_impl FResult MouseClick(optl<StrArg> aButton, optl<int> aX, optl<int> aY, optl<int> aClickCount, optl<int> aSpeed, optl<StrArg> aDownOrUp, optl<StrArg> aRelative)
 {
 	return PerformMouse(ACT_MOUSECLICK, aButton, aX, aY, nullptr, nullptr, aSpeed, aRelative, aClickCount, aDownOrUp);
 }
 
-bif_impl FResult MouseClickDrag(LPCTSTR aButton, int aX1, int aY1, int aX2, int aY2, int *aSpeed, LPCTSTR aRelative)
+bif_impl FResult MouseClickDrag(optl<StrArg> aButton, int aX1, int aY1, int aX2, int aY2, optl<int> aSpeed, optl<StrArg> aRelative)
 {
-	return PerformMouse(ACT_MOUSECLICKDRAG, aButton, &aX1, &aY1, &aX2, &aY2, aSpeed, aRelative, nullptr, nullptr);
+	return PerformMouse(ACT_MOUSECLICKDRAG, aButton, aX1, aY1, aX2, aY2, aSpeed, aRelative, nullptr, nullptr);
 }
 
-bif_impl FResult MouseMove(int aX, int aY, int *aSpeed, LPCTSTR aRelative)
+bif_impl FResult MouseMove(int aX, int aY, optl<int> aSpeed, optl<StrArg> aRelative)
 {
-	return PerformMouse(ACT_MOUSEMOVE, nullptr, &aX, &aY, nullptr, nullptr, aSpeed, aRelative, nullptr, nullptr);
+	return PerformMouse(ACT_MOUSEMOVE, nullptr, aX, aY, nullptr, nullptr, aSpeed, aRelative, nullptr, nullptr);
 }
 
 #pragma endregion
@@ -4537,7 +4538,7 @@ void OurBlockInput(bool aEnable)
 	g_BlockInput = aEnable;
 }
 
-bif_impl FResult ScriptBlockInput(LPCTSTR aMode)
+bif_impl FResult ScriptBlockInput(StrArg aMode)
 {
 	switch (auto toggle = Line::ConvertBlockInput(aMode))
 	{

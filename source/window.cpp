@@ -23,66 +23,23 @@ GNU General Public License for more details.
 
 
 HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
-	, bool aFindLastMatch, bool aReturnFoundWindow, HWND aAlreadyVisited[], int aAlreadyVisitedCount)
+	, bool aFindLastMatch, HWND aAlreadyVisited[], int aAlreadyVisitedCount)
 {
-	// If window is already active, be sure to leave it that way rather than activating some
-	// other window that may match title & text also.  NOTE: An explicit check is done
-	// for this rather than just relying on EnumWindows() to obey the z-order because
-	// EnumWindows() is *not* guaranteed to enumerate windows in z-order, thus the currently
-	// active window, even if it's an exact match, might become overlapped by another matching
-	// window.  Also, use the USE_FOREGROUND_WINDOW vs. IF_USE_FOREGROUND_WINDOW macro for
-	// this because the active window can sometimes be NULL (i.e. if it's a hidden window
-	// and DetectHiddenWindows is off):
 	HWND target_window;
-	if (USE_FOREGROUND_WINDOW(aTitle, aText, aExcludeTitle, aExcludeText))
-	{
-		// User asked us to activate the "active" window, which by definition already is.
-		SET_TARGET_TO_ALLOWABLE_FOREGROUND(aSettings.DetectHiddenWindows)
-		// The documented behavior is "If a matching window is already active, that window
-		// will be kept active"; however, if the active (foreground) window is hidden and
-		// DetectHiddenWindows is off, that window isn't a match and so we should search
-		// for a matching window.
-		if (target_window) // Added in v1.1.20.
-		{
-			// The window is already active, but might be minimized.  The behavior in
-			// v1.1.19 and earlier was to leave it minimized, but it seems more useful
-			// and intuitive to restore it.  The documentation says "If the window is
-			// minimized, it is automatically restored prior to being activated."
-			if (IsIconic(target_window))
-				ShowWindow(target_window, SW_RESTORE);
-			return target_window;
-		}
-	}
-
-	if (!aFindLastMatch && !*aTitle && !*aText && !*aExcludeTitle && !*aExcludeText)
-	{
-		// User passed no params, so use the window most recently found by WinExist():
-		if (   !(target_window = GetValidLastUsedWindow(aSettings))   )
-			return NULL;
-	}
-	else
-	{
-		/*
-		// Might not help avg. performance any?
-		if (!aFindLastMatch) // Else even if the windows is already active, we want the bottommost one.
-			if (hwnd = WinActive(aTitle, aText, aExcludeTitle, aExcludeText)) // Already active.
-				return target_window;
-		*/
-		// Don't activate in this case, because the top-most window might be an
-		// always-on-top but not-meant-to-be-activated window such as AutoIt's
-		// splash text:
-		if (   !(target_window = WinExist(aSettings, aTitle, aText, aExcludeTitle, aExcludeText, aFindLastMatch
-			, false, aAlreadyVisited, aAlreadyVisitedCount))   )
-			return NULL;
-	}
+	// There are no checks for WinActivate("A") or WinActivate() since WinExist() handles both
+	// of those cases.
+	// There's no attempt to check whether the current active window is a match, because the
+	// established behaviour is to activate the top/bottom-most active window regardless, and
+	// that seems more useful than ignoring the call.
+	if (   !(target_window = WinExist(aSettings, aTitle, aText, aExcludeTitle, aExcludeText, aFindLastMatch
+		, false, aAlreadyVisited, aAlreadyVisitedCount))   )
+		return NULL;
 	// Above has ensured that target_window is non-NULL, that it is a valid window, and that
 	// it is eligible due to g->DetectHiddenWindows being true or the window not being hidden
 	// (or being one of the script's GUI windows).
 	HWND activated = SetForegroundWindowEx(target_window);
-	// GroupActivate wants the window found above, even if it isn't now active.
-	// aReturnFoundWindow was added because aAlreadyVisited is allocated on first
-	// use and therefore not a reliable indicator of whether this is GroupActivate.
-	return aReturnFoundWindow ? target_window : activated;
+	// Callers want the window found above, even if it isn't now active.
+	return target_window;
 }
 
 
@@ -422,8 +379,8 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 
 
 
-HWND WinClose(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, int aTimeToWaitForClose
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText, bool aKillIfHung)
+HWND WinClose(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, int aTimeToWaitForClose
+	, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText, bool aKillIfHung)
 // Return the HWND of any found-window to the caller so that it has the option of waiting
 // for it to become an invalid (closed) window.
 {
@@ -535,7 +492,7 @@ HWND WinClose(HWND aWnd, int aTimeToWaitForClose, bool aKillIfHung)
 
 
 	
-HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
+HWND WinActive(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText
 	, bool aUpdateLastUsed)
 // This function must be kept thread-safe because it may be called (indirectly) by hook thread too.
 // In addition, it must not change the value of anything in aSettings except when aUpdateLastUsed==true.
@@ -578,7 +535,7 @@ HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aEx
 
 
 
-HWND WinExist(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
+HWND WinExist(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText
 	, bool aFindLastMatch, bool aUpdateLastUsed, HWND aAlreadyVisited[], int aAlreadyVisitedCount)
 // This function must be kept thread-safe because it may be called (indirectly) by hook thread too.
 // In addition, it must not change the value of anything in aSettings except when aUpdateLastUsed==true.
@@ -776,12 +733,13 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 
 
 
-void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
-	, LPTSTR aTextToWaitFor, int aWaitTime, int aCheckInterval)
+FResult StatusBarUtil(HWND aWindow, int aPartNumber, StrRet *aRetVal
+	, LPCTSTR aTextToWaitFor, int aWaitTime, int aCheckInterval)
 // aBarHwnd is allowed to be NULL because in that case, the caller wants us to set aresultToken appropriately.
 {
+	HWND aBarHwnd = ControlExist(aWindow, _T("msctls_statusbar321"));
 	if (!aBarHwnd)
-		_f_throw(ERR_NO_STATUSBAR, ErrorPrototype::Target);
+		return FError(ERR_NO_STATUSBAR, nullptr, ErrorPrototype::Target);
 
 	if (aCheckInterval < 1)
 		aCheckInterval = SB_DEFAULT_CHECK_INTERVAL; // Caller relies on us doing this.
@@ -805,11 +763,11 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 	LPVOID remote_buf;
 	LRESULT part_count; // The number of parts this status bar has.
 	if (!SendMessageTimeout(aBarHwnd, SB_GETPARTS, 0, 0, SMTO_ABORTIFHUNG, SB_TIMEOUT, (PDWORD_PTR)&part_count)) // It failed or timed out.
-		goto error;
+		return FR_E_WIN32;
 	if (aPartNumber > part_count)
-		_f_throw_value(ERR_PARAM1_INVALID);
+		return FR_E_ARG(aTextToWaitFor ? 2 : 0);
 	if (  !(remote_buf = AllocInterProcMem(handle, _TSIZE(WINDOW_TEXT_SIZE + 1), aBarHwnd))  )
-		goto error;
+		return FR_E_WIN32;
 
 	TCHAR local_buf[WINDOW_TEXT_SIZE + 1]; // The local counterpart to the buf allocated remotely above.
 
@@ -841,10 +799,7 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 				// normal/intuitive matching, a match is also achieved if both are empty strings.
 				// In fact, IsTextMatch() yields "true" whenever aTextToWaitFor is the empty string:
 				if (aTextToWaitFor && IsTextMatch(local_buf, aTextToWaitFor))
-				{
-					aResultToken.value_int64 = TRUE; // Indicate "match found".
-					break;
-				}
+					return TRUE; // Indicate "match found".
 			}
 			//else SB_GETTEXT msg timed out or failed.  Leave local_buf unaltered.  See comment below.
 		}
@@ -866,25 +821,19 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 			&& (aWaitTime < 0 || (int)(aWaitTime - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)   )
 			MsgSleep(aCheckInterval);
 		else // Timed out.
-		{
-			aResultToken.value_int64 = FALSE; // Indicate "timeout".
-			break;
-		}
+			return FALSE; // Indicate "timeout".
 	} // for()
 
 	FreeInterProcMem(handle, remote_buf);
 	// Consider this to be always successful, even if aBarHwnd == NULL.
-	if (!aTextToWaitFor)
-		aResultToken.Return(local_buf);
-	return;
-
-error:
-	_f_throw_win32();
+	if (aRetVal && !aRetVal->Copy(local_buf))
+		return FR_E_OUTOFMEM;
+	return OK;
 }
 
 
 
-HWND ControlExist(HWND aParentWindow, LPTSTR aClassNameAndNum)
+HWND ControlExist(HWND aParentWindow, LPCTSTR aClassNameAndNum)
 {
 	if (!aParentWindow || !aClassNameAndNum || !*aClassNameAndNum)
 		return NULL;
@@ -1006,7 +955,7 @@ int MsgBox(int aValue)
 
 
 
-int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwner)
+int MsgBox(LPCTSTR aText, UINT uType, LPCTSTR aTitle, double aTimeout, HWND aOwner)
 // Returns 0 if the attempt failed because of too many existing MessageBox windows,
 // or if MessageBox() itself failed.
 // MB_SETFOREGROUND or some similar setting appears to dismiss some types of screen savers (if active).
@@ -1015,19 +964,8 @@ int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwne
 	// Set the below globals so that any WM_TIMER messages dispatched by this call to
 	// MsgBox() (which may result in a recursive call back to us) know not to display
 	// any more MsgBoxes:
-	if (g_nMessageBoxes > MAX_MSGBOXES + 1)  // +1 for the final warning dialog.  Verified correct.
-		return 0;
-
-	if (g_nMessageBoxes == MAX_MSGBOXES)
-	{
-		// Do a recursive call to self so that it will be forced to the foreground.
-		// But must increment this so that the recursive call allows the last MsgBox
-		// to be displayed:
-		++g_nMessageBoxes;
-		MsgBox(_T("The maximum number of MsgBoxes has been reached."));
-		--g_nMessageBoxes;
-		return 0;
-	}
+	if (g_nMessageBoxes >= MAX_MSGBOXES)
+		return AHK_TOO_MANY_MSGBOXES;
 
 	if (!aText) // In case the caller explicitly called it with a NULL, overriding the default.
 		aText = (uType & 0xF) ? _T("") : _T("Press OK to continue."); // Use default text only if OK is the only button.
@@ -1471,7 +1409,7 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, INT_PTR aBufSize, UINT aTimeout
 
 
 
-ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText)
 // Returns FAIL if the new criteria can't possibly match a window (due to ahk_id being in invalid
 // window or the specified ahk_group not existing).  Otherwise, it returns OK.
 // Callers must ensure that aText, aExcludeTitle, and aExcludeText point to buffers whose contents
@@ -1495,7 +1433,8 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTi
 	mSettings = &aSettings;
 
 	DWORD orig_criteria = mCriteria;
-	TCHAR *ahk_flag, *cp, buf[MAX_VAR_NAME_LENGTH + 1];
+	TCHAR buf[MAX_VAR_NAME_LENGTH + 1];
+	LPCTSTR ahk_flag, cp;
 	int criteria_count;
 	size_t size;
 
@@ -1545,7 +1484,7 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTi
 			cp += 5;
 			mCriteria |= CRITERION_GROUP;
 			tcslcpy(buf, omit_leading_whitespace(cp), _countof(buf));
-			if (cp = StrChrAny(buf, _T(" \t"))) // Group names can't contain spaces, so terminate at the first one to exclude any "ahk_" criteria that come afterward.
+			if (auto cp = StrChrAny(buf, _T(" \t"))) // Group names can't contain spaces, so terminate at the first one to exclude any "ahk_" criteria that come afterward.
 				*cp = '\0';
 			if (   !(mCriterionGroup = g_script.FindGroup(buf))   )
 				return FAIL; // No such group: Inform caller of invalid criteria.  No need to do anything else further below.
@@ -1579,7 +1518,7 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTi
 			// Besides, even if it's possible for a class name to start with a space, a RegEx dot or other symbol
 			// can be used to match it via SetTitleMatchMode RegEx.
 			tcslcpy(criterion, omit_leading_whitespace(cp), SEARCH_PHRASE_SIZE); // Copy all of the remaining string to simplify the below.
-			for (cp = criterion; cp = tcscasestr(cp, _T("ahk_")); cp += 4)  // Fix for v1.0.47.06: strstr() changed to strcasestr() for consistency with the other sections.
+			for (auto cp = criterion; cp = tcscasestr(cp, _T("ahk_")); cp += 4)  // Fix for v1.0.47.06: strstr() changed to strcasestr() for consistency with the other sections.
 			{
 				// This loop truncates any other criteria from the class criteria.  It's not a complete
 				// solution because it doesn't validate that what comes after the "ahk_" string is a

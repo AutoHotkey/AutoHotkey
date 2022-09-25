@@ -23,64 +23,61 @@ GNU General Public License for more details.
 
 
 
-ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox)
+ResultType InputBoxParseOptions(LPCTSTR aOptions, InputBoxType &aInputBox)
 {
-	LPTSTR next_option, option_end;
-	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
+	LPCTSTR next_option, option_end;
+	for (next_option = aOptions; ; next_option = omit_leading_whitespace(option_end))
 	{
-		// Find the end of this option item:
-		if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
-			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
+		if (!*next_option)
+			return OK; // All options parsed OK.
 
-		// Temporarily terminate for simplicity and to reduce ambiguity:
-		TCHAR orig_char = *option_end;
-		*option_end = '\0';
+		// Find the end of this option item:
+		for (option_end = next_option; *option_end && !IS_SPACE_OR_TAB(*option_end); ++option_end);
 
 		// The legacy InputBox command used "Hide", but "Password" seems clearer
 		// and better for consistency with the equivalent Edit control option:
-		if (!_tcsnicmp(next_option, _T("Password"), 8) && _tcslen(next_option) <= 9)
-			aInputBox.password_char = next_option[8] ? next_option[8] : UorA(L'\x25CF', '*');
-		else
+		if (!_tcsnicmp(next_option, _T("Password"), 8))
 		{
-			// All of the remaining options are single-letter followed by a number:
-			TCHAR option_char = ctoupper(*next_option);
-			if (!_tcschr(_T("XYWHT"), option_char) // Not a valid option char.
-				|| !IsNumeric(next_option + 1 // Or not a valid number.
-					, option_char == 'X' || option_char == 'Y' // Only X and Y allow negative numbers.
-					, FALSE, option_char == 'T')) // Only Timeout allows floating-point.
+			if (next_option[8] && !IS_SPACE_OR_TAB(next_option[8]))
 			{
-				*option_end = orig_char; // Undo the temporary termination.
-				return ValueError(ERR_INVALID_OPTION, next_option, FAIL_OR_OK);
+				if (next_option[8] && (next_option[9] && !IS_SPACE_OR_TAB(next_option[9])))
+					break; // More than one character - invalid.
+				aInputBox.password_char = next_option[8];
 			}
-
-			switch (ctoupper(*next_option))
-			{
-			case 'W': aInputBox.width = DPIScale(ATOI(next_option + 1)); break;
-			case 'H': aInputBox.height = DPIScale(ATOI(next_option + 1)); break;
-			case 'X': aInputBox.xpos = ATOI(next_option + 1); break;
-			case 'Y': aInputBox.ypos = ATOI(next_option + 1); break;
-			case 'T': aInputBox.timeout = (DWORD)(ATOF(next_option + 1) * 1000); break;
-			}
+			else
+				aInputBox.password_char = UorA(L'\x25CF', '*');
+			continue;
 		}
+
+		// All of the remaining options are a single letter followed by a number.
+		TCHAR option_char = ctoupper(*next_option);
+		LPTSTR n_end;
+		auto value = _tcstod(next_option + 1, &n_end); // Supports hex with VC++ 2015 and later.
+		if (*n_end && !IS_SPACE_OR_TAB(*n_end) // Invalid option or non-numeric suffix.
+			|| value < 0 && !(option_char == 'X' || option_char == 'Y'))
+			break; 
 		
-		*option_end = orig_char; // Undo the temporary termination.
+		switch (ctoupper(*next_option))
+		{
+		case 'W': aInputBox.width = DPIScale((int)value); continue;
+		case 'H': aInputBox.height = DPIScale((int)value); continue;
+		case 'X': aInputBox.xpos = (int)value; continue;
+		case 'Y': aInputBox.ypos = (int)value; continue;
+		case 'T': aInputBox.timeout = (DWORD)(value * 1000); continue;
+		}
+		break;
 	}
-	return OK;
+	return ValueError(ERR_INVALID_OPTION, next_option, FAIL_OR_OK);
 }
 
 
 
-BIF_DECL(BIF_InputBox)
+bif_impl FResult InputBox(optl<StrArg> aPrompt, optl<StrArg> aTitle, optl<StrArg> aOptions, optl<StrArg> aDefault, IObject *&aRetVal)
 {
-	_f_param_string_opt(aText, 0);
-	_f_param_string_opt_def(aTitle, 1, g_script.DefaultDialogTitle());
-	_f_param_string_opt(aOptions, 2);
-	_f_param_string_opt(aDefault, 3);
-
 	InputBoxType inputbox;
-	inputbox.title = aTitle;
-	inputbox.text = aText;
-	inputbox.default_string = aDefault;
+	inputbox.title = aTitle.has_value() ? aTitle.value() : g_script.DefaultDialogTitle();
+	inputbox.text = aPrompt.value_or_empty();
+	inputbox.default_string = aDefault.value_or_null();
 	inputbox.return_string = nullptr;
 	// Set defaults:
 	inputbox.width = INPUTBOX_DEFAULT;
@@ -90,8 +87,8 @@ BIF_DECL(BIF_InputBox)
 	inputbox.password_char = '\0';
 	inputbox.timeout = 0;
 	// Parse options and override defaults:
-	if (!InputBoxParseOptions(aOptions, inputbox))
-		_f_return_FAIL; // It already displayed the error.
+	if (aOptions.has_value() && !InputBoxParseOptions(aOptions.value(), inputbox))
+		return FR_FAIL; // It already displayed the error.
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP
@@ -113,24 +110,19 @@ BIF_DECL(BIF_InputBox)
 	case IDCANCEL:		reason = _T("Cancel");	break;
 	default:			reason = nullptr;		break;
 	}
-	// result can be -1 or FAIL in case of failure, but since failure of any
-	// kind is rare, all kinds are handled the same way, below.
 
+	FResult fresult;
 	if (reason && value)
 	{
 		ExprTokenType argt[] = { _T("Result"), reason, _T("Value"), value };
 		ExprTokenType *args[_countof(argt)] = { argt, argt+1, argt+2, argt+3 };
-		if (Object *obj = Object::Create(args, _countof(args)))
-		{
-			free(value);
-			_f_return(obj);
-		}
+		aRetVal = Object::Create(args, _countof(args));
+		fresult = aRetVal ? OK : FR_E_OUTOFMEM;
 	}
-
+	else
+		fresult = result == -1 ? FR_E_WIN32 : FR_E_FAILED;
 	free(value);
-	// Since above didn't return, result is -1 (DialogBox somehow failed),
-	// result is FAIL (something failed in InputBoxProc), or value is null.
-	_f_throw(ERR_INTERNAL_CALL);
+	return fresult;
 }
 
 
@@ -213,7 +205,7 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		GetClientRect(hWndDlg, &rect);  // Not to be confused with GetWindowRect().
 		SendMessage(hWndDlg, WM_SIZE, SIZE_RESTORED, rect.right + (rect.bottom<<16));
 		
-		if (*CURR_INPUTBOX.default_string)
+		if (CURR_INPUTBOX.default_string)
 			SetDlgItemText(hWndDlg, IDC_INPUTEDIT, CURR_INPUTBOX.default_string);
 
 		if (hWndDlg != GetForegroundWindow()) // Normally it will be foreground since the template has this property.

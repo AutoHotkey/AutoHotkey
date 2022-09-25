@@ -40,10 +40,27 @@ MdFuncEntry sMdFunc[]
 
 Func *Script::GetBuiltInMdFunc(LPTSTR aFuncName)
 {
-	for (int i = 0; i < _countof(sMdFunc); ++i)
+#ifdef _DEBUG
+	static bool sChecked = false;
+	if (!sChecked)
 	{
-		auto &f = sMdFunc[i];
-		if (!_tcsicmp(f.name, aFuncName))
+		sChecked = true;
+		for (int i = 1; i < _countof(sMdFunc); ++i)
+			if (_tcsicmp(sMdFunc[i-1].name, sMdFunc[i].name) >= 0)
+				MsgBox(_T("DEBUG: sMdFunc out of order."), 0, sMdFunc[i].name);
+	}
+#endif
+	int left, right, mid, result;
+	for (left = 0, right = _countof(sMdFunc) - 1; left <= right;)
+	{
+		mid = (left + right) / 2;
+		auto &f = sMdFunc[mid];
+		result = _tcsicmp(aFuncName, f.name);
+		if (result > 0)
+			left = mid + 1;
+		else if (result < 0)
+			right = mid - 1;
+		else // Match found.
 		{
 			int ac;
 			for (ac = 0; ac < _countof(f.argtype) && f.argtype[ac] != MdType::Void; ++ac);
@@ -104,7 +121,7 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 		if (!retval && !MdType_IsBits(aArg[i]))
 		{
 			++pc;
-			if (!opt)
+			if (!opt && pc - 1 == mMinParams)
 				mMinParams = pc;
 			if (aArg[i] == MdType::String || aArg[i] == MdType::Variant && out != MdType::Void)
 				++mMaxResultTokens;
@@ -270,7 +287,6 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				t = &param;
 			arg_value = (UINT_PTR)TokenToString(*t, buf);
 		}
-#if 0 // Currently unused/untested
 		else if (arg_type == MdType::Object)
 		{
 			arg_value = (DWORD_PTR)TokenToObject(param);
@@ -280,7 +296,6 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				goto end;
 			}
 		}
-#endif
 		else if (arg_type == MdType::Variant)
 		{
 			arg_value = (DWORD_PTR)&param;
@@ -339,23 +354,30 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	rup = DynaCall(mArgSlots, args, mMcFunc, mThisCall);
 
 	// Convert the return value
+	bool aborted = false;
 	switch (mRetType)
 	{
 	case MdType::Int32: aResultToken.SetValue(ri32); break;
+	case MdType::UInt64:
 	case MdType::Int64: aResultToken.SetValue(ri64); break;
+	case MdType::UInt32: aResultToken.SetValue((UINT)rup); break;
 	case MdType::Float64: aResultToken.SetValue(GetDoubleRetval()); break;
 	case MdType::String: aResultToken.SetValue((LPTSTR)rup); break; // Strictly statically-allocated strings.
 	case MdType::ResultType: aResultToken.SetResult((ResultType)rup); break;
 	case MdType::FResult:
 		if (FAILED(res))
+		{
 			FResultToError(aResultToken, aParam, aParamCount, res);
-		else if (res == FR_ABORTED)
-			retval_index = -1; // Leave aResultToken set to its default value.
+			aborted = true;
+		}
+		else
+			aborted = (res == FR_ABORTED);
 		break;
 	case MdType::NzIntWin32:
 		if (!(BOOL)rup)
 			aResultToken.Win32Error();
 		break;
+	case MdType::Bool32: aResultToken.SetValue(ri32 ? TRUE : FALSE); break;
 	}
 	if (retval_index != -1)
 	{
@@ -370,6 +392,12 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		}
 		else if (retval_arg_type != MdType::Variant) // Variant type passes aResultToken directly.
 			TypedPtrToToken(retval_arg_type, (void*)args[retval_index], aResultToken);
+	}
+	if (aborted)
+	{
+		aResultToken.Free(); // In case memory was allocated or an object was returned, despite the return value indicating failure.
+		aResultToken.mem_to_free = nullptr; // Because Free() doesn't clear it.
+		aResultToken.SetValue(_T(""), 0);
 	}
 
 	// Copy output parameters
@@ -422,6 +450,14 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			else
 				var->Assign(value);
 		}
+		// Now that any memory or object allocated by the function has been assigned:
+		if (aborted)
+		{
+			// Although 0 or "" is a fairly conventional default, it might not be safe.
+			// For error-detection and to avoid unexpected behaviour, "unset" the var.
+			var->Assign();
+			var->MarkUninitialized();
+		}
 	}
 
 end:
@@ -440,17 +476,19 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 	{
 	case MdType::Bool32:
 	case MdType::Int32: aToken.SetValue(*(int*)aPtr); break;
+	case MdType::UInt32: aToken.SetValue(*(UINT*)aPtr); break;
+	case MdType::UInt64:
 	case MdType::Int64: aToken.SetValue(*(__int64*)aPtr); break;
 	case MdType::Float64: aToken.SetValue(*(double*)aPtr); break;
 	case MdType::Object:
-		if (aPtr)
-			aToken.SetValue(*(IObject**)aPtr);
+		if (auto obj = *(IObject**)aPtr)
+			aToken.SetValue(obj);
 		else
 			aToken.SetValue(_T(""), 0);
 		break;
 	case MdType::String: // String*, not String
-		if (aPtr)
-			aToken.SetValue(*(LPTSTR*)aPtr);
+		if (auto str = *(LPTSTR*)aPtr)
+			aToken.SetValue(str);
 		else
 			aToken.SetValue(_T(""), 0);
 		break;

@@ -22,254 +22,19 @@ GNU General Public License for more details.
 
 
 
-BIF_DECL(BIF_Wait)
-// Since other script threads can interrupt these commands while they're running, it's important that
-// these commands not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
-// This is because an interrupting thread usually changes the values to something inappropriate for this thread.
-// fincs: it seems best that this function not throw an exception if the wait timeouts.
+typedef bool (*WaitCompletedPredicate)(void *);
+
+static bool Wait(int aTimeout, void *aParam, WaitCompletedPredicate aWaitCompleted)
 {
-	bool wait_indefinitely;
-	int sleep_duration;
-	DWORD start_time;
-
-	vk_type vk; // For GetKeyState.
-	HANDLE running_process; // For RUNWAIT
-	DWORD exit_code; // For RUNWAIT
-
-	// For FID_KeyWait:
-	bool wait_for_keydown;
-	KeyStateTypes key_state_type;
-	JoyControls joy;
-	int joystick_id;
-	ExprTokenType token;
-
 	Line *waiting_line = g_script.mCurrLine;
 
-	_f_set_retval_i(TRUE); // Set default return value to be possibly overridden later on.
-
-	_f_param_string_opt(arg1, 0);
-	_f_param_string_opt(arg2, 1);
-	_f_param_string_opt(arg3, 2);
-
-	HWND target_hwnd = NULL;
-
-	switch (_f_callee_id)
+	for (DWORD start_time = GetTickCount();;) // start_time is initialized unconditionally for use with ListLines.
 	{
-	case FID_RunWait:
-		if (!g_script.ActionExec(arg1, NULL, arg2, true, arg3, &running_process, true, true
-			, ParamIndexToOutputVar(4-1)))
-			_f_return_FAIL;
-		//else fall through to the waiting-phase of the operation.
-		break;
-	case FID_WinWait:
-	case FID_WinWaitClose:
-	case FID_WinWaitActive:
-	case FID_WinWaitNotActive:
-		if (ParamIndexIsOmitted(0))
-			break;
-		// The following supports pure HWND or {Hwnd:HWND} as in other WinTitle parameters,
-		// in lieu of saving aParam[] and evaluating them vs. arg1,2,4,5 on each iteration.
-		switch (DetermineTargetHwnd(target_hwnd, aResultToken, *aParam[0]))
-		{
-		case FAIL: return;
-		case OK:
-			if (!target_hwnd) // Caller passed 0 or a value that failed an IsWindow() check.
-			{
-				// If it's 0 due to failing IsWindow(), there's no way to determine whether
-				// it was ever valid, so assume it was but that the window has been closed.
-				DoWinDelay;
-				if (_f_callee_id == FID_WinWaitClose || _f_callee_id == FID_WinWaitNotActive)
-					_f_return_retval;
-				// Otherwise, this window will never exist or be active again, so abort early.
-				// It might be more correct to just wait the timeout (or stall indefinitely),
-				// but that's probably not the user's intention.
-				_f_return_i(FALSE);
-			}
-		}
-		break;
-	}
-
-	// These are declared/accessed after "case FID_RunWait:" to avoid a UseUnset warning.
-	_f_param_string_opt(arg4, 3);
-	_f_param_string_opt(arg5, 4);
-	
-	// Must NOT use ELSE-IF in line below due to ELSE further down needing to execute for RunWait.
-	if (_f_callee_id == FID_KeyWait)
-	{
-		if (   !(vk = TextToVK(arg1))   )
-		{
-			joy = (JoyControls)ConvertJoy(arg1, &joystick_id);
-			if (!IS_JOYSTICK_BUTTON(joy)) // Currently, only buttons are supported.
-				// It's either an invalid key name or an unsupported Joy-something.
-				_f_throw_param(0);
-		}
-		// Set defaults:
-		wait_for_keydown = false;  // The default is to wait for the key to be released.
-		key_state_type = KEYSTATE_PHYSICAL;  // Since physical is more often used.
-		wait_indefinitely = true;
-		sleep_duration = 0;
-		for (LPTSTR cp = arg2; *cp; ++cp)
-		{
-			switch(ctoupper(*cp))
-			{
-			case 'D':
-				wait_for_keydown = true;
-				break;
-			case 'L':
-				key_state_type = KEYSTATE_LOGICAL;
-				break;
-			case 'T':
-				// Although ATOF() supports hex, it's been documented in the help file that hex should
-				// not be used (see comment above) so if someone does it anyway, some option letters
-				// might be misinterpreted:
-				wait_indefinitely = false;
-				sleep_duration = (int)(ATOF(cp + 1) * 1000);
-				break;
-			}
-		}
-	}
-	else if (   (_f_callee_id != FID_RunWait && _f_callee_id != FID_ClipWait && *arg3)
-		|| (_f_callee_id == FID_ClipWait && *arg1)   )
-	{
-		// Since the param containing the timeout value isn't blank, it must be numeric,
-		// otherwise, the loading validation would have prevented the script from loading.
-		wait_indefinitely = false;
-		sleep_duration = (int)(ATOF(_f_callee_id == FID_ClipWait ? arg1 : arg3) * 1000); // Can be zero.
-	}
-	else
-	{
-		wait_indefinitely = true;
-		sleep_duration = 0; // Just to catch any bugs.
-	}
-
-	bool any_clipboard_format = (_f_callee_id == FID_ClipWait && ATOI(arg2) == 1);
-
-	for (start_time = GetTickCount();;) // start_time is initialized unconditionally for use with v1.0.30.02's new logging feature further below.
-	{ // Always do the first iteration so that at least one check is done.
-		if (target_hwnd) // Caller passed a pure HWND or {Hwnd:HWND}.
-		{
-			// Change the behaviour a little since we know that once the HWND is destroyed,
-			// it is not meaningful to wait for another window with that same HWND.
-			if (!IsWindow(target_hwnd))
-			{
-				DoWinDelay;
-				if (_f_callee_id == FID_WinWaitClose || _f_callee_id == FID_WinWaitNotActive)
-					_f_return_retval; // Condition met.
-				// Otherwise, it would not be meaningful to wait for another window to be
-				// created with the same HWND.  It seems more useful to abort immediately
-				// but report timeout/failure than to wait for the timeout to elapse.
-				_f_return_i(FALSE);
-			}
-			if (_f_callee_id == FID_WinWait || _f_callee_id == FID_WinWaitClose)
-			{
-				// Wait for the window to become visible/hidden.  Most functions ignore
-				// DetectHiddenWindows when given a pure HWND/object (because it's more
-				// useful that way), but in this case it seems more useful and intuitive
-				// to respect DetectHiddenWindows.
-				if (g->DetectWindow(target_hwnd) == (_f_callee_id == FID_WinWait))
-				{
-					DoWinDelay;
-					if (_f_callee_id == FID_WinWaitClose)
-						_f_return_retval;
-					_f_return_i((size_t)target_hwnd);
-				}
-			}
-			else
-			{
-				if ((GetForegroundWindow() == target_hwnd) == (_f_callee_id == FID_WinWaitActive))
-				{
-					DoWinDelay;
-					if (_f_callee_id == FID_WinWaitNotActive)
-						_f_return_retval;
-					_f_return_i((size_t)target_hwnd);
-				}
-			}
-		}
-		else switch (_f_callee_id)
-		{
-		case FID_WinWait:
-			#define SAVED_WIN_ARGS arg1, arg2, arg4, arg5
-			if (HWND found = WinExist(*g, SAVED_WIN_ARGS, false, true))
-			{
-				DoWinDelay;
-				_f_return_i((size_t)found);
-			}
-			break;
-		case FID_WinWaitClose:
-			if (!WinExist(*g, SAVED_WIN_ARGS, false, true))
-			{
-				DoWinDelay;
-				_f_return_retval;
-			}
-			break;
-		case FID_WinWaitActive:
-			if (HWND found = WinActive(*g, SAVED_WIN_ARGS, true))
-			{
-				DoWinDelay;
-				_f_return_i((size_t)found);
-			}
-			break;
-		case FID_WinWaitNotActive:
-			if (!WinActive(*g, SAVED_WIN_ARGS, true))
-			{
-				DoWinDelay;
-				_f_return_retval;
-			}
-			break;
-		case FID_ClipWait:
-			// Seems best to consider CF_HDROP to be a non-empty clipboard, since we
-			// support the implicit conversion of that format to text:
-			if (any_clipboard_format)
-			{
-				if (CountClipboardFormats())
-					_f_return_retval;
-			}
-			else
-				if (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP))
-					_f_return_retval;
-			break;
-		case FID_KeyWait:
-			if (vk) // Waiting for key or mouse button, not joystick.
-			{
-				if (ScriptGetKeyState(vk, key_state_type) == wait_for_keydown)
-					_f_return_retval;
-			}
-			else // Waiting for joystick button
-			{
-				TCHAR unused[32];
-				if (ScriptGetJoyState(joy, joystick_id, token, unused) == wait_for_keydown)
-					_f_return_retval;
-			}
-			break;
-		case FID_RunWait:
-			// Pretty nasty, but for now, nothing is done to prevent an infinite loop.
-			// In the future, maybe OpenProcess() can be used to detect if a process still
-			// exists (is there any other way?):
-			// MSDN: "Warning: If a process happens to return STILL_ACTIVE (259) as an error code,
-			// applications that test for this value could end up in an infinite loop."
-			if (running_process)
-				GetExitCodeProcess(running_process, &exit_code);
-			else // it can be NULL in the case of launching things like "find D:\" or "www.yahoo.com"
-				exit_code = 0;
-			if (exit_code != STATUS_PENDING) // STATUS_PENDING == STILL_ACTIVE
-			{
-				if (running_process)
-					CloseHandle(running_process);
-				// Use signed vs. unsigned, since that is more typical?  No, it seems better
-				// to use unsigned now that script variables store 64-bit ints.  This is because
-				// GetExitCodeProcess() yields a DWORD, implying that the value should be unsigned.
-				// Unsigned also is more useful in cases where an app returns a (potentially large)
-				// count of something as its result.  However, if this is done, it won't be easy
-				// to check against a return value of -1, for example, which I suspect many apps
-				// return.  AutoIt3 (and probably 2) use a signed int as well, so that is another
-				// reason to keep it this way:
-				_f_return_i((int)exit_code);
-			}
-			break;
-		}
+		if (aWaitCompleted(aParam))
+			return true;
 
 		// Must cast to int or any negative result will be lost due to DWORD type:
-		if (wait_indefinitely || (int)(sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
+		if (aTimeout < 0 || (aTimeout - (int)(GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
 		{
 			if (MsgSleep(INTERVAL_UNSPECIFIED)) // INTERVAL_UNSPECIFIED performs better.
 			{
@@ -298,7 +63,287 @@ BIF_DECL(BIF_Wait)
 				}
 			}
 		}
-		else // Done waiting.
-			_f_return_i(FALSE); // Since it timed out, we override the default with this.
-	} // for()
+		else // Done waiting (timed out).
+			return false;
+	}
+}
+
+
+
+bif_impl FResult ClipWait(optl<double> aTimeout, optl<int> aWaitForAnyData, BOOL &aRetVal)
+{
+	int timeout = -1;
+	if (aTimeout.has_value())
+	{
+		timeout = (int)(aTimeout.value() * 1000);
+		if (timeout < 0)
+			return FR_E_ARG(0);
+	}
+	WaitCompletedPredicate predicate;
+	switch (aWaitForAnyData.value_or(0))
+	{
+	case 0: // Wait for text
+		predicate = [](void*) -> bool {
+			// Seems best to consider CF_HDROP to be a non-empty clipboard, since we
+			// support the implicit conversion of that format to text:
+			return (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP));
+		};
+		break;
+	case 1: // Wait for any clipboard data
+		predicate = [](void*) -> bool {
+			return CountClipboardFormats();
+		};
+		break;
+	default: // Reserved
+		return FR_E_ARG(1);
+	}
+	aRetVal = Wait(timeout, nullptr, predicate);
+	return OK;
+}
+
+
+
+bif_impl FResult KeyWait(StrArg aKeyName, optl<StrArg> aOptions, BOOL &aRetVal)
+{
+	// Set defaults:
+	int timeout = -1;
+	struct Params
+	{
+		vk_type vk;
+		JoyControls joy;
+		int joystick_id;
+		bool wait_for_keydown = false;  // The default is to wait for the key to be released.
+		KeyStateTypes key_state_type = KEYSTATE_PHYSICAL;  // Since physical is more often used.
+	} params;
+
+	if (   !(params.vk = TextToVK(aKeyName))   )
+	{
+		params.joy = (JoyControls)ConvertJoy(aKeyName, &params.joystick_id);
+		if (!IS_JOYSTICK_BUTTON(params.joy)) // Currently, only buttons are supported.
+			// It's either an invalid key name or an unsupported Joy-something.
+			return FR_E_ARG(0);
+	}
+	
+	for (auto cp = aOptions.value_or_empty(); *cp; ++cp)
+	{
+		switch (ctoupper(*cp))
+		{
+		case 'D':
+			params.wait_for_keydown = true;
+			break;
+		case 'L':
+			params.key_state_type = KEYSTATE_LOGICAL;
+			break;
+		case 'T':
+			timeout = (int)(ATOF(cp + 1) * 1000);
+			if (timeout < 0)
+				return FR_E_ARG(1);
+			break;
+		}
+	}
+
+	WaitCompletedPredicate predicate;
+	if (params.vk) predicate = [](void *pp) -> bool { // Waiting for key or mouse button
+		auto &p = *((Params*)pp);
+		return ScriptGetKeyState(p.vk, p.key_state_type) == p.wait_for_keydown;
+	};
+	else predicate = [](void *pp) -> bool { // Waiting for joystick button
+		auto &p = *((Params*)pp);
+		TCHAR unused[32];
+		ExprTokenType token;
+		return ScriptGetJoyState(p.joy, p.joystick_id, token, unused) == p.wait_for_keydown;
+	};
+	aRetVal = Wait(timeout, &params, predicate);
+	return OK;
+}
+
+
+
+static FResult WinWait(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText
+	, UINT &aRetVal, BuiltInFunctionID aCondition)
+{
+	int timeout = -1;
+	if (aTimeout.has_value())
+	{
+		timeout = (int)(aTimeout.value() * 1000);
+		if (timeout < 0)
+			return FR_E_ARG(2);
+	}
+	
+	TCHAR title_buf[MAX_NUMBER_SIZE];
+	WaitCompletedPredicate predicate;
+	struct Params {
+		BuiltInFunctionID condition;
+		bool hwnd_specified;
+		HWND hwnd;
+		LPCTSTR title, text, exclude_title, exclude_text;
+	} p;
+	
+	p.condition = aCondition;
+	p.hwnd_specified = false;
+	p.hwnd = NULL;
+	p.title = _T("");
+	p.text = aWinText.value_or_empty();
+	p.exclude_title = aExcludeTitle.value_or_empty();
+	p.exclude_text = aExcludeText.value_or_empty();
+
+	if (aWinTitle)
+	{
+		auto fr = DetermineTargetHwnd(p.hwnd, p.hwnd_specified, *aWinTitle);
+		if (fr != OK)
+			return fr;
+		if (p.hwnd_specified && !p.hwnd)
+		{
+			// Caller may have specified a NULL HWND or it may be NULL due to an IsWindow() check.
+			// In either case, it isn't meaningful to wait (see !IsWindow(p.hwnd) comments below).
+			aRetVal = (aCondition == FID_WinWaitClose || aCondition == FID_WinWaitNotActive);
+			if (aRetVal)
+				DoWinDelay;
+			return OK;
+		}
+		if (!p.hwnd_specified)
+			p.title = TokenToString(*aWinTitle, title_buf);
+	}
+
+	if (p.hwnd_specified)
+	{
+		predicate = [](void *pp)
+		{
+			auto &p = *(Params*)pp;
+			if (!IsWindow(p.hwnd))
+			{
+				// It's not meaningful to wait for another window to be created with this
+				// same HWND, so return now regardless of whether the wait condition was met.
+				// Let the return value be 1 for WinWaitClose/WinWaitNotActive to indicate the
+				// condition was met, and 0 for WinWait/WinWaitActive to indicate that it wasn't.
+				p.hwnd = NULL;
+				return true;
+			}
+			if (p.condition == FID_WinWait || p.condition == FID_WinWaitClose)
+				// Wait for the window to become visible/hidden.  Most functions ignore
+				// DetectHiddenWindows when given a pure HWND/object (because it's more
+				// useful that way), but in this case it seems more useful and intuitive
+				// to respect DetectHiddenWindows.
+				return (g->DetectWindow(p.hwnd) == (p.condition == FID_WinWait));
+			else
+				return (GetForegroundWindow() == p.hwnd) == (p.condition == FID_WinWaitActive);
+		};
+	}
+	else // hwnd_specified == false
+	switch (aCondition)
+	{
+	default:
+#ifdef _DEBUG
+		ASSERT(!"Unhandled case");
+		break;
+#endif
+	case FID_WinWait:
+	case FID_WinWaitClose:
+		predicate = [](void *pp)
+		{
+			auto &p = *(Params*)pp;
+			HWND found = WinExist(*g, p.title, p.text, p.exclude_title, p.exclude_text, false, true);
+			if ((found != NULL) == (p.condition == FID_WinWait))
+			{
+				p.hwnd = found;
+				return true;
+			}
+			return false;
+		};
+		break;
+	case FID_WinWaitActive:
+	case FID_WinWaitNotActive:
+		predicate = [](void *pp)
+		{
+			auto &p = *(Params*)pp;
+			HWND found = WinActive(*g, p.title, p.text, p.exclude_title, p.exclude_text, true);
+			if ((found != NULL) == (p.condition == FID_WinWaitActive))
+			{
+				p.hwnd = found;
+				return true;
+			}
+			return false;
+		};
+		break;
+	}
+
+	if (Wait(timeout, &p, predicate))
+	{
+		DoWinDelay;
+		if (aCondition == FID_WinWaitClose || aCondition == FID_WinWaitNotActive)
+			aRetVal = 1;
+		else
+			aRetVal = (UINT)(size_t)p.hwnd;
+	}
+	else
+		aRetVal = 0;
+	return OK;
+}
+
+bif_impl FResult WinWait(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText, UINT &aRetVal)
+{
+	return WinWait(aWinTitle, aWinText, aTimeout, aExcludeTitle, aExcludeText, aRetVal, FID_WinWait);
+}
+
+bif_impl FResult WinWaitClose(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText, UINT &aRetVal)
+{
+	return WinWait(aWinTitle, aWinText, aTimeout, aExcludeTitle, aExcludeText, aRetVal, FID_WinWaitClose);
+}
+
+bif_impl FResult WinWaitActive(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText, UINT &aRetVal)
+{
+	return WinWait(aWinTitle, aWinText, aTimeout, aExcludeTitle, aExcludeText, aRetVal, FID_WinWaitActive);
+}
+
+bif_impl FResult WinWaitNotActive(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<double> aTimeout, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText, UINT &aRetVal)
+{
+	return WinWait(aWinTitle, aWinText, aTimeout, aExcludeTitle, aExcludeText, aRetVal, FID_WinWaitNotActive);
+}
+
+
+
+// RunWait is still a "BIF" for now because the OutputVarPID parameter can only be used
+// by another thread, while the function is running, and there's currently no means for
+// a function implemented via MdFunc to assign to the output var directly.
+BIF_DECL(BIF_RunWait)
+{
+	Line *waiting_line = g_script.mCurrLine;
+
+	_f_param_string_opt(arg1, 0);
+	_f_param_string_opt(arg2, 1);
+	_f_param_string_opt(arg3, 2);
+	Var *output_var = ParamIndexToOutputVar(3);
+	if (output_var)
+		output_var->Assign();
+
+	HANDLE running_process;
+	if (!g_script.ActionExec(arg1, NULL, arg2, true, arg3, &running_process, true, true))
+		_f_return_FAIL;
+	
+	// For the output var to be useful, it must be assigned before we wait:
+	if (output_var && running_process)
+		output_var->Assign(GetProcessId(running_process));
+
+	if (!running_process) // Nothing to wait for (rare?).
+		_f_return_i(0);
+
+	Wait(-1, (void*)running_process, [](void *p)
+		{
+			// Using WaitForSingleObject() rather than GetExitCodeProcess() avoids an
+			// infinite loop if a process returns 259 (STILL_ACTIVE) as its exit code.
+			return WaitForSingleObject((HANDLE)p, 0) != WAIT_TIMEOUT;
+		});
+
+	DWORD exit_code = 0;
+	GetExitCodeProcess(running_process, &exit_code);
+	CloseHandle(running_process);
+	// Use signed vs. unsigned, since that is more typical?  No, it seems better
+	// to use unsigned now that script variables store 64-bit ints.  This is because
+	// GetExitCodeProcess() yields a DWORD, implying that the value should be unsigned.
+	// Unsigned also is more useful in cases where an app returns a (potentially large)
+	// count of something as its result.  However, if this is done, it won't be easy
+	// to check against a return value of -1, for example, which I suspect many apps
+	// return.  AutoIt3 (and probably 2) use a signed int as well, so that is another
+	// reason to keep it this way:
+	_f_return_i((int)exit_code);
 }

@@ -29,3 +29,43 @@ constexpr FResult FR_E_ARGS = FR_E_ARG(0xFFFF);
 constexpr int FR_ERR_BASE = FR_OUR_FLAG | MAKE_HRESULT(SEVERITY_ERROR, FR_FACILITY_ERR, 0); // 0xA00E0000
 constexpr int FR_E_OUTOFMEM = FR_ERR_BASE | 1;
 constexpr int FR_E_FAILED = FR_ERR_BASE | 2;
+
+
+typedef LPCTSTR StrArg;
+
+template<typename T> class optl
+{
+	const T *_value;
+public:
+	optl(T &v) : _value {&v} {}
+	optl(nullptr_t) : _value {nullptr} {}
+	bool has_value() { return _value != nullptr; }
+	T operator* () { return *_value; }
+	T value() { return *_value; }
+	T value_or(T aDefault) { return _value ? *_value : aDefault; }
+};
+
+template<> class optl<StrArg>
+{
+	const StrArg _value;
+public:
+	optl(StrArg v) : _value {v} {}
+	bool has_value() { return _value != nullptr; }
+	bool has_nonempty_value() { return _value && *_value; }
+	bool is_blank() { return _value && !*_value; }
+	bool is_blank_or_omitted() { return !has_nonempty_value(); }
+	StrArg value() { ASSERT(_value); return _value; }
+	StrArg value_or(StrArg aDefault) { return _value ? _value : aDefault; }
+	StrArg value_or_null() { return _value; }
+	StrArg value_or_empty() { return _value ? _value : _T(""); }
+};
+
+template<> class optl<IObject *>
+{
+	IObject *_value;
+public:
+	optl(IObject *v) : _value {v} {}
+	optl(nullptr_t) : _value {nullptr} {}
+	bool has_value() { return _value != nullptr; }
+	IObject *value() { return _value; }
+};

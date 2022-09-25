@@ -81,7 +81,7 @@ invalid_option:
 }
 
 
-bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
+bif_impl FResult TrayTip(optl<StrArg> aText, optl<StrArg> aTitle, optl<StrArg> aOptions)
 {
 	NOTIFYICONDATA nic = {0};
 	nic.cbSize = sizeof(nic);
@@ -89,15 +89,8 @@ bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
 	nic.hWnd = g_hWnd;
 	nic.uFlags = NIF_INFO;
 	// nic.uTimeout is no longer used because it is valid only on Windows 2000 and Windows XP.
-	if (!TrayTipParseOptions(aOptions, nic))
+	if (!TrayTipParseOptions(aOptions.value_or_null(), nic))
 		return FR_FAIL;
-	if (!aTitle) aTitle = _T("");
-	if (!aText) aText = _T("");
-	if (*aTitle && !*aText)
-		// As passing an empty string hides the TrayTip (or does nothing on Windows 10),
-		// pass a space to ensure the TrayTip is shown.  Testing showed that Windows 10
-		// will size the notification to fit only the title, as if there was no text.
-		aText = _T(" ");
 	if (nic.dwInfoFlags & NIIF_USER)
 	{
 		// Windows 10 toast notifications display the small tray icon stretched to the
@@ -111,8 +104,16 @@ bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
 		else
 			nic.hBalloonIcon = g_script.mCustomIconSmall ? g_script.mCustomIconSmall : g_IconSmall;
 	}
-	tcslcpy(nic.szInfoTitle, aTitle, _countof(nic.szInfoTitle)); // Empty title omits the title line entirely.
-	tcslcpy(nic.szInfo, aText, _countof(nic.szInfo));	// Empty text removes the balloon.
+	if (aTitle.has_value())
+		tcslcpy(nic.szInfoTitle, aTitle.value(), _countof(nic.szInfoTitle));
+	else
+		*nic.szInfoTitle = '\0'; // Empty title omits the title line entirely.
+	if (aText.has_nonempty_value())
+		tcslcpy(nic.szInfo, aText.value(), _countof(nic.szInfo));
+	else if (aTitle.has_nonempty_value()) // Text was omitted or empty, but Title was specified.
+		*nic.szInfo = ' ', nic.szInfo[1] = '\0'; // Pass a non-empty string to ensure the notification is shown.
+	else // Both parameters were omitted or empty.
+		*nic.szInfo = '\0'; // Empty text removes the notification (or tries to).
 	if (!Shell_NotifyIcon(NIM_MODIFY, &nic) && (nic.dwInfoFlags & NIIF_USER))
 	{
 		// Passing NIIF_USER without NIIF_LARGE_ICON on Windows 10.0.19018 caused failure,
@@ -124,18 +125,6 @@ bif_impl FResult TrayTip(LPCTSTR aText, LPCTSTR aTitle, LPCTSTR aOptions)
 		Shell_NotifyIcon(NIM_MODIFY, &nic);
 	}
 	return OK; // i.e. never a critical error if it fails.
-}
-
-
-
-BIF_DECL(BIF_TraySetIcon)
-{
-	if (!g_script.SetTrayIcon(
-		ParamIndexToOptionalString(0, _f_number_buf) // buf is provided for error-reporting purposes.
-		, ParamIndexToOptionalInt(1, 1)
-		, ParamIndexIsOmitted(2) ? NEUTRAL : ParamIndexToBOOL(2) ? TOGGLED_ON : TOGGLED_OFF))
-		_f_return_FAIL;
-	_f_return_empty;
 }
 
 
@@ -810,9 +799,9 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 
 
 
-bif_impl void ListLines(int *aMode)
+bif_impl void ListLines(optl<int> aMode)
 {
-	if (!aMode)
+	if (!aMode.has_value())
 	{
 		ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
 		return;
@@ -851,9 +840,9 @@ bif_impl void ListHotkeys()
 
 
 
-bif_impl FResult KeyHistory(int *aMaxEvents)
+bif_impl FResult KeyHistory(optl<int> aMaxEvents)
 {
-	if (!aMaxEvents)
+	if (!aMaxEvents.has_value())
 	{
 		ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
 		return OK;
@@ -953,15 +942,18 @@ UserFunc* Script::CreateHotFunc()
 /////////////////////////
 
 
-ResultType MsgBoxParseOptions(LPTSTR aOptions, int &aType, double &aTimeout, HWND &aOwner)
+ResultType MsgBoxParseOptions(LPCTSTR aOptions, int &aType, double &aTimeout, HWND &aOwner)
 {
 	aType = 0;
 	aTimeout = 0;
 
+	if (!aOptions)
+		return OK;
+
 	//int button_option = 0;
 	//int icon_option = 0;
 
-	LPTSTR next_option, option_end;
+	LPCTSTR next_option, option_end;
 	TCHAR option[1+MAX_NUMBER_SIZE];
 	for (next_option = omit_leading_whitespace(aOptions); ; next_option = omit_leading_whitespace(option_end))
 	{
@@ -1064,23 +1056,18 @@ LPTSTR MsgBoxResultString(int aResult)
 }
 
 
-BIF_DECL(BIF_MsgBox)
+bif_impl FResult MsgBox(optl<StrArg> aText, optl<StrArg> aTitle, optl<StrArg> aOptions, StrRet &aRetVal)
 {
 	int result;
 	HWND dialog_owner = THREAD_DIALOG_OWNER; // Resolve macro only once to reduce code size.
 	// dialog_owner is passed via parameter to avoid internally-displayed MsgBoxes from being
 	// affected by script-thread's owner setting.
-	_f_param_string_opt_def(aText, 0, nullptr);
-	_f_param_string_opt_def(aTitle, 1, nullptr);
-	_f_param_string_opt(aOptions, 2);
 	int type;
 	double timeout;
-	if (!MsgBoxParseOptions(aOptions, type, timeout, dialog_owner))
-	{
-		aResultToken.SetExitResult(FAIL);
-		return;
-	}
-	result = MsgBox(aText, type, aTitle, timeout, dialog_owner);
+	if (!MsgBoxParseOptions(aOptions.value_or_null(), type, timeout, dialog_owner))
+		return FR_FAIL;
+	SetLastError(0); // To differentiate MAX_MSGBOXES from invalid parameters.
+	result = MsgBox(aText.value_or_null(), type, aTitle.value_or_null(), timeout, dialog_owner);
 	// If the MsgBox window can't be displayed for any reason, always return FAIL to
 	// the caller because it would be unsafe to proceed with the execution of the
 	// current script subroutine.  For example, if the script contains an IfMsgBox after,
@@ -1099,15 +1086,19 @@ BIF_DECL(BIF_MsgBox)
 	//	// not have any effect.  The below only takes effect if MsgBox()'s call to
 	//	// MessageBox() failed in some unexpected way:
 	//	_f_throw("The MsgBox could not be displayed.");
-	// v1.1.09.02: If the MsgBox failed due to invalid options, it seems better to display
-	// an error dialog than to silently exit the thread:
-	if (!result && GetLastError() == ERROR_INVALID_MSGBOX_STYLE)
-		_f_throw_param(2);
-	// Return a string such as "OK", "Yes" or "No" if possible, or fall back to the integer value.
+
+	// Return a button name such as "OK", "Yes" or "No" if applicable.
 	if (LPTSTR result_string = MsgBoxResultString(result))
-		_f_return_p(result_string);
-	else
-		_f_return_i(result);
+	{
+		aRetVal.SetStatic(result_string);
+		return OK;
+	}
+	if (result == AHK_TOO_MANY_MSGBOXES)
+		// Raise an error, since the MsgBox() might be intended to request approval or input from
+		// the user, and continuing without doing so could be risky:
+		return FError(_T("The maximum number of MsgBoxes has been reached."));
+	auto error = GetLastError();
+	return error == ERROR_INVALID_MSGBOX_STYLE ? FR_E_ARG(2) : FR_E_WIN32(error);
 }
 
 
@@ -1116,16 +1107,11 @@ BIF_DECL(BIF_MsgBox)
 // GUI-related: ToolTip //
 //////////////////////////
 
-BIF_DECL(BIF_ToolTip)
+bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<int> aIndex, UINT_PTR &aRetVal)
 {
-	int window_index = 0; // Default if param index 3 omitted
-	if (!ParamIndexIsOmitted(3))
-	{
-		Throw_if_Param_NaN(3);
-		window_index = ParamIndexToInt(3) - 1;
-		if (window_index < 0 || window_index >= MAX_TOOLTIPS)
-			_f_throw_value(_T("Max window number is ") MAX_TOOLTIPS_STR _T("."));
-	}
+	int window_index = aIndex.value_or(0);
+	if (window_index < 0 || window_index >= MAX_TOOLTIPS)
+		return FR_E_ARG(3);
 
 	HWND tip_hwnd = g_hWndToolTip[window_index];
 
@@ -1138,19 +1124,17 @@ BIF_DECL(BIF_ToolTip)
 	// ToolTip text, 388, 24
 	// Sleep 1000
 	// ToolTip text, 388, 24
-	TCHAR number_buf[MAX_NUMBER_SIZE];
-	auto tip_text = ParamIndexToOptionalString(0, number_buf);
+	auto tip_text = aText.value_or_empty();
 	if (!*tip_text)
 	{
 		if (tip_hwnd && IsWindow(tip_hwnd))
 			DestroyWindow(tip_hwnd);
 		g_hWndToolTip[window_index] = NULL;
-		_f_return_empty;
+		aRetVal = 0;
+		return OK;
 	}
 	
-	bool param1_omitted = ParamIndexIsOmitted(1);
-	bool param2_omitted = ParamIndexIsOmitted(2);
-	bool one_or_both_coords_unspecified = param1_omitted || param2_omitted;
+	bool one_or_both_coords_unspecified = !aX.has_value() || !aY.has_value();
 		 
 	POINT pt, pt_cursor;
 	if (one_or_both_coords_unspecified)
@@ -1170,20 +1154,14 @@ BIF_DECL(BIF_ToolTip)
 	}
 
 	POINT origin = { 0 };
-	if (!param1_omitted || !param2_omitted) // Need the offsets.
+	if (aX.has_value() || aY.has_value()) // Need the offsets.
 		CoordToScreen(origin, COORD_MODE_TOOLTIP);
 
 	// This will also convert from relative to screen coordinates if appropriate:
-	if (!param1_omitted)
-	{
-		Throw_if_Param_NaN(1);
-		pt.x = ParamIndexToInt(1) + origin.x;
-	}
-	if (!param2_omitted)
-	{
-		Throw_if_Param_NaN(2);
-		pt.y = ParamIndexToInt(2) + origin.y;
-	}
+	if (aX.has_value())
+		pt.x = aX.value() + origin.x;
+	if (aY.has_value())
+		pt.y = aY.value() + origin.y;
 	HMONITOR hmon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
 	MONITORINFO mi;
 	mi.cbSize = sizeof(mi);
@@ -1196,7 +1174,7 @@ BIF_DECL(BIF_ToolTip)
 	TOOLINFO ti = { 0 };
 	ti.cbSize = sizeof(ti);
 	ti.uFlags = TTF_TRACK;
-	ti.lpszText = tip_text;
+	ti.lpszText = const_cast<LPTSTR>(tip_text);
 	// ti.hwnd is the window to which notification messages are sent.  Set this to allow customization.
 	ti.hwnd = g_hWnd;
 	// All of ti's other members are left at NULL/0, including the following:
@@ -1224,7 +1202,7 @@ BIF_DECL(BIF_ToolTip)
 		tip_hwnd = g_hWndToolTip[window_index] = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, TTS_NOPREFIX | TTS_ALWAYSTIP
 			, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, NULL, NULL);
 		if (!tip_hwnd)
-			_f_throw_win32();
+			return FR_E_WIN32;
 		SendMessage(tip_hwnd, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&ti);
 	}
 
@@ -1315,7 +1293,8 @@ BIF_DECL(BIF_ToolTip)
 	// And do a TTM_TRACKACTIVATE even if the tooltip window already existed upon entry to this function,
 	// so that in case it was hidden or dismissed while its HWND still exists, it will be shown again:
 	SendMessage(tip_hwnd, TTM_TRACKACTIVATE, TRUE, (LPARAM)&ti);
-	_f_return((size_t)tip_hwnd);
+	aRetVal = (UINT_PTR)tip_hwnd;
+	return OK;
 }
 
 
@@ -1335,58 +1314,41 @@ VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 // MouseGetPos //
 /////////////////
 
-BIF_DECL(BIF_MouseGetPos)
-// Returns OK or FAIL.
+bif_impl FResult MouseGetPos(int *aX, int *aY, ResultToken *aParent, ResultToken *aChild, optl<int> aFlag)
 {
-	// Since SYM_VAR is always VAR_NORMAL, these always resolve to normal vars or nullptr:
-	Var *output_var_x = ParamIndexToOutputVar(0);
-	Var *output_var_y = ParamIndexToOutputVar(1);
-	Var *output_var_parent = ParamIndexToOutputVar(2);
-	Var *output_var_child = ParamIndexToOutputVar(3);
-	int aOptions = ParamIndexToOptionalInt(4, 0);
-
 	POINT point;
 	GetCursorPos(&point);  // Realistically, can't fail?
 
 	POINT origin = {0};
 	CoordToScreen(origin, COORD_MODE_MOUSE);
 
-	if (output_var_x) // else the user didn't want the X coordinate, just the Y.
-		if (!output_var_x->Assign(point.x - origin.x))
-			_f_return_FAIL;
-	if (output_var_y) // else the user didn't want the Y coordinate, just the X.
-		if (!output_var_y->Assign(point.y - origin.y))
-			_f_return_FAIL;
+	if (aX) *aX = point.x - origin.x;
+	if (aY) *aY = point.y - origin.y;
 
-	_f_set_retval_p(_T(""), 0); // Set default.
+	if (!aParent && !aChild)
+		return OK;
 
-	if (!output_var_parent && !output_var_child)
-		_f_return_retval;
-
-	if (output_var_parent)
-		output_var_parent->Assign(); // Set default: empty.
-	if (output_var_child)
-		output_var_child->Assign(); // Set default: empty.
+	int aOptions = aFlag.value_or(0);
 
 	// This is the child window.  Despite what MSDN says, WindowFromPoint() appears to fetch
 	// a non-NULL value even when the mouse is hovering over a disabled control (at least on XP).
 	HWND child_under_cursor = WindowFromPoint(point);
 	if (!child_under_cursor)
-		_f_return_retval;
+		return OK;
 
 	HWND parent_under_cursor = GetNonChildParent(child_under_cursor);  // Find the first ancestor that isn't a child.
-	if (output_var_parent)
+	if (aParent)
 	{
 		// Testing reveals that an invisible parent window never obscures another window beneath it as seen by
 		// WindowFromPoint().  In other words, the below never happens, so there's no point in having it as a
 		// documented feature:
 		//if (!g->DetectHiddenWindows && !IsWindowVisible(parent_under_cursor))
 		//	return output_var_parent->Assign();
-		output_var_parent->AssignHWND(parent_under_cursor);
+		aParent->SetValue((UINT_PTR)parent_under_cursor);
 	}
 
-	if (!output_var_child)
-		_f_return_retval;
+	if (!aChild)
+		return OK;
 
 	// Doing it this way overcomes the limitations of WindowFromPoint() and ChildWindowFromPoint()
 	// and also better matches the control that Window Spy would think is under the cursor:
@@ -1404,12 +1366,12 @@ BIF_DECL(BIF_MouseGetPos)
 	// although probably constant, is not useful for determine which one is one top of the others).
 
 	if (parent_under_cursor == child_under_cursor) // if there's no control per se, make it blank.
-		_f_return_retval;
+		return OK;
 
 	if (aOptions & 0x02) // v1.0.43.06: Bitwise flag that means "return control's HWND vs. ClassNN".
 	{
-		output_var_child->AssignHWND(child_under_cursor);
-		_f_return_retval;
+		aChild->SetValue((UINT_PTR)child_under_cursor);
+		return OK;
 	}
 
 	class_and_hwnd_type cah;
@@ -1417,17 +1379,17 @@ BIF_DECL(BIF_MouseGetPos)
 	TCHAR class_name[WINDOW_CLASS_SIZE];
 	cah.class_name = class_name;
 	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5))  // -5 to allow room for sequence number.
-		_f_return_retval;
+		return OK;
 	cah.class_count = 0;  // Init for the below.
 	cah.is_found = false; // Same.
 	EnumChildWindows(parent_under_cursor, EnumChildFindSeqNum, (LPARAM)&cah); // Find this control's seq. number.
 	if (!cah.is_found)
-		_f_return_retval;
+		return OK;
 	// Append the class sequence number onto the class name and set the output param to be that value:
 	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
-	if (!output_var_child->Assign(class_name))
-		_f_return_FAIL;
-	_f_return_retval;
+	if (!TokenSetResult(*aChild, class_name))
+		return aChild->Exited() ? FR_FAIL : FR_ABORTED;
+	return OK;
 }
 
 
@@ -1563,8 +1525,8 @@ LPTSTR GetWorkingDir()
 // GUI-related: FileSelect //
 /////////////////////////////
 
-bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGreeting, LPCTSTR aFilter
-	, ResultToken &aResultToken)
+bif_impl FResult FileSelect(optl<StrArg> aOptions, optl<StrArg> aWorkingDir, optl<StrArg> aGreeting
+	, optl<StrArg> aFilter, ResultToken &aResultToken)
 // Since other script threads can interrupt this command while it's running, it's important that
 // this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
@@ -1578,7 +1540,7 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 	LPCTSTR default_file_name = _T("");
 
 	TCHAR working_dir[MAX_PATH]; // Using T_MAX_PATH vs. MAX_PATH did not help on Windows 10.0.16299 (see below).
-	if (!aWorkingDir || !*aWorkingDir)
+	if (aWorkingDir.is_blank_or_omitted())
 		*working_dir = '\0';
 	else
 	{
@@ -1587,10 +1549,10 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 		// does not support long paths.  Surprisingly, although Windows 10 long path awareness
 		// does not allow us to pass a long path for working_dir, it does affect whether the long
 		// path is used in the address bar and returned filenames.
-		if (_tcslen(aWorkingDir) >= MAX_PATH)
-			GetShortPathName(aWorkingDir, working_dir, _countof(working_dir));
+		if (_tcslen(aWorkingDir.value()) >= MAX_PATH)
+			GetShortPathName(aWorkingDir.value(), working_dir, _countof(working_dir));
 		else
-			tcslcpy(working_dir, aWorkingDir, _countof(working_dir));
+			tcslcpy(working_dir, aWorkingDir.value(), _countof(working_dir));
 		// v1.0.43.10: Support CLSIDs such as:
 		//   My Computer  ::{20d04fe0-3aea-1069-a2d8-08002b30309d}
 		//   My Documents ::{450d8fba-ad25-11d0-98a8-0800361b1103}
@@ -1633,11 +1595,9 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 
 	TCHAR pattern[1024];
 	*pattern = '\0'; // Set default.
-	if (!aFilter)
-		aFilter = _T(""); // For maintainability.
-	if (*aFilter)
+	if (aFilter.has_nonempty_value())
 	{
-		auto pattern_start = _tcschr(aFilter, '(');
+		auto pattern_start = _tcschr(aFilter.value(), '(');
 		if (pattern_start)
 		{
 			// Make pattern a separate string because we want to remove any spaces from it.
@@ -1650,11 +1610,11 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 				*pattern_end = '\0';  // If parentheses are empty, this will set pattern to be the empty string.
 		}
 		else // No open-paren, so assume the entire string is the filter.
-			tcslcpy(pattern, aFilter, _countof(pattern));
+			tcslcpy(pattern, aFilter.value(), _countof(pattern));
 	}
 	UINT filter_count = 0;
 	COMDLG_FILTERSPEC filters[2];
-	if (*pattern)
+	if (*pattern) // aFilter was not omitted or blank.
 	{
 		// Remove any spaces present in the pattern, such as a space after every semicolon
 		// that separates the allowed file extensions.  The API docs specify that there
@@ -1668,7 +1628,7 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 		// pattern like "*.cpp; *.h" will work correctly (possibly due to how leading spaces work
 		// with the file system).
 		//StrReplace(pattern, _T(" "), _T(""), SCS_SENSITIVE);
-		filters[0].pszName = aFilter;
+		filters[0].pszName = aFilter.value();
 		filters[0].pszSpec = pattern;
 		++filter_count;
 	}
@@ -1695,37 +1655,36 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 	// 2) The last item in the list is terminated by a linefeed, which is not as easily used with a
 	//    parsing loop as shown in example in the help file.
 	bool always_use_save_dialog = false; // Set default.
-	if (!aOptions)
-		aOptions = _T("");
-	switch (ctoupper(*aOptions))
+	auto options_str = aOptions.value_or_empty();
+	switch (ctoupper(*options_str))
 	{
 	case 'D':
-		++aOptions;
+		++options_str;
 		flags |= FOS_PICKFOLDERS;
-		if (*aFilter)
+		if (*pattern)
 			return FValueError(ERR_PARAM4_MUST_BE_BLANK);
 		filter_count = 0;
 		break;
 	case 'M':  // Multi-select.
-		++aOptions;
+		++options_str;
 		flags |= FOS_ALLOWMULTISELECT;
 		break;
 	case 'S': // Have a "Save" button rather than an "Open" button.
-		++aOptions;
+		++options_str;
 		always_use_save_dialog = true;
 		break;
 	}
 
 	TCHAR greeting[1024];
-	if (aGreeting && *aGreeting)
-		tcslcpy(greeting, aGreeting, _countof(greeting));
+	if (aGreeting.has_nonempty_value())
+		tcslcpy(greeting, aGreeting.value(), _countof(greeting));
 	else
 		// Use a more specific title so that the dialogs of different scripts can be distinguished
 		// from one another, which may help script automation in rare cases:
 		sntprintf(greeting, _countof(greeting), _T("Select %s - %s")
 			, (flags & FOS_PICKFOLDERS) ? _T("Folder") : _T("File"), g_script.DefaultDialogTitle());
 
-	int options = ATOI(aOptions);
+	int options = ATOI(options_str);
 	if (options & 0x20)
 		flags |= FOS_NODEREFERENCELINKS;
 	if (options & 0x10)
@@ -1831,9 +1790,9 @@ bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGree
 // Keyboard Functions //
 ////////////////////////
 
-FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPCTSTR aToggleText)
+FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, optl<StrArg> aToggleText)
 {
-	ToggleValueType toggle = Line::ConvertOnOffAlways(aToggleText, NEUTRAL);
+	ToggleValueType toggle = Line::ConvertOnOffAlways(aToggleText.value_or_null(), NEUTRAL);
 	switch (toggle)
 	{
 	case TOGGLED_ON:
@@ -2034,22 +1993,22 @@ BOOL Line::CheckValidFinallyJump(Line* jumpTarget, bool aSilent)
 ////////////////////
 
 
-bif_impl void Persistent(BOOL *aNewValue, BOOL *aOldValue)
+bif_impl void Persistent(optl<BOOL> aNewValue, BOOL &aOldValue)
 {
 	// Returning the old value might have some use, but if the caller doesn't want its value to change,
 	// something awkward like "Persistent(isPersistent := Persistent())" is needed.  Rather than just
 	// returning the current status, Persistent() makes the script persistent because that's likely to
 	// be its most common use by far, and it's what users familiar with the old #Persistent may expect.
-	*aOldValue = g_persistent;
-	g_persistent = aNewValue ? *aNewValue : TRUE;
+	aOldValue = g_persistent;
+	g_persistent = aNewValue.value_or(TRUE);
 }
 
 
 
-static void InstallHook(BOOL *aInstalling, BOOL *aUseForce, HookType which_hook)
+static void InstallHook(optl<BOOL> aInstalling, optl<BOOL> aUseForce, HookType which_hook)
 {
-	bool installing = aInstalling ? *aInstalling : true;
-	bool use_force = aUseForce ? *aUseForce : false;
+	bool installing = aInstalling.value_or(true);
+	bool use_force = aUseForce.value_or(false);
 	// When the second parameter is true, unconditionally remove the hook.  If the first parameter is
 	// also true, the hook will be reinstalled fresh.  Otherwise the hook will be left uninstalled,
 	// until something happens to reinstall it, such as Hotkey::ManifestAllHotkeysHotstringsHooks().
@@ -2060,12 +2019,12 @@ static void InstallHook(BOOL *aInstalling, BOOL *aUseForce, HookType which_hook)
 		Hotkey::ManifestAllHotkeysHotstringsHooks();
 }
 
-bif_impl void InstallKeybdHook(BOOL *aInstalling, BOOL *aUseForce)
+bif_impl void InstallKeybdHook(optl<BOOL> aInstalling, optl<BOOL> aUseForce)
 {
 	InstallHook(aInstalling, aUseForce, HOOK_KEYBD);
 }
 
-bif_impl void InstallMouseHook(BOOL *aInstalling, BOOL *aUseForce)
+bif_impl void InstallMouseHook(optl<BOOL> aInstalling, optl<BOOL> aUseForce)
 {
 	InstallHook(aInstalling, aUseForce, HOOK_MOUSE);
 }
@@ -2140,9 +2099,9 @@ BIF_DECL(BIF_String)
 ////////////////////
 
 
-BIF_DECL(BIF_IsLabel)
+bif_impl BOOL IsLabel(StrArg aName)
 {
-	_f_return_b(g_script.FindLabel(ParamIndexToString(0, _f_number_buf)) ? 1 : 0);
+	return g_script.FindLabel(aName) ? 1 : 0;
 }
 
 
@@ -2325,7 +2284,7 @@ BIF_DECL(BIF_IsSet)
 ////////////////////////
 
 
-bif_impl FResult GetKeyState(LPCTSTR key_name, LPCTSTR mode, ResultToken &aResultToken)
+bif_impl FResult GetKeyState(StrArg key_name, optl<StrArg> aMode, ResultToken &aResultToken)
 {
 	JoyControls joy;
 	int joystick_id;
@@ -2342,7 +2301,7 @@ bif_impl FResult GetKeyState(LPCTSTR key_name, LPCTSTR mode, ResultToken &aResul
 	}
 	// Since above didn't return: There is a virtual key (not a joystick control).
 	KeyStateTypes key_state_type;
-	switch (mode ? ctoupper(*mode) : 'L') // Second parameter.
+	switch (aMode.has_value() ? ctoupper(*aMode.value()) : 'L') // Second parameter.
 	{
 	case 'T': key_state_type = KEYSTATE_TOGGLE; break; // Whether a toggleable key such as CapsLock is currently turned on.
 	case 'P': key_state_type = KEYSTATE_PHYSICAL; break; // Physical state of key.
@@ -2355,7 +2314,7 @@ bif_impl FResult GetKeyState(LPCTSTR key_name, LPCTSTR mode, ResultToken &aResul
 
 
 
-bif_impl int GetKeyVK(LPCTSTR aKeyName)
+bif_impl int GetKeyVK(StrArg aKeyName)
 {
 	vk_type vk;
 	sc_type sc;
@@ -2364,7 +2323,7 @@ bif_impl int GetKeyVK(LPCTSTR aKeyName)
 }
 
 
-bif_impl int GetKeySC(LPCTSTR aKeyName)
+bif_impl int GetKeySC(StrArg aKeyName)
 {
 	vk_type vk;
 	sc_type sc;
@@ -2373,12 +2332,12 @@ bif_impl int GetKeySC(LPCTSTR aKeyName)
 }
 
 
-bif_impl void GetKeyName(LPCTSTR aKeyName, StrRet &aRetVal)
+bif_impl void GetKeyName(StrArg aKeyName, StrRet &aRetVal)
 {
 	vk_type vk;
 	sc_type sc;
 	TextToVKandSC(aKeyName, vk, sc);
-	aRetVal.SetStatic(GetKeyName(vk, sc, aRetVal.CallerBuf(), aRetVal.CallerBufSize, _T("")));
+	aRetVal.SetTemp(GetKeyName(vk, sc, aRetVal.CallerBuf(), aRetVal.CallerBufSize, _T("")));
 }
 
 
@@ -2546,12 +2505,12 @@ BIF_DECL(BIF_Hotkey)
 
 
 
-BIF_DECL(BIF_SetTimer)
+bif_impl FResult SetTimer(optl<IObject*> aFunction, optl<__int64> aPeriod, optl<int> aPriority)
 {
 	IObject *callback;
 	// Note that only one timer per callback is allowed because the callback is the
 	// unique identifier that allows us to update or delete an existing timer.
-	if (ParamIndexIsOmitted(0)) // Fully omitted, not an empty string.
+	if (!aFunction.has_value())
 	{
 		if (g->CurrentTimer)
 			// Default to the timer which launched the current thread.
@@ -2560,37 +2519,35 @@ BIF_DECL(BIF_SetTimer)
 			callback = NULL;
 		if (!callback)
 			// Either the thread was not launched by a timer or the timer has been deleted.
-			_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);
+			return FR_E_ARG(0);
 	}
 	else
 	{
-		callback = ParamIndexToObject(0);
-		if (!callback)
-			_f_throw_param(0, _T("object"));
-		if (!ValidateFunctor(callback, 0, aResultToken))
-			return;
+		callback = aFunction.value();
+		auto fr = ValidateFunctor(callback, 0);
+		if (fr != OK)
+			return fr;
 	}
 	__int64 period = DEFAULT_TIMER_PERIOD;
 	int priority = 0;
 	bool update_period = false, update_priority = false;
-	if (!ParamIndexIsOmitted(1))
+	if (aPeriod.has_value())
 	{
-		Throw_if_Param_NaN(1);
-		period = ParamIndexToInt64(1);
+		period = aPeriod.value();
 		if (!period)
 		{
 			g_script.DeleteTimer(callback);
-			_f_return_empty;
+			return OK;
 		}
 		update_period = true;
 	}
-	if (!ParamIndexIsOmitted(2))
+	if (aPriority.has_value())
 	{
-		priority = ParamIndexToInt(2);
+		priority = aPriority.value();
 		update_priority = true;
 	}
 	g_script.UpdateOrCreateTimer(callback, update_period, period, update_priority, priority);
-	_f_return_empty;
+	return OK;
 }
 
 
@@ -2602,7 +2559,7 @@ bif_impl void ScriptSleep(int aDelay)
 
 
 
-bif_impl void Critical(LPCTSTR aSetting)
+bif_impl void Critical(optl<StrArg> aSetting)
 {
 	// v1.0.46: When the current thread is critical, have the script check messages less often to
 	// reduce situations where an OnMessage or GUI message must be discarded due to "thread already
@@ -2620,9 +2577,9 @@ bif_impl void Critical(LPCTSTR aSetting)
 	//     - Integer other than 0.
 	// Everything else is considered to be "Off", including "Off", any non-blank string that
 	// doesn't start with a non-zero number, and zero itself.
-	g->ThreadIsCritical = !aSetting || !*aSetting // i.e. a first arg that's omitted or blank is the same as "ON". See comments above.
-		|| !_tcsicmp(aSetting, _T("On"))
-		|| (peek_frequency_when_critical_is_on = ATOU(aSetting)); // Non-zero integer also turns it on. Relies on short-circuit boolean order.
+	g->ThreadIsCritical = aSetting.is_blank_or_omitted() // i.e. omitted or blank is the same as "ON". See comments above.
+		|| !_tcsicmp(aSetting.value(), _T("On"))
+		|| (peek_frequency_when_critical_is_on = ATOU(aSetting.value())); // Non-zero integer also turns it on. Relies on short-circuit boolean order.
 	if (g->ThreadIsCritical) // Critical has been turned on. (For simplicity even if it was already on, the following is done.)
 	{
 		g->PeekFrequency = peek_frequency_when_critical_is_on;
@@ -2649,23 +2606,23 @@ bif_impl void Critical(LPCTSTR aSetting)
 
 
 
-bif_impl FResult Thread(LPCTSTR aCommand, int *aValue1, int *aValue2)
+bif_impl FResult Thread(StrArg aCommand, optl<int> aValue1, optl<int> aValue2)
 {
 	switch (Line::ConvertThreadCommand(aCommand))
 	{
 	case THREAD_CMD_PRIORITY:
-		if (aValue1)
+		if (aValue1.has_value())
 			g->Priority = *aValue1;
 		return OK;
 	case THREAD_CMD_INTERRUPT:
 		// If either one is blank, leave that setting as it was before.
-		if (aValue1)
+		if (aValue1.has_value())
 			g_script.mUninterruptibleTime = *aValue1;  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
-		if (aValue2)
+		if (aValue2.has_value())
 			g_script.mUninterruptedLineCountMax = *aValue2;  // 32-bit also, to help performance (since huge values seem unnecessary).
 		return OK;
 	case THREAD_CMD_NOTIMERS:
-		g->AllowTimers = (aValue1 && *aValue1 == 0); // Double-negative NoTimers=false -> allow timers.
+		g->AllowTimers = (aValue1.has_value() && *aValue1 == 0); // Double-negative NoTimers=false -> allow timers.
 		return OK;
 	default:
 		return FR_E_ARG(0);
@@ -2674,7 +2631,7 @@ bif_impl FResult Thread(LPCTSTR aCommand, int *aValue1, int *aValue2)
 
 
 
-bif_impl void OutputDebug(LPCTSTR aText)
+bif_impl void OutputDebug(StrArg aText)
 {
 #ifdef CONFIG_DEBUGGER
 	if (!g_Debugger.OutputStdErr(aText))
@@ -2688,27 +2645,16 @@ bif_impl void OutputDebug(LPCTSTR aText)
 // Event Handling Functions //
 //////////////////////////////
 
-BIF_DECL(BIF_OnMessage)
-// Returns: An empty string.
-// Parameters:
-// 1: Message number to monitor.
-// 2: Name of the function that will monitor the message.
-// 3: Maximum threads and "register first" flag.
+bif_impl FResult OnMessage(UINT aNumber, IObject *aFunction, optl<int> aMaxThreads)
 {
-	// Currently OnMessage (in v2) has no return value.
-	_f_set_retval_p(_T(""), 0);
-
-	// Prior validation has ensured there's at least two parameters:
-	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
-
 	// Set defaults:
 	bool mode_is_delete = false;
 	int max_instances = 1;
 	bool call_it_last = true;
 
-	if (!ParamIndexIsOmitted(2)) // Parameter #3 is present.
+	if (aMaxThreads.has_value())
 	{
-		max_instances = (int)ParamIndexToInt64(2);
+		max_instances = aMaxThreads.value();
 		// For backward-compatibility, values between MAX_INSTANCES+1 and SHORT_MAX must be supported.
 		if (max_instances > MsgMonitorStruct::MAX_INSTANCES) // MAX_INSTANCES >= MAX_THREADS_LIMIT.
 			max_instances = MsgMonitorStruct::MAX_INSTANCES;
@@ -2721,24 +2667,20 @@ BIF_DECL(BIF_OnMessage)
 			mode_is_delete = true;
 	}
 
-	// Parameter #2: The callback to add or remove.  Must be an object.
-	IObject *callback = TokenToObject(*aParam[1]);
-	if (!callback)
-		_f_throw_param(1, _T("object"));
-
 	// Check if this message already exists in the array:
-	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
+	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(aNumber, aFunction);
 	bool item_already_exists = (pmonitor != NULL);
 	if (!item_already_exists)
 	{
 		if (mode_is_delete) // Delete a non-existent item.
-			_f_return_retval; // Yield the default return value set earlier (an empty string).
-		if (!ValidateFunctor(callback, 4, aResultToken))
-			return;
+			return OK;
+		auto fr = ValidateFunctor(aFunction, 4);
+		if (fr != OK)
+			return fr;
 		// From this point on, it is certain that an item will be added to the array.
-		pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last);
+		pmonitor = g_MsgMonitor.Add(aNumber, aFunction, call_it_last);
 		if (!pmonitor)
-			_f_throw_oom;
+			return FR_E_OUTOFMEM;
 	}
 
 	MsgMonitorStruct &monitor = *pmonitor;
@@ -2758,10 +2700,8 @@ BIF_DECL(BIF_OnMessage)
 			// occur while the monitor is currently running, which requires more complex handling within
 			// MsgMonitor() (see its comments for details).
 			g_MsgMonitor.Delete(pmonitor);
-			_f_return_retval;
+			return OK;
 		}
-		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
-			_f_return_retval; // Everything was already set up above to yield the proper return value.
 		// Otherwise, an existing item is being assigned a new function or MaxThreads limit.
 		// Continue on to update this item's attributes.
 	}
@@ -2773,10 +2713,10 @@ BIF_DECL(BIF_OnMessage)
 	}
 
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
-	if (!item_already_exists || !ParamIndexIsOmitted(2))
+	if (!item_already_exists || aMaxThreads.has_value())
 		monitor.max_instances = max_instances;
 	// Otherwise, the parameter was omitted so leave max_instances at its current value.
-	_f_return_retval;
+	return OK;
 }
 
 
@@ -2941,59 +2881,51 @@ void MsgMonitorList::Dispose()
 }
 
 
-BIF_DECL(BIF_On)
+static FResult OnScriptEvent(IObject *aFunction, optl<int> aAddRemove, MsgMonitorList &handlers, int aParamCount)
 {
-	_f_set_retval_p(_T("")); // In all cases there is no return value.
-	auto event_type = _f_callee_id;
-	MsgMonitorList *phandlers;
-	switch (event_type)
-	{
-	case FID_OnError: phandlers = &g_script.mOnError; break;
-	case FID_OnClipboardChange: phandlers = &g_script.mOnClipboardChange; break;
-	default: phandlers = &g_script.mOnExit; break;
-	}
-	MsgMonitorList &handlers = *phandlers;
-
-
-	IObject *callback = ParamIndexToObject(0);
-	if (!callback)
-		_f_throw_param(0, _T("object"));
-	if (!ValidateFunctor(callback, event_type == FID_OnClipboardChange ? 1 : 2, aResultToken))
-		return;
+	auto fr = ValidateFunctor(aFunction, aParamCount);
+	if (fr != OK)
+		return fr;
 	
-	int mode = 1; // Default.
-	if (!ParamIndexIsOmitted(1))
-		mode = ParamIndexToInt(1);
+	int mode = aAddRemove.value_or(1);
 
-	MsgMonitorStruct *existing = handlers.Find(0, callback);
+	MsgMonitorStruct *existing = handlers.Find(0, aFunction);
 
 	switch (mode)
 	{
 	case  1:
 	case -1:
-		if (existing)
-			return;
-		if (event_type == FID_OnClipboardChange)
-		{
-			// Do this before adding the handler so that it won't be called as a result of the
-			// SetClipboardViewer() call on Windows XP.  This won't cause existing handlers to
-			// be called because in that case the clipboard listener is already enabled.
-			g_script.EnableClipboardListener(true);
-		}
-		if (!handlers.Add(0, callback, mode == 1))
-			_f_throw_oom;
+		if (!existing && !handlers.Add(0, aFunction, mode == 1))
+			return FR_E_OUTOFMEM;
 		break;
 	case  0:
 		if (existing)
 			handlers.Delete(existing);
 		break;
 	default:
-		_f_throw_param(1);
+		return FR_E_ARG(1);
 	}
-	// In case the above enabled the clipboard listener but failed to add the handler,
-	// do this even if mode != 0:
-	if (event_type == FID_OnClipboardChange && !handlers.Count())
-		g_script.EnableClipboardListener(false);
+	return OK;
+}
+
+bif_impl FResult OnClipboardChange(IObject *aFunction, optl<int> aAddRemove)
+{
+	auto result = OnScriptEvent(aFunction, aAddRemove, g_script.mOnClipboardChange, 1);
+	// Unlike SetClipboardViewer(), AddClipboardFormatListener() doesn't cause existing
+	// listeners to be called, so we can simply enable or disable our listener based on
+	// whether any handlers are registered.  This has no effect if already enabled:
+	g_script.EnableClipboardListener(g_script.mOnClipboardChange.Count() > 0);
+	return result;
+}
+
+bif_impl FResult OnError(IObject *aFunction, optl<int> aAddRemove)
+{
+	return OnScriptEvent(aFunction, aAddRemove, g_script.mOnError, 2);
+}
+
+bif_impl FResult OnExit(IObject *aFunction, optl<int> aAddRemove)
+{
+	return OnScriptEvent(aFunction, aAddRemove, g_script.mOnExit, 2);
 }
 
 
@@ -3003,15 +2935,10 @@ BIF_DECL(BIF_On)
 ///////////////////////
 
 
-BIF_DECL(BIF_MenuFromHandle)
+bif_impl void MenuFromHandle(UINT_PTR aHandle, IObject *&aRetVal)
 {
-	auto *menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
-	if (menu)
-	{
-		menu->AddRef();
-		_f_return(menu);
-	}
-	_f_return_empty;
+	if (aRetVal = g_script.FindMenu((HMENU)aHandle))
+		aRetVal->AddRef();
 }
 
 
@@ -3103,44 +3030,40 @@ void GuiControlType::StatusBar(ResultToken &aResultToken, int aID, int aFlags, E
 
 
 
-BIF_DECL(BIF_IL_Create)
+bif_impl UINT_PTR IL_Create(optl<int> aInitialCount, optl<int> aGrowCount, optl<BOOL> aLargeIcons)
 // Returns: Handle to the new image list, or 0 on failure.
 // Parameters:
 // 1: Initial image count (ImageList_Create() ignores values <=0, so no need for error checking).
 // 2: Grow count (testing shows it can grow multiple times, even when this is set <=0, so it's apparently only a performance aid)
-// 3: Width of each image (overloaded to mean small icon size when omitted or false, large icon size otherwise).
+// 3: Width of each image (currently meaning small icon size when omitted or false, large icon size otherwise).
 // 4: Future: Height of each image [if this param is present and >0, it would mean param 3 is not being used in its TRUE/FALSE mode)
 // 5: Future: Flags/Color depth
 {
-	// The following old comment makes no sense because large icons are only used if param3 is NON-ZERO,
-	// and there was never a distinction between passing zero and omitting the param:
-	// So that param3 can be reserved as a future "specified width" param, to go along with "specified height"
-	// after it, only when the parameter is both present and numerically zero are large icons used.  Otherwise,
-	// small icons are used.
-	int param3 = ParamIndexToOptionalBOOL(2, FALSE);
-	_f_return_i((size_t)ImageList_Create(GetSystemMetrics(param3 ? SM_CXICON : SM_CXSMICON)
-		, GetSystemMetrics(param3 ? SM_CYICON : SM_CYSMICON)
-		, ILC_MASK | ILC_COLOR32  // ILC_COLOR32 or at least something higher than ILC_COLOR is necessary to support true-color icons.
-		, ParamIndexToOptionalInt(0, 2)    // cInitial. 2 seems a better default than one, since it might be common to have only two icons in the list.
-		, ParamIndexToOptionalInt(1, 5)));  // cGrow.  Somewhat arbitrary default.
+	BOOL large = aLargeIcons.value_or(FALSE);
+	return (UINT_PTR)ImageList_Create(
+		GetSystemMetrics(large ? SM_CXICON : SM_CXSMICON),
+		GetSystemMetrics(large ? SM_CYICON : SM_CYSMICON),
+		ILC_MASK | ILC_COLOR32,  // ILC_COLOR32 or at least something higher than ILC_COLOR is necessary to support true-color icons.
+		aInitialCount.value_or(2),  // 2 seems a better default than one, since it might be common to have only two icons in the list.
+		aGrowCount.value_or(5)  // Somewhat arbitrary default.
+	);
 }
 
 
 
-BIF_DECL(BIF_IL_Destroy)
+bif_impl BOOL IL_Destroy(UINT_PTR aImageList)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
 {
-	// Load-time validation has ensured there is at least one parameter.
 	// Returns nonzero if successful, or zero otherwise, so force it to conform to TRUE/FALSE for
 	// better consistency with other functions:
-	_f_return_i(ImageList_Destroy((HIMAGELIST)ParamIndexToInt64(0)) ? 1 : 0);
+	return ImageList_Destroy((HIMAGELIST)aImageList) ? 1 : 0;
 }
 
 
 
-BIF_DECL(BIF_IL_Add)
+bif_impl FResult IL_Add(UINT_PTR aImageList, StrArg aFilename, optl<int> aIconNumber, optl<BOOL> aResizeNonIcon, int &aIndex)
 // Returns: the one-based index of the newly added icon, or zero on failure.
 // Parameters:
 // 1: HIMAGELIST: Handle of an existing ImageList.
@@ -3157,16 +3080,16 @@ BIF_DECL(BIF_IL_Add)
 // The parameters above (at least #4) can be overloaded in the future calling ImageList_GetImageInfo() to determine
 // whether the imagelist has a mask.
 {
-	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter.
+	HIMAGELIST himl = (HIMAGELIST)aImageList;
 	if (!himl)
-		_f_throw_param(0);
+		return FR_E_ARG(0);
 
-	int param3 = ParamIndexToOptionalInt(2, 0);
+	int param3 = aIconNumber.value_or(0);
 	int icon_number, width = 0, height = 0; // Zero width/height causes image to be loaded at its actual width/height.
-	if (!ParamIndexIsOmitted(3)) // Presence of fourth parameter switches mode to be "load a non-icon image".
+	if (aResizeNonIcon.has_value()) // The presence of this parameter switches mode to be "load a non-icon image".
 	{
 		icon_number = 0; // Zero means "load icon or bitmap (doesn't matter)".
-		if (ParamIndexToBOOL(3)) // A value of True indicates that the image should be scaled to fit the imagelist's image size.
+		if (aResizeNonIcon.value()) // A value of True indicates that the image should be scaled to fit the imagelist's image size.
 			ImageList_GetIconSize(himl, &width, &height); // Determine the width/height to which it should be scaled.
 		//else retain defaults of zero for width/height, which loads the image at actual size, which in turn
 		// lets ImageList_AddMasked() divide it up into separate images based on its width.
@@ -3178,10 +3101,12 @@ BIF_DECL(BIF_IL_Add)
 	}
 
 	int image_type;
-	HBITMAP hbitmap = LoadPicture(ParamIndexToString(1, _f_number_buf) // Caller has ensured there are at least two parameters.
-		, width, height, image_type, icon_number, false); // Defaulting to "false" for "use GDIplus" provides more consistent appearance across multiple OSes.
+	HBITMAP hbitmap = LoadPicture(aFilename, width, height, image_type, icon_number, false); // Defaulting to "false" for "use GDIplus" provides more consistent appearance across multiple OSes.
 	if (!hbitmap)
-		_f_return_i(0);
+	{
+		aIndex = 0;
+		return OK;
+	}
 
 	int index;
 	if (image_type == IMAGE_BITMAP) // In this mode, param3 is always assumed to be an RGB color.
@@ -3196,7 +3121,8 @@ BIF_DECL(BIF_IL_Add)
 		index = ImageList_AddIcon(himl, (HICON)hbitmap) + 1; // +1 to convert to one-based.
 		DestroyIcon((HICON)hbitmap); // Works on cursors too.  See notes in LoadPicture().
 	}
-	_f_return_i(index);
+	aIndex = index;
+	return OK;
 }
 
 
@@ -3205,19 +3131,14 @@ BIF_DECL(BIF_IL_Add)
 // Misc Functions //
 ////////////////////
 
-BIF_DECL(BIF_LoadPicture)
+bif_impl FResult LoadPicture(StrArg aFilename, optl<StrArg> aOptions, int *aImageType, UINT_PTR &aRetVal)
 {
-	// h := LoadPicture(filename [, options, ByRef image_type])
-	LPTSTR filename = ParamIndexToString(0, aResultToken.buf);
-	LPTSTR options = ParamIndexToOptionalString(1);
-	Var *image_type_var = ParamIndexToOutputVar(2);
-
 	int width = -1;
 	int height = -1;
 	int icon_number = 0;
 	bool use_gdi_plus = false;
 
-	for (LPTSTR cp = options; cp; cp = StrChrAny(cp, _T(" \t")))
+	for (auto cp = aOptions.value_or_null(); cp; cp = StrChrAny(cp, _T(" \t")))
 	{
 		cp = omit_leading_whitespace(cp);
 		if (tolower(*cp) == 'w')
@@ -3235,13 +3156,14 @@ BIF_DECL(BIF_LoadPicture)
 		width = 0;
 
 	int image_type;
-	HBITMAP hbm = LoadPicture(filename, width, height, image_type, icon_number, use_gdi_plus);
-	if (image_type_var)
-		image_type_var->Assign(image_type);
+	HBITMAP hbm = LoadPicture(aFilename, width, height, image_type, icon_number, use_gdi_plus);
+	if (aImageType)
+		*aImageType = image_type;
 	else if (image_type != IMAGE_BITMAP && hbm)
 		// Always return a bitmap when the ImageType output var is omitted.
 		hbm = IconToBitmap32((HICON)hbm, true); // Also works for cursors.
-	aResultToken.value_int64 = (__int64)(UINT_PTR)hbm;
+	aRetVal = (UINT_PTR)hbm;
+	return OK;
 }
 
 
@@ -3689,6 +3611,14 @@ IObject *TokenToObject(ExprTokenType &aToken)
 }
 
 
+
+FResult ValidateFunctor(IObject *aFunc, int aParamCount, int *aMinParams, bool aShowError)
+{
+	ResultToken result_token;
+	result_token.SetResult(OK);
+	return ValidateFunctor(aFunc, aParamCount, result_token, aMinParams, aShowError)
+		? OK : result_token.Exited() ? FR_FAIL : FR_ABORTED;
+}
 
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aUseMinParams, bool aShowError)
 {

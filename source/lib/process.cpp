@@ -24,96 +24,111 @@ GNU General Public License for more details.
 
 
 
-BIF_DECL(BIF_Process)
+bif_impl UINT ProcessExist(optl<StrArg> aProcess)
 {
-	_f_param_string_opt(aProcess, 0);
-
-	HANDLE hProcess;
-	DWORD pid;
-	
-	BuiltInFunctionID process_cmd = _f_callee_id;
-	switch (process_cmd)
-	{
-	case FID_ProcessExist:
-		// Return the discovered PID or zero if none.
-		_f_return_i(*aProcess ? ProcessExist(aProcess) : GetCurrentProcessId());
-
-	case FID_ProcessClose:
-		_f_set_retval_i(0); // Set default.
-		if (pid = ProcessExist(aProcess))  // Assign
-		{
-			if (hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pid))
-			{
-				if (TerminateProcess(hProcess, 0))
-					_f_set_retval_i(pid); // Indicate success.
-				CloseHandle(hProcess);
-			}
-		}
-		// Since above didn't return, yield a PID of 0 to indicate failure.
-		_f_return_retval;
-
-	case FID_ProcessWait:
-	case FID_ProcessWaitClose:
-	{
-		// This section is similar to that used for WINWAIT and RUNWAIT:
-		bool wait_indefinitely;
-		int sleep_duration;
-		DWORD start_time;
-		if (aParamCount > 1) // The param containing the timeout value was specified.
-		{
-			if (!ParamIndexIsNumeric(1))
-				_f_throw_param(1, _T("Number"));
-			wait_indefinitely = false;
-			sleep_duration = (int)(TokenToDouble(*aParam[1]) * 1000); // Can be zero.
-			start_time = GetTickCount();
-		}
-		else
-		{
-			wait_indefinitely = true;
-			sleep_duration = 0; // Just to catch any bugs.
-		}
-		for (;;)
-		{ // Always do the first iteration so that at least one check is done.
-			pid = ProcessExist(aProcess);
-			if ((process_cmd == FID_ProcessWait) == (pid != 0)) // i.e. condition of this cmd is satisfied.
-			{
-				// For WaitClose: Since PID cannot always be determined (i.e. if process never existed,
-				// there was no need to wait for it to close), for consistency, return 0 on success.
-				_f_return_i(pid);
-			}
-			// Must cast to int or any negative result will be lost due to DWORD type:
-			if (wait_indefinitely || (int)(sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
-			{
-				MsgSleep(100);  // For performance reasons, don't check as often as the WinWait family does.
-			}
-			else // Done waiting.
-			{
-				// Return 0 if "Process Wait" times out; or the PID of the process that still exists
-				// if "Process WaitClose" times out.
-				_f_return_i(pid);
-			}
-		} // for()
-
-	case FID_ProcessGetName:
-	case FID_ProcessGetPath:
-		pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId();
-		if (!pid)
-			_f_throw(ERR_NO_PROCESS, ErrorPrototype::Target);
-		TCHAR process_name[MAX_PATH];
-		if (!GetProcessName(pid, process_name, _countof(process_name), process_cmd == FID_ProcessGetName))
-			_f_throw_win32();
-		_f_return(process_name);
-	} // case
-	} // switch()
+	// Return the discovered PID or zero if none.
+	return aProcess.has_value() ? ProcessExist(aProcess.value()) : GetCurrentProcessId();
 }
 
 
 
-BIF_DECL(BIF_ProcessSetPriority)
+bif_impl FResult ProcessClose(StrArg aProcess, UINT &aRetVal)
 {
-	_f_param_string_opt(aPriority, 0);
-	_f_param_string_opt(aProcess, 1);
+	aRetVal = 0; // Set default in case of failure.
+	if (auto pid = ProcessExist(aProcess))  // Assign
+	{
+		if (auto hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pid))
+		{
+			if (TerminateProcess(hProcess, 0))
+				aRetVal = pid; // Indicate success.
+			CloseHandle(hProcess);
+		}
+	}
+	return OK;
+}
 
+
+
+static FResult ProcessGetPathName(optl<StrArg> aProcess, StrRet &aRetVal, bool aGetNameOnly)
+{
+	auto pid = aProcess.has_value() ? ProcessExist(aProcess.value()) : GetCurrentProcessId();
+	if (!pid)
+		return FError(ERR_NO_PROCESS, nullptr, ErrorPrototype::Target);
+	TCHAR process_name[MAX_PATH];
+	if (!GetProcessName(pid, process_name, _countof(process_name), aGetNameOnly))
+		return FR_E_WIN32;
+	return aRetVal.Copy(process_name) ? OK : FR_E_OUTOFMEM;
+}
+
+bif_impl FResult ProcessGetName(optl<StrArg> aProcess, StrRet &aRetVal)
+{
+	return ProcessGetPathName(aProcess, aRetVal, true);
+}
+
+bif_impl FResult ProcessGetPath(optl<StrArg> aProcess, StrRet &aRetVal)
+{
+	return ProcessGetPathName(aProcess, aRetVal, false);
+}
+
+
+
+static FResult ProcessWait(StrArg aProcess, optl<double> aTimeout, UINT &aRetVal, bool aWaitClose)
+{
+	DWORD pid;
+	// This section is similar to that used for WINWAIT and RUNWAIT:
+	bool wait_indefinitely;
+	int sleep_duration;
+	DWORD start_time;
+	if (aTimeout.has_value()) // The param containing the timeout value was specified.
+	{
+		wait_indefinitely = false;
+		sleep_duration = (int)(aTimeout.value_or(0) * 1000); // Can be zero.
+		start_time = GetTickCount();
+	}
+	else
+	{
+		wait_indefinitely = true;
+		sleep_duration = 0; // Just to catch any bugs.
+	}
+	for (;;)
+	{ // Always do the first iteration so that at least one check is done.
+		pid = ProcessExist(aProcess);
+		if ((!aWaitClose) == (pid != 0)) // i.e. condition of this cmd is satisfied.
+		{
+			// For WaitClose: Since PID cannot always be determined (i.e. if process never existed,
+			// there was no need to wait for it to close), for consistency, return 0 on success.
+			aRetVal = pid;
+			return OK;
+		}
+		// Must cast to int or any negative result will be lost due to DWORD type:
+		if (wait_indefinitely || (int)(sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
+		{
+			MsgSleep(100);  // For performance reasons, don't check as often as the WinWait family does.
+		}
+		else // Done waiting.
+		{
+			// Return 0 if ProcessWait times out; or the PID of the process that still exists
+			// if ProcessWaitClose times out.
+			aRetVal = pid;
+			return OK;
+		}
+	} // for()
+}
+
+bif_impl FResult ProcessWait(StrArg aProcess, optl<double> aTimeout, UINT &aRetVal)
+{
+	return ProcessWait(aProcess, aTimeout, aRetVal, false);
+}
+
+bif_impl FResult ProcessWaitClose(StrArg aProcess, optl<double> aTimeout, UINT &aRetVal)
+{
+	return ProcessWait(aProcess, aTimeout, aRetVal, true);
+}
+
+
+
+bif_impl FResult ProcessSetPriority(StrArg aPriority, optl<StrArg> aProcess, UINT &aRetVal)
+{
 	DWORD priority;
 	switch (_totupper(*aPriority))
 	{
@@ -125,35 +140,35 @@ BIF_DECL(BIF_ProcessSetPriority)
 	case 'R': priority = REALTIME_PRIORITY_CLASS; break;
 	default:
 		// Since above didn't break, aPriority was invalid.
-		_f_throw_param(0);
+		return FR_E_ARG(0);
 	}
 
-	DWORD pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId();
+	DWORD pid = aProcess.has_nonempty_value() ? ProcessExist(aProcess.value()) : GetCurrentProcessId();
 	if (!pid)
-		_f_throw(ERR_NO_PROCESS, ErrorPrototype::Target);
+		return FError(ERR_NO_PROCESS, nullptr, ErrorPrototype::Target);
 
 	HANDLE hProcess = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pid);
 	if (!hProcess)
-		_f_throw_win32();
+		return FR_E_WIN32;
 
 	DWORD error = SetPriorityClass(hProcess, priority) ? NOERROR : GetLastError();
 	CloseHandle(hProcess);
 	if (error)
-		_f_throw_win32(error);
-	_f_return_i(pid);
+		return FR_E_WIN32(error);
+	aRetVal = pid;
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_Run)
+bif_impl FResult Run(StrArg aTarget, optl<StrArg> aWorkingDir, optl<StrArg> aOptions, ResultToken *aOutPID)
 {
-	_f_param_string(target, 0);
-	_f_param_string_opt(working_dir, 1);
-	_f_param_string_opt(options, 2);
-	Var *output_var_pid = ParamIndexToOutputVar(3);
-	if (!g_script.ActionExec(target, nullptr, working_dir, true, options, nullptr, true, true, output_var_pid))
-		_f_return_FAIL;
-	_f_return_empty;
+	HANDLE hprocess;
+	auto result = g_script.ActionExec(aTarget, nullptr, aWorkingDir.value_or_null(), true
+		, aOptions.value_or_null(), &hprocess, true, true);
+	if (aOutPID && hprocess)
+		aOutPID->SetValue((UINT)GetProcessId(hprocess));
+	return result ? OK : FR_FAIL;
 }
 
 

@@ -31,7 +31,7 @@
 #include "abi.h"
 
 
-bif_impl FResult IniRead(LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey, LPCTSTR aDefault, StrRet &aRetVal)
+bif_impl FResult IniRead(StrArg aFilespec, optl<StrArg> aSection, optl<StrArg> aKey, optl<StrArg> aDefault, StrRet &aRetVal)
 {
 	TCHAR	szFileTemp[T_MAX_PATH];
 	TCHAR	*szFilePart, *cp;
@@ -41,8 +41,10 @@ bif_impl FResult IniRead(LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey, LPCT
 
 	// Get the fullpathname (ini functions need a full path):
 	GetFullPathName(aFilespec, _countof(szFileTemp), szFileTemp, &szFilePart);
-	if (aKey) // But let it be "", which would correspond to an entry such as "=value".
+	if (aKey.has_value()) // But let it be "", which would correspond to an entry such as "=value".
 	{
+		if (!aSection.has_value()) // But an explicit "" acceptable (see below).
+			return FR_E_ARG(1);
 		// An access violation can occur if the following conditions are met:
 		//	1) aFilespec specifies a Unicode file.
 		//	2) aSection is a read-only string, either empty or containing only spaces.
@@ -56,12 +58,11 @@ bif_impl FResult IniRead(LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey, LPCT
 		// required parameter prior to revision 57, empty or blank section names
 		// are actually valid.  Simply passing an empty writable buffer appears
 		// to work around the problem effectively:
-		if (!aSection || !*aSection)
-			aSection = szEmpty;
-		GetPrivateProfileString(aSection, aKey, aDefault, szBuffer, _countof(szBuffer), szFileTemp);
+		GetPrivateProfileString(*aSection.value() ? aSection.value() : szEmpty
+			, aKey.value(), aDefault.value_or_null(), szBuffer, _countof(szBuffer), szFileTemp);
 	}
-	else if (aSection
-		? GetPrivateProfileSection(aSection, szBuffer, _countof(szBuffer), szFileTemp)
+	else if (aSection.has_value()
+		? GetPrivateProfileSection(aSection.value(), szBuffer, _countof(szBuffer), szFileTemp)
 		: GetPrivateProfileSectionNames(szBuffer, _countof(szBuffer), szFileTemp))
 	{
 		// Convert null-terminated array of null-terminated strings to newline-delimited list.
@@ -76,15 +77,15 @@ bif_impl FResult IniRead(LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey, LPCT
 	g->LastError = GetLastError();
 	if (g->LastError)
 	{
-		if (!aDefault)
+		if (!aDefault.has_value())
 		{
 			if (g->LastError == 2)
 				return FError(_T("The requested key, section or file was not found."));
 			return FR_E_WIN32(g->LastError);
 		}
-		if (!aKey)
+		if (!aKey.has_value())
 		{
-			aRetVal.SetStatic(aDefault);
+			aRetVal.SetTemp(aDefault.value());
 			return OK;
 		}
 	}
@@ -126,7 +127,7 @@ static BOOL IniEncodingFix(LPCWSTR aFilespec, LPCWSTR aSection)
 }
 #endif
 
-bif_impl FResult IniWrite(LPCTSTR aValue, LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey)
+bif_impl FResult IniWrite(StrArg aValue, StrArg aFilespec, StrArg aSection, optl<StrArg> aKey)
 {
 	TCHAR	szFileTemp[T_MAX_PATH];
 	TCHAR	*szFilePart;
@@ -140,9 +141,9 @@ bif_impl FResult IniWrite(LPCTSTR aValue, LPCTSTR aFilespec, LPCTSTR aSection, L
 	result = IniEncodingFix(szFileTemp, aSection);
 	if(result){
 #endif
-		if (aKey) // But let it be "", which would create an entry such as "=value".
+		if (aKey.has_value()) // But let it be "", which would create an entry such as "=value".
 		{
-			result = WritePrivateProfileString(aSection, aKey, aValue, szFileTemp);  // Returns zero on failure.
+			result = WritePrivateProfileString(aSection, aKey.value(), aValue, szFileTemp);  // Returns zero on failure.
 		}
 		else
 		{
@@ -167,14 +168,14 @@ bif_impl FResult IniWrite(LPCTSTR aValue, LPCTSTR aFilespec, LPCTSTR aSection, L
 
 
 
-bif_impl FResult IniDelete(LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey)
+bif_impl FResult IniDelete(StrArg aFilespec, StrArg aSection, optl<StrArg> aKey)
 // Note that aKey can be NULL, in which case the entire section will be deleted.
 {
 	TCHAR	szFileTemp[T_MAX_PATH];
 	TCHAR	*szFilePart;
 	// Get the fullpathname (ini functions need a full path) 
 	GetFullPathName(aFilespec, _countof(szFileTemp), szFileTemp, &szFilePart);
-	BOOL result = WritePrivateProfileString(aSection, aKey, NULL, szFileTemp);  // Returns zero on failure.
+	BOOL result = WritePrivateProfileString(aSection, aKey.value_or_null(), NULL, szFileTemp);  // Returns zero on failure.
 	g->LastError = GetLastError();
 	WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
 	return result ? OK : FR_E_WIN32(g->LastError);

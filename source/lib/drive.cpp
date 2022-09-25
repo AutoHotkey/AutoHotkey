@@ -50,7 +50,7 @@ static void DriveFixPath(LPCTSTR &aDrive, TCHAR (&aBuf)[n])
 
 
 
-static FResult DriveSpace(LPCTSTR aPath, __int64 *aRetVal, bool aGetFreeSpace)
+static FResult DriveSpace(LPCTSTR aPath, __int64 &aRetVal, bool aGetFreeSpace)
 // Because of NTFS's ability to mount volumes into a directory, a path might not necessarily
 // have the same amount of free space as its root drive.  However, I'm not sure if this
 // method here actually takes that into account.
@@ -75,23 +75,23 @@ static FResult DriveSpace(LPCTSTR aPath, __int64 *aRetVal, bool aGetFreeSpace)
 	if (!GetDiskFreeSpaceEx(buf, &free, &total, &used))
 		return FR_E_WIN32;
 	// Casting this way allows sizes of up to 2,097,152 gigabytes:
-	*aRetVal = (__int64)((unsigned __int64)(aGetFreeSpace ? free.QuadPart : total.QuadPart) / 1048576);
+	aRetVal = (__int64)((unsigned __int64)(aGetFreeSpace ? free.QuadPart : total.QuadPart) / 1048576);
 	return OK;
 }
 
-bif_impl FResult DriveGetCapacity(LPCTSTR aPath, __int64 *aRetVal)
+bif_impl FResult DriveGetCapacity(StrArg aPath, __int64 &aRetVal)
 {
 	return DriveSpace(aPath, aRetVal, false);
 }
 
-bif_impl FResult DriveGetSpaceFree(LPCTSTR aPath, __int64 *aRetVal)
+bif_impl FResult DriveGetSpaceFree(StrArg aPath, __int64 &aRetVal)
 {
 	return DriveSpace(aPath, aRetVal, true);
 }
 
 
 
-static FResult DriveEject(LPCTSTR aDrive, bool aEject)
+static FResult DriveEject(optl<StrArg> aDrive, bool aEject)
 {
 	// Don't do DRIVE_SET_PATH in this case since trailing backslash is not wanted.
 	// It seems best not to do the below check since:
@@ -101,14 +101,16 @@ static FResult DriveEject(LPCTSTR aDrive, bool aEject)
 	//if (GetDriveType(aDrive) != DRIVE_CDROM)
 	//	return FR_E_FAILED;
 	TCHAR path[] { '\\', '\\', '.', '\\', 0, ':', '\0', '\0' };
-	if (aDrive)
+	LPCTSTR drive;
+	if (aDrive.has_value())
 	{
+		drive = aDrive.value();
 		// Testing showed that a Volume GUID of the form \\?\Volume{...} will work even when
 		// the drive isn't mapped to a drive letter.
-		if (IsValidDriveLetter(aDrive))
+		if (IsValidDriveLetter(drive))
 		{
-			path[4] = aDrive[0];
-			aDrive = path;
+			path[4] = drive[0];
+			drive = path;
 		}
 	}
 	else // When drive is omitted, operate upon the first CD/DVD drive.
@@ -126,12 +128,12 @@ static FResult DriveEject(LPCTSTR aDrive, bool aEject)
 				return FR_E_FAILED; // No CD/DVD drive found with a drive letter.  
 		}
 		path[6] = '\0'; // Remove the trailing slash for CreateFile to open the volume.
-		aDrive = path;
+		drive = path;
 	}
 	// Testing indicates neither this method nor the MCI method work with mapped drives or UNC paths.
 	// That makes sense when one considers that the following opens the *volume*, whereas a network
 	// share would correspond to a directory; i.e. this needs "\\.\D:" and not "\\.\D:\".
-	HANDLE hVol = CreateFile(aDrive, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE hVol = CreateFile(drive, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
 	if (hVol == INVALID_HANDLE_VALUE)
 		return FR_E_WIN32;
 	DWORD unused;
@@ -140,28 +142,28 @@ static FResult DriveEject(LPCTSTR aDrive, bool aEject)
 	return successful ? OK : FR_E_WIN32;
 }
 
-bif_impl FResult DriveEject(LPCTSTR aDrive)
+bif_impl FResult DriveEject(optl<StrArg> aDrive)
 {
 	return DriveEject(aDrive, true);
 }
 
-bif_impl FResult DriveRetract(LPCTSTR aDrive)
+bif_impl FResult DriveRetract(optl<StrArg> aDrive)
 {
 	return DriveEject(aDrive, false);
 }
 
 
 
-bif_impl FResult DriveSetLabel(LPCTSTR aDrive, LPCTSTR aLabel)
+bif_impl FResult DriveSetLabel(StrArg aDrive, optl<StrArg> aLabel)
 {
 	TCHAR buf[MAX_PATH]; // MAX_PATH vs. T_MAX_PATH because SetVolumeLabel() can't seem to make use of long paths.
 	DriveFixPath(aDrive, buf);
-	return SetVolumeLabel(aDrive, aLabel) ? OK : FR_E_WIN32;
+	return SetVolumeLabel(aDrive, aLabel.value_or_null()) ? OK : FR_E_WIN32;
 }
 
 
 
-static FResult DriveLock(LPCTSTR aDrive, bool aLockIt)
+static FResult DriveLock(StrArg aDrive, bool aLockIt)
 {
 	if (!IsValidDriveLetter(aDrive))
 		return FR_E_ARG(0);
@@ -189,29 +191,29 @@ static FResult DriveLock(LPCTSTR aDrive, bool aLockIt)
 	return result ? OK : FR_E_WIN32;
 }
 
-bif_impl FResult DriveLock(LPCTSTR aDrive)
+bif_impl FResult DriveLock(StrArg aDrive)
 {
 	return DriveLock(aDrive, true);
 }
 
-bif_impl FResult DriveUnlock(LPCTSTR aDrive)
+bif_impl FResult DriveUnlock(StrArg aDrive)
 {
 	return DriveLock(aDrive, false);
 }
 
 
 
-bif_impl FResult DriveGetList(LPCTSTR aType, StrRet &aRetVal)
+bif_impl FResult DriveGetList(optl<StrArg> aType, StrRet &aRetVal)
 {
 	UINT drive_type;
 	#define ALL_DRIVE_TYPES 256
-	if (!aType) drive_type = ALL_DRIVE_TYPES;
-	else if (!_tcsicmp(aType, _T("CDROM"))) drive_type = DRIVE_CDROM;
-	else if (!_tcsicmp(aType, _T("Removable"))) drive_type = DRIVE_REMOVABLE;
-	else if (!_tcsicmp(aType, _T("Fixed"))) drive_type = DRIVE_FIXED;
-	else if (!_tcsicmp(aType, _T("Network"))) drive_type = DRIVE_REMOTE;
-	else if (!_tcsicmp(aType, _T("RAMDisk"))) drive_type = DRIVE_RAMDISK;
-	else if (!_tcsicmp(aType, _T("Unknown"))) drive_type = DRIVE_UNKNOWN;
+	if (!aType.has_value()) drive_type = ALL_DRIVE_TYPES;
+	else if (!_tcsicmp(aType.value(), _T("CDROM"))) drive_type = DRIVE_CDROM;
+	else if (!_tcsicmp(aType.value(), _T("Removable"))) drive_type = DRIVE_REMOVABLE;
+	else if (!_tcsicmp(aType.value(), _T("Fixed"))) drive_type = DRIVE_FIXED;
+	else if (!_tcsicmp(aType.value(), _T("Network"))) drive_type = DRIVE_REMOTE;
+	else if (!_tcsicmp(aType.value(), _T("RAMDisk"))) drive_type = DRIVE_RAMDISK;
+	else if (!_tcsicmp(aType.value(), _T("Unknown"))) drive_type = DRIVE_UNKNOWN;
 	else
 		return FR_E_ARG(0);
 
@@ -237,46 +239,46 @@ bif_impl FResult DriveGetList(LPCTSTR aType, StrRet &aRetVal)
 
 
 
-bif_impl FResult DriveGetFilesystem(LPCTSTR aDrive, StrRet &aRetVal)
+bif_impl FResult DriveGetFilesystem(StrArg aDrive, StrRet &aRetVal)
 {
 	TCHAR buf[MAX_PATH]; // MAX_PATH vs. T_MAX_PATH because testing in 2019 indicated GetVolumeInformation() did not support long paths.
 	DriveFixPath(aDrive, buf);
 	LPTSTR file_system = aRetVal.CallerBuf();
 	if (!GetVolumeInformation(aDrive, NULL, 0, NULL, NULL, NULL, file_system, StrRet::CallerBufSize))
 		return FR_E_WIN32;
-	aRetVal.SetStatic(file_system);
+	aRetVal.SetTemp(file_system);
 	return OK;
 }
 
 
 
-bif_impl FResult DriveGetLabel(LPCTSTR aDrive, StrRet &aRetVal)
+bif_impl FResult DriveGetLabel(StrArg aDrive, StrRet &aRetVal)
 {
 	TCHAR buf[MAX_PATH]; // MAX_PATH vs. T_MAX_PATH because testing in 2019 indicated GetVolumeInformation() did not support long paths.
 	DriveFixPath(aDrive, buf);
 	LPTSTR volume_name = aRetVal.CallerBuf();
 	if (!GetVolumeInformation(aDrive, volume_name, StrRet::CallerBufSize, NULL, NULL, NULL, NULL, 0))
 		return FR_E_WIN32;
-	aRetVal.SetStatic(volume_name);
+	aRetVal.SetTemp(volume_name);
 	return OK;
 }
 
 
 
-bif_impl FResult DriveGetSerial(LPCTSTR aDrive, __int64 *aRetVal)
+bif_impl FResult DriveGetSerial(StrArg aDrive, __int64 &aRetVal)
 {
 	TCHAR buf[MAX_PATH]; // MAX_PATH vs. T_MAX_PATH because testing in 2019 indicated GetVolumeInformation() did not support long paths.
 	DriveFixPath(aDrive, buf);
 	DWORD serial_number;
 	if (!GetVolumeInformation(aDrive, NULL, 0, &serial_number, NULL, NULL, NULL, 0))
 		return FR_E_WIN32;
-	*aRetVal = serial_number;
+	aRetVal = serial_number;
 	return OK;
 }
 
 
 
-bif_impl FResult DriveGetType(LPCTSTR aDrive, StrRet &aRetVal)
+bif_impl FResult DriveGetType(StrArg aDrive, StrRet &aRetVal)
 {
 	TCHAR buf[T_MAX_PATH]; // T_MAX_PATH vs. MAX_PATH because GetDriveType() can support long paths.
 	DriveFixPath(aDrive, buf);
@@ -296,7 +298,7 @@ bif_impl FResult DriveGetType(LPCTSTR aDrive, StrRet &aRetVal)
 
 
 
-bif_impl FResult DriveGetStatus(LPCTSTR aDrive, StrRet &aRetVal)
+bif_impl FResult DriveGetStatus(StrArg aDrive, StrRet &aRetVal)
 {
 	TCHAR buf[MAX_PATH]; // MAX_PATH vs. T_MAX_PATH because testing in 2019 indicated GetDiskFreeSpace() did not support long paths.
 	DriveFixPath(aDrive, buf);
@@ -316,10 +318,10 @@ bif_impl FResult DriveGetStatus(LPCTSTR aDrive, StrRet &aRetVal)
 
 
 
-bif_impl FResult DriveGetStatusCD(LPCTSTR aDrive, StrRet &aRetVal)
+bif_impl FResult DriveGetStatusCD(optl<StrArg> aDrive, StrRet &aRetVal)
 {
 	// Explicitly validate aDrive since it'll be inserted into the MCI command string.
-	if (!IsValidDriveLetter(aDrive))
+	if (aDrive.has_value() && !IsValidDriveLetter(aDrive.value()))
 		return FR_E_ARG(0);
 
 	// Don't do DRIVE_SET_PATH in this case since trailing backslash might prevent it from
@@ -337,14 +339,14 @@ bif_impl FResult DriveGetStatusCD(LPCTSTR aDrive, StrRet &aRetVal)
 	LPTSTR status = aRetVal.Alloc(status_size);
 	// Note that there is apparently no way to determine via mciSendString() whether the tray is ejected
 	// or not, since "open" is returned even when the tray is closed but there is no media.
-	if (!aDrive) // When drive is omitted, operate upon default CD/DVD drive.
+	if (!aDrive.has_value()) // When drive is omitted, operate upon default CD/DVD drive.
 	{
 		if (mciSendString(_T("status cdaudio mode"), status, status_size, NULL)) // Error.
 			return FR_E_FAILED;
 	}
 	else // Operate upon a specific drive letter.
 	{
-		sntprintf(mci_string, _countof(mci_string), _T("open %s type cdaudio alias cd wait shareable"), aDrive);
+		sntprintf(mci_string, _countof(mci_string), _T("open %s type cdaudio alias cd wait shareable"), aDrive.value());
 		if (mciSendString(mci_string, NULL, 0, NULL)) // Error.
 			return FR_E_FAILED;
 		MCIERROR error = mciSendString(_T("status cd mode"), status, status_size, NULL);

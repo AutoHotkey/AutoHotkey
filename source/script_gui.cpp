@@ -551,36 +551,18 @@ void GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 }
 
 
-BIF_DECL(BIF_GuiFromHwnd)
+bif_impl void GuiFromHwnd(UINT_PTR aHwnd, optl<BOOL> aRecurse, IObject *&aGui)
 {
-	HWND hwnd = (HWND)ParamIndexToIntPtr(0);
-	BOOL recurse_parent = ParamIndexToOptionalBOOL(1, FALSE);
-	
-	GuiType* gui = recurse_parent ? GuiType::FindGuiParent(hwnd) : GuiType::FindGui(hwnd);
-	if (gui)
-	{
-		gui->AddRef();
-		_f_return(gui);
-	}
-	_f_return_empty;
+	if (aGui = aRecurse.value_or(FALSE) ? GuiType::FindGuiParent((HWND)aHwnd) : GuiType::FindGui((HWND)aHwnd))
+		aGui->AddRef();
 }
 
 
-BIF_DECL(BIF_GuiCtrlFromHwnd)
+bif_impl void GuiCtrlFromHwnd(UINT_PTR aHwnd, IObject *&aGuiCtrl)
 {
-	HWND hwnd = (HWND)ParamIndexToIntPtr(0);
-
-	GuiType* gui = GuiType::FindGuiParent(hwnd);
-	if (gui)
-	{
-		GuiControlType* ctrl = gui->FindControl(hwnd);
-		if (ctrl)
-		{
-			ctrl->AddRef();
-			_f_return(ctrl);
-		}
-	}
-	_f_return_empty;
+	if (GuiType* gui = GuiType::FindGuiParent((HWND)aHwnd))
+		if (aGuiCtrl = gui->FindControl((HWND)aHwnd))
+			aGuiCtrl->AddRef();
 }
 
 

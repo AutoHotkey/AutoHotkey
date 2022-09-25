@@ -43,7 +43,7 @@ if (USE_FOREGROUND_WINDOW(title, text, exclude_title, exclude_text))\
 
 
 
-inline bool IsTextMatch(LPTSTR aHaystack, LPTSTR aNeedle)
+inline bool IsTextMatch(LPCTSTR aHaystack, LPCTSTR aNeedle)
 // Generic helper function used by WindowSearch and other things.
 // To help performance, it's the caller's responsibility to ensure that all params are not NULL.
 {
@@ -93,10 +93,10 @@ public:
 	TCHAR mCriterionTitle[SEARCH_PHRASE_SIZE]; // For storing the title.
 	TCHAR mCriterionClass[SEARCH_PHRASE_SIZE]; // For storing the "ahk_class" class name.
 	size_t mCriterionTitleLength;             // Length of mCriterionTitle.
-	LPTSTR mCriterionExcludeTitle;             // ExcludeTitle.
+	LPCTSTR mCriterionExcludeTitle;           // ExcludeTitle.
 	size_t mCriterionExcludeTitleLength;      // Length of the above.
-	LPTSTR mCriterionText;                     // WinText.
-	LPTSTR mCriterionExcludeText;              // ExcludeText.
+	LPCTSTR mCriterionText;                   // WinText.
+	LPCTSTR mCriterionExcludeText;            // ExcludeText.
 	HWND mCriterionHwnd;                      // For "ahk_id".
 	DWORD mCriterionPID;                      // For "ahk_pid".
 	WinGroup *mCriterionGroup;                // For "ahk_group".
@@ -133,7 +133,7 @@ public:
 		}
 	}
 
-	ResultType SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText);
 	void UpdateCandidateAttributes();
 	HWND IsMatch(bool aInvert = false);
 
@@ -213,21 +213,21 @@ struct point_and_hwnd_type
 
 
 HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
-	, bool aFindLastMatch = false, bool aReturnFoundWindow = false
+	, bool aFindLastMatch = false
 	, HWND aAlreadyVisited[] = NULL, int aAlreadyVisitedCount = 0);
 HWND SetForegroundWindowEx(HWND aTargetWindow);
 
 // Defaulting to a non-zero wait-time solves a lot of script problems that would otherwise
 // require the user to specify the last param (or use WinWaitClose):
 #define DEFAULT_WINCLOSE_WAIT 20
-HWND WinClose(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, int aTimeToWaitForClose = DEFAULT_WINCLOSE_WAIT
-	, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""), bool aKillIfHung = false);
+HWND WinClose(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, int aTimeToWaitForClose = DEFAULT_WINCLOSE_WAIT
+	, LPCTSTR aExcludeTitle = _T(""), LPCTSTR aExcludeText = _T(""), bool aKillIfHung = false);
 HWND WinClose(HWND aWnd, int aTimeToWaitForClose = DEFAULT_WINCLOSE_WAIT, bool aKillIfHung = false);
 
-HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
+HWND WinActive(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText
 	, bool aUpdateLastUsed = false);
 
-HWND WinExist(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
+HWND WinExist(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText
 	, bool aFindLastMatch = false, bool aUpdateLastUsed = false
 	, HWND aAlreadyVisited[] = NULL, int aAlreadyVisitedCount = 0);
 
@@ -240,16 +240,16 @@ BOOL CALLBACK EnumChildFind(HWND hwnd, LPARAM lParam);
 // Use a fairly long default for aCheckInterval since the contents of this function's loops
 // might be somewhat high in overhead (especially SendMessageTimeout):
 #define SB_DEFAULT_CHECK_INTERVAL 50
-void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber = 1
-	, LPTSTR aTextToWaitFor = nullptr, int aWaitTime = -1, int aCheckInterval = SB_DEFAULT_CHECK_INTERVAL);
-HWND ControlExist(HWND aParentWindow, LPTSTR aClassNameAndNum = NULL);
+FResult StatusBarUtil(HWND aWindow, int aPartNumber, StrRet *aRetVal = nullptr
+	, LPCTSTR aTextToWaitFor = nullptr, int aWaitTime = -1, int aCheckInterval = SB_DEFAULT_CHECK_INTERVAL);
+HWND ControlExist(HWND aParentWindow, LPCTSTR aClassNameAndNum = NULL);
 BOOL CALLBACK EnumControlFind(HWND aWnd, LPARAM lParam);
 
 #define MSGBOX_NORMAL (MB_OK | MB_SETFOREGROUND)
 #define MSGBOX_TEXT_SIZE (1024 * 8)
 #define DIALOG_TITLE_SIZE 1024
 int MsgBox(int aValue);
-int MsgBox(LPCTSTR aText = _T(""), UINT uType = MSGBOX_NORMAL, LPTSTR aTitle = NULL, double aTimeout = 0, HWND aOwner = NULL);
+int MsgBox(LPCTSTR aText = _T(""), UINT uType = MSGBOX_NORMAL, LPCTSTR aTitle = NULL, double aTimeout = 0, HWND aOwner = NULL);
 HWND FindOurTopDialog();
 BOOL CALLBACK EnumDialog(HWND hwnd, LPARAM lParam);
 

@@ -266,7 +266,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 
 void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
 
-DWORD ProcessExist(LPTSTR aProcess);
+DWORD ProcessExist(LPCTSTR aProcess);
 DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly);
 
 FResult Shutdown(int nFlag);
@@ -281,9 +281,9 @@ DWORD GetAHKInstallDir(LPTSTR aBuf);
 
 struct InputBoxType
 {
-	LPTSTR title;
-	LPTSTR text;
-	LPTSTR default_string;
+	LPCTSTR title;
+	LPCTSTR text;
+	LPCTSTR default_string;
 	LPTSTR return_string;
 	int width;
 	int height;
@@ -323,7 +323,7 @@ static inline int DPIUnscale(int x)
 }
 
 #define INPUTBOX_DEFAULT INT_MIN
-ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox);
+ResultType InputBoxParseOptions(LPCTSTR aOptions, InputBoxType &aInputBox);
 ResultType InputBox(Var *aOutputVar, LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions, LPTSTR aDefault);
 INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
@@ -650,16 +650,10 @@ enum BuiltInFunctionID {
 	FID_ObjHasOwnProp = 0, FID_ObjOwnPropCount, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjOwnProps,
 	FID_ObjGetBase = 0, FID_ObjSetBase,
 	FID_ObjPtr = 0, FID_ObjPtrAddRef, FID_ObjFromPtr, FID_ObjFromPtrAddRef,
-	FID_WinGetID = 0, FID_WinGetIDLast, FID_WinGetPID, FID_WinGetProcessName, FID_WinGetProcessPath, FID_WinGetCount, FID_WinGetList, FID_WinGetMinMax, FID_WinGetControls, FID_WinGetControlsHwnd, FID_WinGetTransparent, FID_WinGetTransColor, FID_WinGetStyle, FID_WinGetExStyle,
 	FID_WinGetPos = 0, FID_WinGetClientPos,
-	FID_WinSetTransparent = 0, FID_WinSetTransColor, FID_WinSetAlwaysOnTop, FID_WinSetStyle, FID_WinSetExStyle, FID_WinSetEnabled, FID_WinSetRegion,
 	FID_WinMoveBottom = 0, FID_WinMoveTop,
 	FID_WinShow = 0, FID_WinHide, FID_WinMinimize, FID_WinMaximize, FID_WinRestore, FID_WinClose, FID_WinKill,
 	FID_WinActivate = 0, FID_WinActivateBottom,
-	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, FID_ProcessGetName, FID_ProcessGetPath,
-	FID_OnExit = 0, FID_OnClipboardChange, FID_OnError,
-	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlFindItem, FID_ControlGetIndex, FID_ControlGetChoice, FID_ControlGetItems, FID_ListViewGetContent, FID_EditGetLineCount, FID_EditGetCurrentLine, FID_EditGetCurrentCol, FID_EditGetLine, FID_EditGetSelectedText, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
-	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChooseIndex, FID_ControlChooseString, FID_EditPaste,
 	FID_ControlSend = SCM_NOT_RAW, FID_ControlSendText = SCM_RAW_TEXT,
 	FID_PostMessage = 0, FID_SendMessage,
 	FID_RegRead = 0, FID_RegWrite, FID_RegCreateKey, FID_RegDelete, FID_RegDeleteKey,
@@ -720,8 +714,6 @@ private:
 	ResultType PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
 	ResultType PerformAssign();
 	bool CatchThis(ExprTokenType &aThrown);
-
-	static FResult SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
 public:
 	#define SET_S_DEREF_BUF(ptr, size) Line::sDerefBuf = ptr, Line::sDerefBufSize = size
@@ -916,7 +908,7 @@ public:
 	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
 	BOOL CheckValidFinallyJump(Line* jumpTarget, bool aSilent = false);
 
-	static HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	static HWND DetermineTargetWindow(LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText);
 
 	
 	static ArgTypeType ArgIsVar(ActionTypeType aActionType, int aArgIndex, int aArgCount)
@@ -1112,9 +1104,9 @@ public:
 		return aDefault;
 	}
 
-	static ToggleValueType Convert10Toggle(int *aValue)
+	static ToggleValueType Convert10Toggle(optl<int> aValue)
 	{
-		if (!aValue) return NEUTRAL;
+		if (!aValue.has_value()) return NEUTRAL;
 		switch (*aValue)
 		{
 		case 1: return TOGGLED_ON;
@@ -1124,7 +1116,7 @@ public:
 		return TOGGLE_INVALID;
 	}
 
-	static ToggleValueType ConvertOnOffToggle(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOffToggle(LPCTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, TOGGLE, or blank.
 	{
 		if (ToggleValueType toggle = ConvertOnOff(aBuf))
@@ -1204,7 +1196,7 @@ public:
 		}
 	}
 
-	static int ConvertRunMode(LPTSTR aBuf)
+	static int ConvertRunMode(LPCTSTR aBuf)
 	// Returns the matching WinShow mode, or SW_SHOWNORMAL if none.
 	// These are also the modes that AutoIt3 uses.
 	{
@@ -2945,7 +2937,7 @@ public:
 	void CreateTrayIcon();
 	void UpdateTrayIcon(bool aForceUpdate = false);
 	void ShowTrayIcon(bool aShow);
-	ResultType SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon);
+	ResultType SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon);
 	void SetTrayTip(LPTSTR aText);
 	ResultType AutoExecSection();
 	bool IsPersistent();
@@ -3026,13 +3018,13 @@ public:
 
 	WinGroup *FindGroup(LPCTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPCTSTR aGroupName);
-	Label *FindLabel(LPTSTR aLabelName);
+	Label *FindLabel(LPCTSTR aLabelName);
 
-	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
-		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, DWORD &aLastError);
-	ResultType ActionExec(LPTSTR aAction, LPTSTR aParams = NULL, LPTSTR aWorkingDir = NULL
-		, bool aDisplayErrors = true, LPTSTR aRunShowMode = NULL, HANDLE *aProcess = NULL
-		, bool aUpdateLastError = false, bool aUseRunAs = false, Var *aOutputVar = NULL);
+	ResultType DoRunAs(LPTSTR aCommandLine, LPCTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
+		, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, DWORD &aLastError);
+	ResultType ActionExec(LPCTSTR aAction, LPCTSTR aParams = NULL, LPCTSTR aWorkingDir = NULL
+		, bool aDisplayErrors = true, LPCTSTR aRunShowMode = NULL, HANDLE *aProcess = NULL
+		, bool aUpdateLastError = false, bool aUseRunAs = false);
 
 	LPTSTR ListVars(LPTSTR aBuf, int aBufSize);
 	LPTSTR ListKeyHistory(LPTSTR aBuf, int aBufSize);
@@ -3223,7 +3215,6 @@ BIF_DECL(BIF_NumGet);
 BIF_DECL(BIF_NumPut);
 BIF_DECL(BIF_StrGetPut);
 BIF_DECL(BIF_StrPtr);
-BIF_DECL(BIF_IsLabel);
 BIF_DECL(BIF_IsTypeish);
 BIF_DECL(BIF_IsSet);
 BIF_DECL(BIF_VarSetStrCapacity);
@@ -3245,38 +3236,10 @@ BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_MinMax);
 BIF_DECL(BIF_DateAdd);
 BIF_DECL(BIF_DateDiff);
-BIF_DECL(BIF_PostSendMessage);
 BIF_DECL(BIF_Hotkey);
-BIF_DECL(BIF_SetTimer);
-BIF_DECL(BIF_OnMessage);
-BIF_DECL(BIF_On);
-
-#ifdef ENABLE_REGISTERCALLBACK
-BIF_DECL(BIF_CallbackCreate);
-BIF_DECL(BIF_CallbackFree);
-#endif
-
-BIF_DECL(BIF_MenuFromHandle);
-BIF_DECL(BIF_TraySetIcon);
-
-BIF_DECL(BIF_MsgBox);
-BIF_DECL(BIF_InputBox);
-BIF_DECL(BIF_ToolTip);
-
-// Gui
-BIF_DECL(BIF_GuiFromHwnd);
-BIF_DECL(BIF_GuiCtrlFromHwnd);
-
-BIF_DECL(BIF_IL_Create);
-BIF_DECL(BIF_IL_Destroy);
-BIF_DECL(BIF_IL_Add);
-
-BIF_DECL(BIF_LoadPicture);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 BIF_DECL(BIF_VerCompare);
-
-BIF_DECL(BIF_Hotstring);
 
 BIF_DECL(BIF_Type);
 BIF_DECL(BIF_IsObject);
@@ -3315,46 +3278,13 @@ BIF_DECL(BIF_ComObjQuery);
 
 
 BIF_DECL(BIF_Click);
-BIF_DECL(BIF_Control);
-BIF_DECL(BIF_ControlClick);
-BIF_DECL(BIF_ControlFocus);
-BIF_DECL(BIF_ControlGet);
-BIF_DECL(BIF_ControlGetClassNN);
-BIF_DECL(BIF_ControlGetFocus);
-BIF_DECL(BIF_ControlGetPos);
-BIF_DECL(BIF_ControlGetText);
-BIF_DECL(BIF_ControlMove);
-BIF_DECL(BIF_ControlSend);
-BIF_DECL(BIF_ControlSetText);
-BIF_DECL(BIF_GroupActivate);
-BIF_DECL(BIF_ImageSearch);
-BIF_DECL(BIF_MouseGetPos);
-BIF_DECL(BIF_PixelGetColor);
-BIF_DECL(BIF_PixelSearch);
 BIF_DECL(BIF_Reg);
 BIF_DECL(BIF_Random);
-BIF_DECL(BIF_Run);
 BIF_DECL(BIF_Sound);
 BIF_DECL(BIF_SplitPath);
-BIF_DECL(BIF_StatusBarGetText);
-BIF_DECL(BIF_StatusBarWait);
 BIF_DECL(BIF_CaretGetPos);
-BIF_DECL(BIF_WinGetClass);
-BIF_DECL(BIF_WinGetText);
-BIF_DECL(BIF_WinGetTitle);
-BIF_DECL(BIF_WinGetPos);
-BIF_DECL(BIF_WinGet);
-BIF_DECL(BIF_WinSet);
-BIF_DECL(BIF_WinSetTitle);
-BIF_DECL(BIF_WinRedraw);
-BIF_DECL(BIF_WinMove);
-BIF_DECL(BIF_WinMoveTopBottom);
-BIF_DECL(BIF_WinShow);
-BIF_DECL(BIF_WinActivate);
 BIF_DECL(BIF_MenuSelect);
-BIF_DECL(BIF_Process);
-BIF_DECL(BIF_ProcessSetPriority);
-BIF_DECL(BIF_Wait);
+BIF_DECL(BIF_RunWait);
 
 BIF_DECL(BIF_SetBIV);
 
@@ -3377,6 +3307,7 @@ StringCaseSenseType TokenToStringCase(ExprTokenType& aToken);
 Var *TokenToOutputVar(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aMinParams = nullptr, bool aShowError = true);
+FResult ValidateFunctor(IObject *aFunc, int aParamCount, int *aMinParams = nullptr, bool aShowError = true);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 LPTSTR TokenTypeString(ExprTokenType &aToken);
 #define STRING_TYPE_STRING _T("String")
@@ -3392,7 +3323,7 @@ FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 void PauseCurrentThread();
 void ToggleSuspendState();
 
-LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
+LPCTSTR RegExMatch(LPCTSTR aHaystack, LPCTSTR aNeedleRegEx);
 FResult SetWorkingDir(LPCTSTR aNewDir);
 void UpdateWorkingDir(LPCTSTR aNewDir = NULL);
 LPTSTR GetWorkingDir();
@@ -3409,14 +3340,32 @@ ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aR
 	if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam + param_offset, aParamCount - param_offset)) \
 		return;
 
+#define WINTITLE_PARAMETERS_DECL ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<StrArg> aExcludeTitle, optl<StrArg> aExcludeText
+#define WINTITLE_PARAMETERS aWinTitle, aWinText, aExcludeTitle, aExcludeText
+FResult DetermineTargetHwnd(HWND &aWindow, bool &aDetermined, ExprTokenType &aToken);
+FResult DetermineTargetWindow(HWND &aWindow, WINTITLE_PARAMETERS_DECL, bool aFindLastMatch = false);
+#define CONTROL_PARAMETERS_DECL ExprTokenType &aControlSpec, WINTITLE_PARAMETERS_DECL
+#define CONTROL_PARAMETERS_DECL_OPT ExprTokenType *aControlSpec, WINTITLE_PARAMETERS_DECL
+#define CONTROL_PARAMETERS aControlSpec, WINTITLE_PARAMETERS
+FResult DetermineTargetControl(HWND &aControl, HWND &aWindow, CONTROL_PARAMETERS_DECL, bool aThrowIfNotFound = true);
+FResult DetermineTargetControl(HWND &aControl, HWND &aWindow, CONTROL_PARAMETERS_DECL_OPT, bool aThrowIfNotFound = true);
+#define DETERMINE_TARGET_WINDOW do { \
+	auto fr = DetermineTargetWindow(target_window, aWinTitle, aWinText.value_or_null(), aExcludeTitle.value_or_null(), aExcludeText.value_or_null()); \
+	if (fr != OK) \
+		return fr; } while (0)
+#define DETERMINE_TARGET_CONTROL2 \
+	HWND target_window, control_window; \
+	{ auto fr = DetermineTargetControl(control_window, target_window, CONTROL_PARAMETERS); \
+	if (fr != OK) \
+		return fr; }
+
 LPTSTR GetExitReasonString(ExitReasons aExitReason);
 
-void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions);
-bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex);
+FResult ControlSetTab(HWND aHwnd, DWORD aTabIndex);
 
-void PixelSearch(Var *aOutputVarX, Var *aOutputVarY
+FResult PixelSearch(BOOL *aFound, ResultToken *aFoundX, ResultToken *aFoundY
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
-	, int aVariation, bool aIsPixelGetColor, ResultToken &aResultToken);
+	, int aVariation, LPTSTR aGetColor);
 
 ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional = false);
 ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional = false);

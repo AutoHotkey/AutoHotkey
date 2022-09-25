@@ -9,8 +9,11 @@ enum class MdType : UINT8
 	TypeFloat	= 2,
 	Size32		= 0x10, // This is just so Int32 != TypeInt, for debugging purposes.
 	Size64		= 0x20, // Flag for types that are 64-bit even on x86-32.
+	Unsigned	= 0x40,
 	Int32		= TypeInt | Size32,
+	UInt32		= TypeInt | Size32 | Unsigned,
 	Int64		= TypeInt | Size64,
+	UInt64		= TypeInt | Size64 | Unsigned,
 	Float64		= TypeFloat | Size64,
 	String		= 3,
 	Object,
@@ -28,6 +31,7 @@ enum class MdType : UINT8
 	// Only aliases from here on
 	FirstModifier = Optional,
 	BitsUpperBound = Optional,
+	UIntPtr = Exp32or64(UInt32, UInt64),
 	IntPtr = Exp32or64(Int32, Int64)
 };
 
@@ -47,23 +51,26 @@ enum class MdType : UINT8
 
 template<MdType T> struct md_argtype;
 template<> struct md_argtype<MdType::Int32> { typedef int t; };
+template<> struct md_argtype<MdType::UInt32> { typedef UINT t; };
+template<> struct md_argtype<MdType::Float64> { typedef double t; };
 template<> struct md_argtype<MdType::Int64> { typedef __int64 t; };
-template<> struct md_argtype<MdType::String> { typedef LPCTSTR t; };
+template<> struct md_argtype<MdType::UInt64> { typedef UINT64 t; };
+template<> struct md_argtype<MdType::String> { typedef StrArg t; };
+template<> struct md_argtype<MdType::Object> { typedef IObject *t; };
 template<> struct md_argtype<MdType::Void> { typedef void t; };
 template<> struct md_argtype<MdType::Variant> { typedef ExprTokenType &t; };
 template<> struct md_argtype<MdType::Bool32> { typedef BOOL t; };
 
-template<MdType T = MdType::Int32> struct md_outtype { typedef typename md_argtype<T>::t* t; };
+template<MdType T = MdType::Int32> struct md_outtype { typedef typename md_argtype<T>::t &t; };
 template<> struct md_outtype<MdType::String> { typedef StrRet &t; };
-template<> struct md_outtype<MdType::Object> { typedef IObject **t; };
 template<> struct md_outtype<MdType::Variant> { typedef ResultToken &t; };
 
-template<MdType T> struct md_optout { typedef typename md_outtype<T>::t t; };
+template<MdType T> struct md_optout { typedef typename md_argtype<T>::t *t; };
 template<> struct md_optout<MdType::String> { typedef StrRet *t; };
 template<> struct md_optout<MdType::Variant> { typedef ResultToken *t; };
 
-template<MdType T> struct md_optional { typedef typename md_argtype<T>::t* t; };
-template<> struct md_optional<MdType::String> { typedef LPCTSTR t; };
+template<MdType T> struct md_optional { typedef typename optl<typename md_argtype<T>::t> t; };
+template<> struct md_optional<MdType::Variant> { typedef ExprTokenType *t; };
 
 template<MdType T> struct md_retval { typedef typename md_argtype<T>::t t; };
 template<> struct md_retval<MdType::FResult> { typedef FResult t; };
@@ -120,6 +127,9 @@ template<> struct md_retval<MdType::NzIntWin32> { typedef BOOL t; };
 
 #define md_func(name, ...) \
 	md_func_x(name, name, FResult, __VA_ARGS__)
+
+#define md_func_v(name, ...) \
+	md_func_x(name, name, Void, __VA_ARGS__)
 
 #ifdef __INTELLISENSE__
 #undef md_func_x

@@ -36,15 +36,10 @@ FuncEntry g_BIF[] =
 	BIFn(ACos, 1, 1, BIF_ASinACos),
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
-#ifdef ENABLE_REGISTERCALLBACK
-	BIF1(CallbackCreate, 1, 3),
-	BIF1(CallbackFree, 1, 1),
-#endif
 	BIF1(CaretGetPos, 0, 2, {1, 2}),
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
 	BIF1(Click, 0, 6),
-	BIFn(ClipWait, 0, 2, BIF_Wait),
 #ifdef ENABLE_DLLCALL
 	BIFn(ComCall, 2, NA, BIF_DllCall),
 #endif
@@ -56,38 +51,6 @@ FuncEntry g_BIF[] =
 	BIF1(ComObjQuery, 2, 3),
 	BIF1(ComObjType, 1, 2),
 	BIF1(ComObjValue, 1, 1),
-	BIFn(ControlAddItem, 2, 6, BIF_Control),
-	BIFn(ControlChooseIndex, 2, 6, BIF_Control),
-	BIFn(ControlChooseString, 2, 6, BIF_Control),
-	BIF1(ControlClick, 0, 8),
-	BIFn(ControlDeleteItem, 2, 6, BIF_Control),
-	BIFn(ControlFindItem, 2, 6, BIF_ControlGet),
-	BIF1(ControlFocus, 1, 5),
-	BIFn(ControlGetChecked, 1, 5, BIF_ControlGet),
-	BIFn(ControlGetChoice, 1, 5, BIF_ControlGet),
-	BIF1(ControlGetClassNN, 1, 5),
-	BIFn(ControlGetEnabled, 1, 5, BIF_ControlGet),
-	BIFn(ControlGetExStyle, 1, 5, BIF_ControlGet),
-	BIF1(ControlGetFocus, 0, 4),
-	BIFn(ControlGetHwnd, 1, 5, BIF_ControlGet),
-	BIFn(ControlGetIndex, 1, 5, BIF_ControlGet),
-	BIFn(ControlGetItems, 1, 5, BIF_ControlGet),
-	BIF1(ControlGetPos, 0, 9, {1, 2, 3, 4}),
-	BIFn(ControlGetStyle, 1, 5, BIF_ControlGet),
-	BIF1(ControlGetText, 1, 5),
-	BIFn(ControlGetVisible, 1, 5, BIF_ControlGet),
-	BIFn(ControlHide, 1, 5, BIF_Control),
-	BIFn(ControlHideDropDown, 1, 5, BIF_Control),
-	BIF1(ControlMove, 0, 9),
-	BIFn(ControlSend, 1, 6, BIF_ControlSend),
-	BIFn(ControlSendText, 1, 6, BIF_ControlSend),
-	BIFn(ControlSetChecked, 2, 6, BIF_Control),
-	BIFn(ControlSetEnabled, 2, 6, BIF_Control),
-	BIFn(ControlSetExStyle, 2, 6, BIF_Control),
-	BIFn(ControlSetStyle, 2, 6, BIF_Control),
-	BIF1(ControlSetText, 2, 6),
-	BIFn(ControlShow, 1, 5, BIF_Control),
-	BIFn(ControlShowDropDown, 1, 5, BIF_Control),
 	BIF1(Cos, 1, 1),
 	BIF1(DateAdd, 3, 3),
 	BIF1(DateDiff, 3, 3),
@@ -96,12 +59,6 @@ FuncEntry g_BIF[] =
 #ifdef ENABLE_DLLCALL
 	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
-	BIFn(EditGetCurrentCol, 1, 5, BIF_ControlGet),
-	BIFn(EditGetCurrentLine, 1, 5, BIF_ControlGet),
-	BIFn(EditGetLine, 2, 6, BIF_ControlGet),
-	BIFn(EditGetLineCount, 1, 5, BIF_ControlGet),
-	BIFn(EditGetSelectedText, 1, 5, BIF_ControlGet),
-	BIFn(EditPaste, 2, 6, BIF_Control),
 	BIF1(Exp, 1, 1),
 	BIFn(FileEncoding, 1, 1, BIF_SetBIV),
 	BIF1(FileOpen, 2, 3),
@@ -109,8 +66,6 @@ FuncEntry g_BIF[] =
 	BIF1(Format, 1, NA),
 	BIF1(FormatTime, 0, 2),
 	BIFn(GetMethod, 1, 3, BIF_GetMethod),
-	BIF1(GuiCtrlFromHwnd, 1, 1),
-	BIF1(GuiFromHwnd, 1, 2),
 	BIF1(HasBase, 2, 2),
 	BIFn(HasMethod, 1, 3, BIF_GetMethod),
 	BIF1(HasProp, 2, 2),
@@ -120,19 +75,12 @@ FuncEntry g_BIF[] =
 	BIFn(HotIfWinNotActive, 0, 2, BIF_Hotkey),
 	BIFn(HotIfWinNotExist, 0, 2, BIF_Hotkey),
 	BIFn(Hotkey, 1, 3, BIF_Hotkey),
-	BIF1(Hotstring, 1, 3),
-	BIF1(IL_Add, 2, 4),
-	BIF1(IL_Create, 0, 3),
-	BIF1(IL_Destroy, 1, 1),
-	BIF1(ImageSearch, 7, 7, {1, 2}),
-	BIF1(InputBox, 0, 4),
 	BIF1(InStr, 2, 5),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
 	BIFi(IsAlpha, 1, 2, BIF_IsTypeish, VAR_TYPE_ALPHA),
 	BIFi(IsDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_DIGIT),
 	BIFi(IsFloat, 1, 1, BIF_IsTypeish, VAR_TYPE_FLOAT),
 	BIFi(IsInteger, 1, 1, BIF_IsTypeish, VAR_TYPE_INTEGER),
-	BIF1(IsLabel, 1, 1),
 	BIFi(IsLower, 1, 2, BIF_IsTypeish, VAR_TYPE_LOWER),
 	BIFi(IsNumber, 1, 1, BIF_IsTypeish, VAR_TYPE_NUMBER),
 	BIF1(IsObject, 1, 1),
@@ -141,19 +89,13 @@ FuncEntry g_BIF[] =
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
 	BIFi(IsXDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_XDIGIT),
-	BIFn(KeyWait, 1, 2, BIF_Wait),
-	BIFn(ListViewGetContent, 0, 6, BIF_ControlGet),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
-	BIF1(LoadPicture, 1, 3, {3}),
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
 	BIFn(LTrim, 1, 2, BIF_Trim),
 	BIFn(Max, 1, NA, BIF_MinMax),
-	BIF1(MenuFromHandle, 1, 1),
 	BIF1(MenuSelect, 0, 11),
 	BIFn(Min, 1, NA, BIF_MinMax),
 	BIF1(Mod, 2, 2),
-	BIF1(MouseGetPos, 0, 5, {1, 2, 3, 4}),
-	BIF1(MsgBox, 0, 3),
 	BIF1(NumGet, 2, 3),
 	BIF1(NumPut, 3, NA),
 	BIFn(ObjAddRef, 1, 1, BIF_ObjAddRefRelease),
@@ -170,21 +112,7 @@ FuncEntry g_BIF[] =
 	BIFn(ObjRelease, 1, 1, BIF_ObjAddRefRelease),
 	BIFn(ObjSetBase, 2, 2, BIF_Base),
 	BIFn(ObjSetCapacity, 2, 2, BIF_ObjXXX),
-	BIFn(OnClipboardChange, 1, 2, BIF_On),
-	BIFn(OnError, 1, 2, BIF_On),
-	BIFn(OnExit, 1, 2, BIF_On),
-	BIF1(OnMessage, 2, 3),
 	BIF1(Ord, 1, 1),
-	BIF1(PixelGetColor, 2, 3),
-	BIF1(PixelSearch, 7, 8, {1, 2}),
-	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
-	BIFn(ProcessClose, 1, 1, BIF_Process),
-	BIFn(ProcessExist, 0, 1, BIF_Process),
-	BIFn(ProcessGetName, 0, 1, BIF_Process),
-	BIFn(ProcessGetPath, 0, 1, BIF_Process),
-	BIF1(ProcessSetPriority, 1, 2),
-	BIFn(ProcessWait, 1, 2, BIF_Process),
-	BIFn(ProcessWaitClose, 1, 2, BIF_Process),
 	BIF1(Random, 0, 2),
 	BIFn(RegCreateKey, 0, 1, BIF_Reg),
 	BIFn(RegDelete, 0, 2, BIF_Reg),
@@ -195,12 +123,9 @@ FuncEntry g_BIF[] =
 	BIFn(RegWrite, 0, 4, BIF_Reg),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
-	BIF1(Run, 1, 4, {4}),
-	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
-	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
+	BIF1(RunWait, 1, 4, {4}),
 	BIFn(SetRegView, 1, 1, BIF_SetBIV),
 	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
-	BIF1(SetTimer, 0, 3),
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
 	BIF1(Sin, 1, 1),
 	BIF1(Sort, 1, 3),
@@ -212,8 +137,6 @@ FuncEntry g_BIF[] =
 	BIFn(SoundSetVolume, 1, 3, BIF_Sound),
 	BIF1(SplitPath, 1, 6, {2, 3, 4, 5, 6}),
 	BIFn(Sqrt, 1, 1, BIF_SqrtLogLn),
-	BIF1(StatusBarGetText, 0, 5),
-	BIF1(StatusBarWait, 0, 8),
 	BIF1(StrCompare, 2, 3),
 	BIFn(StrGet, 1, 3, BIF_StrGetPut),
 	BIF1(StrLen, 1, 1),
@@ -226,58 +149,12 @@ FuncEntry g_BIF[] =
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
 	BIF1(Tan, 1, 1),
-	BIF1(ToolTip, 0, 4),
-	BIF1(TraySetIcon, 0, 3),
 	BIFn(Trim, 1, 2, BIF_Trim),
 	BIF1(Type, 1, 1),
 	BIF1(VarSetStrCapacity, 1, 2, {1}),
 	BIF1(VerCompare, 2, 2),
-	BIFn(WinActivate, 0, 4, BIF_WinActivate),
-	BIFn(WinActivateBottom, 0, 4, BIF_WinActivate),
 	BIFn(WinActive, 0, 4, BIF_WinExistActive),
-	BIFn(WinClose, 0, 5, BIF_WinShow),
 	BIFn(WinExist, 0, 4, BIF_WinExistActive),
-	BIF1(WinGetClass, 0, 4),
-	BIFn(WinGetClientPos, 0, 8, BIF_WinGetPos, {1, 2, 3, 4}),
-	BIFn(WinGetControls, 0, 4, BIF_WinGet),
-	BIFn(WinGetControlsHwnd, 0, 4, BIF_WinGet),
-	BIFn(WinGetCount, 0, 4, BIF_WinGet),
-	BIFn(WinGetExStyle, 0, 4, BIF_WinGet),
-	BIFn(WinGetID, 0, 4, BIF_WinGet),
-	BIFn(WinGetIDLast, 0, 4, BIF_WinGet),
-	BIFn(WinGetList, 0, 4, BIF_WinGet),
-	BIFn(WinGetMinMax, 0, 4, BIF_WinGet),
-	BIFn(WinGetPID, 0, 4, BIF_WinGet),
-	BIFn(WinGetPos, 0, 8, BIF_WinGetPos, {1, 2, 3, 4}),
-	BIFn(WinGetProcessName, 0, 4, BIF_WinGet),
-	BIFn(WinGetProcessPath, 0, 4, BIF_WinGet),
-	BIFn(WinGetStyle, 0, 4, BIF_WinGet),
-	BIF1(WinGetText, 0, 4),
-	BIF1(WinGetTitle, 0, 4),
-	BIFn(WinGetTransColor, 0, 4, BIF_WinGet),
-	BIFn(WinGetTransparent, 0, 4, BIF_WinGet),
-	BIFn(WinHide, 0, 4, BIF_WinShow),
-	BIFn(WinKill, 0, 5, BIF_WinShow),
-	BIFn(WinMaximize, 0, 4, BIF_WinShow),
-	BIFn(WinMinimize, 0, 4, BIF_WinShow),
-	BIF1(WinMove, 0, 8),
-	BIFn(WinMoveBottom, 0, 4, BIF_WinMoveTopBottom),
-	BIFn(WinMoveTop, 0, 4, BIF_WinMoveTopBottom),
-	BIF1(WinRedraw, 0, 4),
-	BIFn(WinRestore, 0, 4, BIF_WinShow),
-	BIFn(WinSetAlwaysOnTop, 0, 5, BIF_WinSet),
-	BIFn(WinSetEnabled, 1, 5, BIF_WinSet),
-	BIFn(WinSetExStyle, 1, 5, BIF_WinSet),
-	BIFn(WinSetRegion, 0, 5, BIF_WinSet),
-	BIFn(WinSetStyle, 1, 5, BIF_WinSet),
-	BIF1(WinSetTitle, 1, 5),
-	BIFn(WinSetTransColor, 1, 5, BIF_WinSet),
-	BIFn(WinSetTransparent, 1, 5, BIF_WinSet),
-	BIFn(WinShow, 0, 4, BIF_WinShow),
-	BIFn(WinWait, 0, 5, BIF_Wait),
-	BIFn(WinWaitActive, 0, 5, BIF_Wait),
-	BIFn(WinWaitClose, 0, 5, BIF_Wait),
-	BIFn(WinWaitNotActive, 0, 5, BIF_Wait),
 };
 #undef NA
 #undef BIFn
@@ -977,7 +854,13 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 
 
 
-ResultType Script::SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon)
+bif_impl FResult TraySetIcon(optl<StrArg> aIconFile, optl<int> aIconNumber, optl<BOOL> aFreeze)
+{
+	return g_script.SetTrayIcon(aIconFile.value_or_null(), aIconNumber.value_or(1)
+		, aFreeze.has_value() ? aFreeze.value() ? TOGGLED_ON : TOGGLED_OFF : NEUTRAL) ? OK : FR_FAIL;
+}
+
+ResultType Script::SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon)
 {
 	bool force_update = false;
 
@@ -990,7 +873,7 @@ ResultType Script::SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueTyp
 		}
 	}
 	
-	if (*aIconFile == '*' && !aIconFile[1]) // Restore the standard icon.
+	if (aIconFile && *aIconFile == '*' && !aIconFile[1]) // Restore the standard icon.
 	{
 		if (mCustomIcon)
 		{
@@ -1004,14 +887,14 @@ ResultType Script::SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueTyp
 			mCustomIconNumber = 0;
 			force_update = true;
 		}
-		aIconFile = _T(""); // Handle this like TraySetIcon(,,n) in case n was specified.
+		aIconFile = nullptr; // Update the icon and return, below.
 	}
 	
-	if (!*aIconFile) // No icon specified, or it was already reset to default above.
+	if (!aIconFile) // No icon specified, or it was already reset to default above.
 	{
 		if (force_update)
 			UpdateTrayIcon(true);
-		return OK; // We were called just to freeze/unfreeze the icon.
+		return OK;
 	}
 
 	// v1.0.43.03: Load via LoadPicture() vs. ExtractIcon() because ExtractIcon harms the quality
@@ -1300,7 +1183,7 @@ ResultType Script::Reload(bool aDisplayErrors)
 
 
 
-bif_impl ResultType Exit(int *aExitCode)
+bif_impl ResultType Exit(optl<int> aExitCode)
 {
 	// Even if the script isn't persistent, this thread might've interrupted another which should
 	// be allowed to complete normally.  This is especially important in v2 because a persistent
@@ -1316,13 +1199,13 @@ bif_impl ResultType Exit(int *aExitCode)
 	// conditions can change during stack-unwind due to __delete or FINALLY.  Instead, this is
 	// reset to 0 in ResumeUnderlyingThread().
 	if (g_nThreads <= 1)
-		g_script.mPendingExitCode = aExitCode ? *aExitCode : 0;
+		g_script.mPendingExitCode = aExitCode.has_value() ? *aExitCode : 0;
 	return EARLY_EXIT;
 }
 
-bif_impl ResultType ExitApp(int *aExitCode)
+bif_impl ResultType ExitApp(optl<int> aExitCode)
 {
-	g_script.mPendingExitCode = aExitCode ? *aExitCode : 0;
+	g_script.mPendingExitCode = aExitCode.has_value() ? *aExitCode : 0;
 	return g_script.ExitApp(EXIT_EXIT);
 }
 
@@ -4086,7 +3969,7 @@ void Script::DeleteTimer(IObject *aLabel)
 
 
 
-Label *Script::FindLabel(LPTSTR aLabelName)
+Label *Script::FindLabel(LPCTSTR aLabelName)
 // Returns the first label whose name matches aLabelName, or NULL if not found.
 
 // If duplicates labels are now possible, callers must be aware that only the first match is returned.
@@ -11897,7 +11780,7 @@ void ToggleSuspendState()
 
 
 
-bif_impl FResult Suspend(int *aMode)
+bif_impl FResult Suspend(optl<int> aMode)
 {
 	auto toggle = Line::Convert10Toggle(aMode);
 	if (toggle == TOGGLE_INVALID)
@@ -11924,7 +11807,7 @@ void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
 }
 
 
-bif_impl FResult Pause(int *aNewState)
+bif_impl FResult Pause(optl<int> aNewState)
 {
 	auto toggle = Line::Convert10Toggle(aNewState);
 	switch (toggle)
@@ -12303,8 +12186,8 @@ LPTSTR Script::ListKeyHistory(LPTSTR aBuf, int aBufSize) // aBufSize should be a
 
 
 
-ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir, bool aDisplayErrors
-	, LPTSTR aRunShowMode, HANDLE *aProcess, bool aUpdateLastError, bool aUseRunAs, Var *aOutputVar)
+ResultType Script::ActionExec(LPCTSTR aAction, LPCTSTR aParams, LPCTSTR aWorkingDir, bool aDisplayErrors
+	, LPCTSTR aRunShowMode, HANDLE *aProcess, bool aUpdateLastError, bool aUseRunAs)
 // Caller should specify NULL for aParams if it wants us to attempt to parse out params from
 // within aAction.  Caller may specify empty string ("") instead to specify no params at all.
 // Remember that aAction and aParams can both be NULL, so don't dereference without checking first.
@@ -12315,8 +12198,6 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	HANDLE hprocess_local;
 	HANDLE &hprocess = aProcess ? *aProcess : hprocess_local; // To simplify other things.
 	hprocess = NULL; // Init output param if the caller gave us memory to store it.  Even if caller didn't, other things below may rely on this being initialized.
-	if (aOutputVar) // Same
-		aOutputVar->Assign();
 
 	// Launching nothing is always a success:
 	if (!aAction || !*aAction) return OK;
@@ -12345,9 +12226,9 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	// Set default items to be run by ShellExecute().  These are also used by the error
 	// reporting at the end, which is why they're initialized even if CreateProcess() works
 	// and there's no need to use ShellExecute():
-	LPTSTR shell_verb = NULL;
-	LPTSTR shell_action = aAction;
-	LPTSTR shell_params = NULL;
+	LPCTSTR shell_verb = NULL;
+	LPCTSTR shell_action = aAction;
+	LPCTSTR shell_params = NULL;
 	
 	///////////////////////////////////////////////////////////////////////////////////
 	// This next section is done prior to CreateProcess() because when aParams is NULL,
@@ -12369,7 +12250,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		LPTSTR phrase;
 		size_t phrase_len;
 		// Set phrase_end to be the location of the first whitespace char, if one exists:
-		LPTSTR phrase_end = StrChrAny(shell_action, _T(" \t")); // Find space or tab.
+		LPCTSTR phrase_end = StrChrAny(shell_action, _T(" \t")); // Find space or tab.
 		if (phrase_end) // i.e. there is a second phrase.
 		{
 			phrase_len = phrase_end - shell_action;
@@ -12446,7 +12327,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		if (use_runas)
 		{
 			if (!DoRunAs(command_line, aWorkingDir, aDisplayErrors, si.wShowWindow  // wShowWindow (min/max/hide).
-				, aOutputVar, pi, success, hprocess, last_error)) // These are output parameters it will set for us.
+				, pi, success, hprocess, last_error)) // These are output parameters it will set for us.
 				return FAIL; // It already displayed the error, if appropriate.
 		}
 		else
@@ -12473,8 +12354,6 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 				if (pi.hThread)
 					CloseHandle(pi.hThread); // Required to avoid memory leak.
 				hprocess = pi.hProcess;
-				if (aOutputVar)
-					aOutputVar->Assign(pi.dwProcessId);
 			}
 			else
 				last_error = GetLastError();
@@ -12589,12 +12468,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		
 		if (ShellExecuteEx(&sei)) // Relies on short-circuit boolean order.
 		{
-			if (hprocess = sei.hProcess)
-			{
-				// A new process was created, so get its ID if possible.
-				if (aOutputVar)
-					aOutputVar->Assign(GetProcessId(hprocess));
-			}
+			hprocess = sei.hProcess;
 			// Even if there's no process handle, it's considered a success because some
 			// system verbs and file associations do not create a new process, by design.
 			success = true;

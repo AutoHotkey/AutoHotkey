@@ -2381,8 +2381,8 @@ void Hotstring::DoReplace(LPARAM alParam)
 
 
 
-ResultType Hotstring::AddHotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR aHotstring
-		, LPTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend)
+ResultType Hotstring::AddHotstring(LPCTSTR aName, IObjectPtr aCallback, LPCTSTR aOptions, LPCTSTR aHotstring
+		, LPCTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend)
 // Returns OK or FAIL.
 // Caller has ensured that aHotstringOptions is blank if there are no options.  Otherwise, aHotstringOptions
 // should end in a colon, which marks the end of the options list.  aHotstring is the hotstring itself
@@ -2428,7 +2428,7 @@ ResultType Hotstring::AddHotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aO
 
 
 
-Hotstring::Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
+Hotstring::Hotstring(LPCTSTR aName, IObjectPtr aCallback, LPCTSTR aOptions, LPCTSTR aHotstring, LPCTSTR aReplacement
 	, bool aHasContinuationSection, UCHAR aSuspend)
 	: mCallback(aCallback)  // Any NULL value will cause failure further below.
 	, mName(NULL)
@@ -2475,7 +2475,7 @@ Hotstring::Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR
 
 
 
-void Hotstring::ParseOptions(LPTSTR aOptions)
+void Hotstring::ParseOptions(LPCTSTR aOptions)
 {
 	bool unused_X_option;
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
@@ -2484,17 +2484,16 @@ void Hotstring::ParseOptions(LPTSTR aOptions)
 
 
 
-void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
+void Hotstring::ParseOptions(LPCTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 	, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
 	, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction, bool &aSuspendExempt)
 {
 	// In this case, colon rather than zero marks the end of the string.  However, the string
 	// might be empty so check for that too.  In addition, this is now called from
 	// IsDirective(), so that's another reason to check for normal string termination.
-	LPTSTR cp1;
-	for (LPTSTR cp = aOptions; *cp && *cp != ':'; ++cp)
+	for (auto cp = aOptions; *cp && *cp != ':'; ++cp)
 	{
-		cp1 = cp + 1;
+		auto cp1 = cp + 1;
 		switch(ctoupper(*cp))
 		{
 		case '*':
@@ -2567,7 +2566,7 @@ void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, Se
 
 
 
-Hotstring *Hotstring::FindHotstring(LPTSTR aHotstring, bool aCaseSensitive, bool aDetectWhenInsideWord, HotkeyCriterion *aHotCriterion)
+Hotstring *Hotstring::FindHotstring(LPCTSTR aHotstring, bool aCaseSensitive, bool aDetectWhenInsideWord, HotkeyCriterion *aHotCriterion)
 {
 	for (UINT u = 0; u < sHotstringCount; ++u)
 	{
@@ -2585,58 +2584,56 @@ Hotstring *Hotstring::FindHotstring(LPTSTR aHotstring, bool aCaseSensitive, bool
 
 
 
-BIF_DECL(BIF_Hotstring)
+bif_impl FResult BIF_Hotstring(StrArg name, ExprTokenType *aReplacement, optl<StrArg> aOnOff, ResultToken &aResultToken)
 {
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
 
-	_f_param_string(name, 0);
-	_f_param_string_opt(action, 1);
-	_f_param_string_opt(onoff, 2);
+	TCHAR number_buf[MAX_NUMBER_SIZE];
+	auto action = aReplacement ? TokenToString(*aReplacement, number_buf) : _T("");
 
 	if (!_tcsicmp(name, _T("EndChars"))) // Equivalent to #Hotstring EndChars <action>
 	{
 		TokenSetResult(aResultToken, g_EndChars); // Return the old value.
-		if (!ParamIndexIsOmitted(1))
+		if (aReplacement)
 			// There is some concern of a race condition with the hook thread, but since g_EndChars
 			// has static storage duration and is therefore zero-initialized at startup (in particular,
 			// the last char is always zero), the only consequence would be that some old end chars may
 			// be used if a hotstring is evaluated during the tcslcpy() call.
 			tcslcpy(g_EndChars, action, _countof(g_EndChars));
-		return;
+		return OK;
 	}
 	else if (!_tcsicmp(name, _T("MouseReset"))) // "MouseReset, true" seems more intuitive than "NoMouse, false"
 	{
 		bool previous_value = g_HSResetUponMouseClick;
-		if (!ParamIndexIsOmitted(1))
+		if (aReplacement)
 		{
-			g_HSResetUponMouseClick = ParamIndexToBOOL(1);
+			g_HSResetUponMouseClick = TokenToBOOL(*aReplacement);
 			if (g_HSResetUponMouseClick != previous_value && Hotstring::sEnabledCount) // No need if there aren't any hotstrings.
 				Hotkey::ManifestAllHotkeysHotstringsHooks(); // Install the hook if needed, or uninstall if no longer needed.
 		}
-		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = previous_value;
-		return;
+		aResultToken.SetValue(previous_value);
+		return OK;
 	}
 	else if (!_tcsicmp(name, _T("Reset")))
 	{
 		*g_HSBuf = '\0';
 		g_HSBufLength = 0;
-		return;
+		return OK;
 	}
-	else if (aParamCount == 1 && *name != ':') // Equivalent to #Hotstring <name>
+	else if (!aReplacement && !aOnOff.has_value() && *name != ':') // Equivalent to #Hotstring <name>
 	{
 		// TODO: Build string of current options and return it?
 		bool unused_X_option; // 'X' option is required to be passed for each Hotstring() call, for clarity.
 		Hotstring::ParseOptions(name, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
 			, g_HSConformToCase, g_HSDoBackspace, g_HSOmitEndChar, g_HSSendRaw, g_HSEndCharRequired
 			, g_HSDetectWhenInsideWord, g_HSDoReset, unused_X_option, g_SuspendExemptHS);
-		return;
+		return OK;
 	}
 
 	// Parse the hotstring name (this is similar to a section in LoadIncludedFile()):
-	LPTSTR hotstring_start = NULL;
-	LPTSTR hotstring_options = _T(""); // Set default as "no options were specified for this hotstring".
+	LPCTSTR hotstring_start = NULL;
+	LPCTSTR hotstring_options = _T(""); // Set default as "no options were specified for this hotstring".
 	if (name[0] == ':' && name[1])
 	{
 		if (name[1] != ':')
@@ -2654,7 +2651,7 @@ BIF_DECL(BIF_Hotstring)
 			//else it's just a naked "::", which is invalid.
 	}
 	if (!hotstring_start)
-		_f_throw_param(0);
+		return FR_E_ARG(0);
 	
 	// Determine options which affect hotstring identity/uniqueness.
 	bool case_sensitive = g_HSCaseSensitive;
@@ -2665,21 +2662,21 @@ BIF_DECL(BIF_Hotstring)
 		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, execute_action, un);
 
 	IObject *action_obj = NULL;
-	if (!ParamIndexIsOmitted(1))
+	if (aReplacement)
 	{
-		if (action_obj = ParamIndexToObject(1))
+		if (action_obj = TokenToObject(*aReplacement))
 			action_obj->AddRef();
 		else if (execute_action)
-			_f_throw_param(1); // the 'X' option must be used together with a function object.
+			return FR_E_ARG(1); // The 'X' option must be used together with a function object.
 		// Otherwise, it's always replacement text
 	}
 	
 	ToggleValueType toggle = NEUTRAL;
-	if (  *onoff && !(toggle = Line::ConvertOnOffToggle(onoff))   )
+	if (  aOnOff.has_value() && !(toggle = Line::ConvertOnOffToggle(aOnOff.value()))  )
 	{
 		if (action_obj)
 			action_obj->Release();
-		_f_throw_param(2);
+		return FR_E_ARG(2);
 	}
 
 	bool was_already_enabled;
@@ -2701,7 +2698,7 @@ BIF_DECL(BIF_Hotstring)
 					new_replacement = existing->mReplacement; // Avoid reallocating it.
 				}
 				else if (   !(new_replacement = _tcsdup(action))   )
-					_f_throw_oom;
+					return FR_E_OUTOFMEM;
 			}
 			existing->mSuspended |= HS_TEMPORARILY_DISABLED;
 			WaitHookIdle();
@@ -2733,7 +2730,7 @@ BIF_DECL(BIF_Hotstring)
 	else // No matching hotstring yet.
 	{
 		if (!action_obj && !*action)
-			_f_throw(ERR_NONEXISTENT_HOTSTRING, ErrorPrototype::Target);
+			return FError(ERR_NONEXISTENT_HOTSTRING, name, ErrorPrototype::Target);
 
 		UCHAR initial_suspend_state = (toggle == TOGGLED_OFF) ? HS_TURNED_OFF : FALSE;
 		if (g_IsSuspended)
@@ -2743,7 +2740,7 @@ BIF_DECL(BIF_Hotstring)
 		{
 			if (action_obj)
 				action_obj->Release();
-			_f_return_FAIL;
+			return FR_FAIL;
 		}
 
 		existing = Hotstring::shs[Hotstring::sHotstringCount-1];
@@ -2776,4 +2773,5 @@ BIF_DECL(BIF_Hotstring)
 				Hotkey::ManifestAllHotkeysHotstringsHooks();
 		}
 	}
+	return OK;
 }

@@ -228,7 +228,7 @@ void WinGroup::Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec *aWin
 			// group isn't currently active (i.e. we're starting fresh), because otherwise
 			// windows would be activated in an order different from what was already shown
 			// the first time through the enumeration, which doesn't seem to be ever desirable:
-			, !aStartWithMostRecent || group_is_active, true
+			, !aStartWithMostRecent || group_is_active
 			, sAlreadyVisited, sAlreadyVisitedCount)   )
 		{
 			// We found a window to activate, so we're done.

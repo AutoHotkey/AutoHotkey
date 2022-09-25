@@ -25,7 +25,7 @@ GNU General Public License for more details.
 #pragma region Environment Variables
 
 
-bif_impl FResult EnvGet(LPCTSTR aEnvVarName, StrRet &aRetVal)
+bif_impl FResult EnvGet(StrArg aEnvVarName, StrRet &aRetVal)
 {
 	// According to MSDN, 32767 is exactly large enough to handle the largest variable plus its zero terminator.
 	// Update: In practice, at least on Windows 7, the limit only applies to the ANSI functions.
@@ -65,7 +65,7 @@ bif_impl FResult EnvGet(LPCTSTR aEnvVarName, StrRet &aRetVal)
 }
 
 
-bif_impl BOOL EnvSet(LPCTSTR aName, LPCTSTR aValue)
+bif_impl BOOL EnvSet(StrArg aName, optl<StrArg> aValue)
 {
 	// MSDN: "If [the 2nd] parameter is NULL, the variable is deleted from the current process's environment."
 	// No checking is currently done to ensure that aValue isn't longer than 32K, since testing shows that
@@ -74,7 +74,7 @@ bif_impl BOOL EnvSet(LPCTSTR aName, LPCTSTR aValue)
 	// Note: It seems that env variable names can contain spaces and other symbols, so it's best not to
 	// validate aEnvVarName the same way we validate script variables (i.e. just let the return value
 	// determine whether there's an error).
-	return SetEnvironmentVariable(aName, aValue);
+	return SetEnvironmentVariable(aName, aValue.value_or_null());
 }
 
 
@@ -160,10 +160,10 @@ bif_impl int MonitorGetPrimary()
 }
 
 
-static FResult MonitorGet(int *aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal, bool aWorkArea)
+static FResult MonitorGet(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int &aRetVal, bool aWorkArea)
 {
 	MonitorInfoPackage mip = {0};
-	EnumForMonitorGet(mip, aIndex ? *aIndex : 0);
+	EnumForMonitorGet(mip, aIndex.value_or(0));
 	if (!mip.count) // Might be virtually impossible.
 		return FR_E_WIN32;
 	if (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count)
@@ -174,27 +174,27 @@ static FResult MonitorGet(int *aIndex, int *aLeft, int *aTop, int *aRight, int *
 	if (aTop) *aTop = monitor_rect.top;
 	if (aRight) *aRight = monitor_rect.right;
 	if (aBottom) *aBottom = monitor_rect.bottom;
-	*aRetVal = mip.count;
+	aRetVal = mip.count;
 	return OK;
 }
 
 
-bif_impl FResult MonitorGet(int *aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal)
+bif_impl FResult MonitorGet(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int &aRetVal)
 {
 	return MonitorGet(aIndex, aLeft, aTop, aRight, aBottom, aRetVal, false);
 }
 
 
-bif_impl FResult MonitorGetWorkArea(int *aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int *aRetVal)
+bif_impl FResult MonitorGetWorkArea(optl<int> aIndex, int *aLeft, int *aTop, int *aRight, int *aBottom, int &aRetVal)
 {
 	return MonitorGet(aIndex, aLeft, aTop, aRight, aBottom, aRetVal, true);
 }
 
 
-bif_impl FResult MonitorGetName(int *aIndex, StrRet &aRetVal)
+bif_impl FResult MonitorGetName(optl<int> aIndex, StrRet &aRetVal)
 {
 	MonitorInfoPackage mip = {0};
-	EnumForMonitorGet(mip, aIndex ? *aIndex : 0);
+	EnumForMonitorGet(mip, aIndex.value_or(0));
 	if (!mip.count) // Might be virtually impossible.
 		return FR_E_WIN32;
 	if (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count)
