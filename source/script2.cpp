@@ -1538,59 +1538,47 @@ bif_impl FResult FileSelect(optl<StrArg> aOptions, optl<StrArg> aWorkingDir, opt
 	}
 	
 	LPCTSTR default_file_name = _T("");
-
-	TCHAR working_dir[MAX_PATH]; // Using T_MAX_PATH vs. MAX_PATH did not help on Windows 10.0.16299 (see below).
-	if (aWorkingDir.is_blank_or_omitted())
-		*working_dir = '\0';
-	else
+	LPCTSTR initial_dir = nullptr;
+	if (aWorkingDir.has_nonempty_value())
 	{
-		// Compress the path if possible to support longer paths.  Without this, any path longer
-		// than MAX_PATH would be ignored, presumably because the dialog, as part of the shell,
-		// does not support long paths.  Surprisingly, although Windows 10 long path awareness
-		// does not allow us to pass a long path for working_dir, it does affect whether the long
-		// path is used in the address bar and returned filenames.
-		if (_tcslen(aWorkingDir.value()) >= MAX_PATH)
-			GetShortPathName(aWorkingDir.value(), working_dir, _countof(working_dir));
+		LPCTSTR dir_and_name = aWorkingDir.value();
+		size_t initial_dir_length = 0;
+		DWORD attr = GetFileAttributes(dir_and_name);
+		if ((attr != 0xFFFFFFFF) && (attr & FILE_ATTRIBUTE_DIRECTORY))
+		{
+			// Use the entire dir_and_name as the initial directory.
+			initial_dir = dir_and_name;
+			initial_dir_length = _tcslen(dir_and_name);
+		}
 		else
-			tcslcpy(working_dir, aWorkingDir.value(), _countof(working_dir));
-		// v1.0.43.10: Support CLSIDs such as:
-		//   My Computer  ::{20d04fe0-3aea-1069-a2d8-08002b30309d}
-		//   My Documents ::{450d8fba-ad25-11d0-98a8-0800361b1103}
-		// Also support optional subdirectory appended to the CLSID.
-		// Neither SetCurrentDirectory() nor GetFileAttributes() directly supports CLSIDs, so rely on other means
-		// to detect whether a CLSID ends in a directory vs. filename.
-		bool is_directory, is_clsid;
-		if (is_clsid = !_tcsncmp(working_dir, _T("::{"), 3))
-		{
-			LPTSTR end_brace;
-			if (end_brace = _tcschr(working_dir, '}'))
-				is_directory = !end_brace[1] // First '}' is also the last char in string, so it's naked CLSID (so assume directory).
-					|| working_dir[_tcslen(working_dir) - 1] == '\\'; // Or path ends in backslash.
-			else // Badly formatted clsid.
-				is_directory = true; // Arbitrary default due to rarity.
-		}
-		else // Not a CLSID.
-		{
-			DWORD attr = GetFileAttributes(working_dir);
-			is_directory = (attr != 0xFFFFFFFF) && (attr & FILE_ATTRIBUTE_DIRECTORY);
-		}
-		if (!is_directory)
 		{
 			// Above condition indicates it's either an existing file that's not a folder, or a nonexistent
 			// folder/filename.  In either case, it seems best to assume it's a file because the user may want
 			// to provide a default SAVE filename, and it would be normal for such a file not to already exist.
-			LPTSTR last_backslash;
-			if (last_backslash = _tcsrchr(working_dir, '\\'))
+			LPCTSTR last_backslash = _tcsrchr(dir_and_name, '\\');
+			if (!last_backslash)
+			{
+				// Use the entire dir_and_name as the default filename.
+				default_file_name = dir_and_name;
+			}
+			else
 			{
 				default_file_name = last_backslash + 1;
-				*last_backslash = '\0'; // Make the working directory just the file's path.
+				initial_dir = dir_and_name;
+				initial_dir_length = last_backslash - dir_and_name;
 			}
-			else // The entire working_dir string is the default file (unless this is a clsid).
-				if (!is_clsid)
-					default_file_name = working_dir; // This signals it to use the default directory.
-				//else leave working_dir set to the entire clsid string in case it's somehow valid.
 		}
-		// else it is a directory, so just leave working_dir set as it was initially.
+		if (initial_dir && initial_dir[initial_dir_length]) // Null termination required.
+		{
+			if (initial_dir_length < T_MAX_PATH) // Avoid stack overflow in case of bad data; anything longer wouldn't work anyway.
+			{
+				LPTSTR buf = (LPTSTR)_alloca(sizeof(TCHAR) * (initial_dir_length + 1));
+				initial_dir = tmemcpy(buf, initial_dir, initial_dir_length);
+				buf[initial_dir_length] = '\0';
+			}
+			else
+				initial_dir = NULL;
+		}
 	}
 
 	TCHAR pattern[1024];
@@ -1715,10 +1703,10 @@ bif_impl FResult FileSelect(optl<StrArg> aOptions, optl<StrArg> aWorkingDir, opt
 		pfd->SetFileTypes(filter_count, filters);
 	pfd->SetFileName(default_file_name);
 
-	if (*working_dir && default_file_name != working_dir)
+	if (initial_dir)
 	{
 		IShellItem *psi;
-		if (SUCCEEDED(SHCreateItemFromParsingName(working_dir, nullptr, IID_PPV_ARGS(&psi))))
+		if (SUCCEEDED(SHCreateItemFromParsingName(initial_dir, nullptr, IID_PPV_ARGS(&psi))))
 		{
 			pfd->SetFolder(psi);
 			psi->Release();
