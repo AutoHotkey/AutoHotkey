@@ -3351,6 +3351,8 @@ SymbolType TokenIsNumeric(ExprTokenType &aToken)
 		return aToken.symbol;
 	case SYM_VAR: 
 		return aToken.var->IsNumeric();
+	case SYM_MISSING:
+		return PURE_NOT_NUMERIC;
 	default: // SYM_STRING: Callers of this function expect a "numeric" result for numeric strings.
 		return IsNumeric(aToken.marker, true, false, true);
 	}
