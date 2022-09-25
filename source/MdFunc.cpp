@@ -114,7 +114,7 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 				retval = true;
 		}
 #ifndef _WIN64
-		if (MdType_Is64bit(aArg[i]))
+		if (MdType_Is64bit(aArg[i]) && out == MdType::Void && !opt) // out and opt parameters are excluded because they are passed by address.
 			++ac;
 #endif
 		++ac;
@@ -234,6 +234,8 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				result = aResultToken.Error(ERR_PARAM_REQUIRED);
 				goto end;
 			}
+			// Pass nullptr for this optional parameter to indicate that it has been omitted.
+			// MdType_Is64bit(arg_type) isn't relevant in this case since opt == true.
 			arg_value = 0;
 			pi++;
 			continue;
