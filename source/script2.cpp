@@ -1109,7 +1109,7 @@ bif_impl FResult MsgBox(optl<StrArg> aText, optl<StrArg> aTitle, optl<StrArg> aO
 
 bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<int> aIndex, UINT_PTR &aRetVal)
 {
-	int window_index = aIndex.value_or(0);
+	int window_index = aIndex.value_or(1) - 1;
 	if (window_index < 0 || window_index >= MAX_TOOLTIPS)
 		return FR_E_ARG(3);
 
