@@ -26,7 +26,7 @@ GNU General Public License for more details.
 static FResult WinAct(WINTITLE_PARAMETERS_DECL, BuiltInFunctionID action, optl<double> aWaitTime = nullptr)
 {
 	TCHAR title_buf[MAX_NUMBER_SIZE];
-	auto aTitle = TokenToString(*aWinTitle, title_buf);
+	auto aTitle = aWinTitle ? TokenToString(*aWinTitle, title_buf) : _T("");
 	auto aText = aWinText.value_or_empty();
 	// Set initial guess for is_ahk_group (further refined later).  For ahk_group, WinText,
 	// ExcludeTitle, and ExcludeText must be blank so that they are reserved for future use
