@@ -10637,6 +10637,8 @@ void Line::FilePatternApply(FilePatternStruct &fps)
 
 		FindClose(file_search);
 	} // if (file_search != INVALID_HANDLE_VALUE)
+	else if (g->LastError == NOERROR) // Avoid overwriting LastError if this is a recursive call.
+		g->LastError = GetLastError(); // Likely ERROR_FILE_NOT_FOUND.
 
 	if (fps.aDoRecurse && space_remaining > 1) // The space_remaining check ensures there's enough room to append "*", though if false, that would imply lfs.pattern is empty.
 	{
