@@ -14567,28 +14567,28 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			GetSystemTimeAsFileTime(&ftNowUTC);
 			FileTimeToLocalFileTime(&ftNowUTC, &ft);  // Convert UTC to local time.
 		}
-		// Convert to 10ths of a microsecond (the units of the FILETIME struct):
 		switch (ctoupper(*ARG3))
 		{
-		case 'S': // Seconds
-			nUnits *= (double)10000000;
-			break;
 		case 'M': // Minutes
-			nUnits *= ((double)10000000 * 60);
+			nUnits *= ((double)60);
 			break;
 		case 'H': // Hours
-			nUnits *= ((double)10000000 * 60 * 60);
+			nUnits *= ((double)60 * 60);
 			break;
 		case 'D': // Days
-			nUnits *= ((double)10000000 * 60 * 60 * 24);
+			nUnits *= ((double)60 * 60 * 24);
 			break;
 		}
 		// Convert ft struct to a 64-bit variable (maybe there's some way to avoid these conversions):
 		ULARGE_INTEGER ul;
 		ul.LowPart = ft.dwLowDateTime;
 		ul.HighPart = ft.dwHighDateTime;
-		// Add the specified amount of time to the result value:
-		ul.QuadPart += (__int64)nUnits;  // Seems ok to cast/truncate in light of the *=10000000 above.
+		// Prior to adding nUnits to the result value, convert it from seconds to 10ths of a
+		// microsecond (the units of the FILETIME struct).  Use int64 multiplication to avoid
+		// floating-point rounding errors, such as with values of seconds > 115292150460.
+		// Testing shows this keeps precision beyond year 9999.  Truncating any fractional part
+		// is fine at this point because the resulting string only includes whole seconds.
+		ul.QuadPart += (__int64)nUnits * 10000000;
 		// Convert back into ft struct:
 		ft.dwLowDateTime = ul.LowPart;
 		ft.dwHighDateTime = ul.HighPart;
