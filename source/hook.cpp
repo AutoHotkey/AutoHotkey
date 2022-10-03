@@ -2618,7 +2618,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 			// that sPendingDeadKeyVK needs to be reinserted, since the buffer state apparently differed
 			// between our two ToUnicode() calls, and sPendingDeadKeyVK is probably the reason.
 			ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, new_ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
-		if (new_char_count != char_count || ch[0] != new_ch[0]) // Translation differs, likely due to pending dead key having been removed.
+		if (new_char_count != char_count || ch[0] != (new_ch[0] == '\r' ? '\n' : new_ch[0])) // Translation differs, likely due to pending dead key having been removed.
 		{
 			// Since our earlier call to ToUnicodeOrAsciiEx has removed the pending dead key from the
 			// buffer, we need to put it back for the active window or the next hook in the chain.
