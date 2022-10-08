@@ -2939,6 +2939,7 @@ void Debugger::PropertyWriter::EndProperty(DebugCookie aCookie)
 
 void GetScriptStack(LPTSTR aBuf, int aBufSize, DbgStack::Entry *aTop)
 {
+	*aBuf = '\0';
 	aBufSize -= 12;
 	auto aBuf_orig = aBuf;
 	for (auto se = aTop ? aTop : g_Debugger.mStack.mTop - 1; se >= g_Debugger.mStack.mBottom; --se)

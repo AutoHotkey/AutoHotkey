@@ -301,7 +301,7 @@ struct ErrorBoxParam
 	Line *line;
 	IObject *obj;
 #ifdef CONFIG_DEBUGGER
-	DbgStack::Entry *stack_top;
+	int stack_index;
 #endif
 };
 
@@ -309,7 +309,7 @@ struct ErrorBoxParam
 #ifdef CONFIG_DEBUGGER
 void InsertCallStack(HWND re, ErrorBoxParam &error)
 {
-	TCHAR buf[SCRIPT_STACK_BUF_SIZE], *stack = nullptr;
+	TCHAR buf[SCRIPT_STACK_BUF_SIZE], *stack = _T("");
 	if (error.obj && error.obj->IsOfType(Object::sPrototype))
 	{
 		auto obj = static_cast<Object*>(error.obj);
@@ -317,9 +317,9 @@ void InsertCallStack(HWND re, ErrorBoxParam &error)
 		if (obj->GetOwnProp(stk, _T("Stack")) && stk.symbol == SYM_STRING)
 			stack = stk.marker;
 	}
-	else if (error.stack_top)
+	else if (error.stack_index >= 0)
 	{
-		GetScriptStack(stack = buf, _countof(buf), error.stack_top);
+		GetScriptStack(stack = buf, _countof(buf), g_Debugger.mStack.mBottom + error.stack_index);
 	}
 
 	CHARFORMAT cfBold;
@@ -510,7 +510,7 @@ void InitErrorBox(HWND hwnd, ErrorBoxParam &error)
 
 #ifdef CONFIG_DEBUGGER
 	ExprTokenType tk;
-	if (   error.stack_top
+	if (   error.stack_index >= 0
 		|| error.obj && error.obj->IsOfType(Object::sPrototype)
 			&& static_cast<Object*>(error.obj)->GetOwnProp(tk, _T("Stack"))
 			&& !TokenIsEmptyString(tk)   )
@@ -690,7 +690,7 @@ ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR 
 	error.line = aLine;
 	error.obj = aException;
 #ifdef CONFIG_DEBUGGER
-	error.stack_top = (aException || !g_script.mIsReadyToExecute) ? nullptr : g_Debugger.mStack.mTop - 1;
+	error.stack_index = (aException || !g_script.mIsReadyToExecute) ? -1 : int(g_Debugger.mStack.mTop - g_Debugger.mStack.mBottom);
 #endif
 	INT_PTR result = DialogBoxParam(NULL, MAKEINTRESOURCE(IDD_ERRORBOX), NULL, ErrorBoxProc, (LPARAM)&error);
 	if (result == IDCONTINUE && aErrorType == FAIL_OR_OK)
