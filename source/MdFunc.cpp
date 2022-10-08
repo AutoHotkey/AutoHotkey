@@ -336,7 +336,8 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			if (MdType_Is64bit(arg_type))
 			{
 				*(__int64*)target = nt.value_int64;
-				++ai; // Consume an additional arg slot.
+				if (!opt) // See above.
+					++ai; // Consume an additional arg slot.
 			}
 			else
 				*(UINT*)target = (UINT)nt.value_int64;
