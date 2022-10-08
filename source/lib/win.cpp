@@ -2188,7 +2188,7 @@ ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTok
 		return CONDITION_FALSE;
 	aWindow = (HWND)(UINT_PTR)n;
 	// Callers expect the return value to be either a valid HWND or 0:
-	if (!IsWindow(aWindow))
+	if (!IsWindow(aWindow) && aWindow != HWND_BROADCAST) // HWND_BROADCAST is probably only meaningful for SendMessage, but is permitted for all, for reasons of code size vs. rarity.
 		aWindow = 0;
 	return OK;
 }
