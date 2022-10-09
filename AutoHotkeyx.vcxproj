@@ -152,8 +152,11 @@
       <PreprocessorDefinitions Condition="$(ConfigDebug)">_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
   </ItemDefinitionGroup>
-  <!-- upx compression: Release -->
-  <PropertyGroup>
+  <!-- upx compression: Release
+    Currently disabled.  Before enabling this, consider that the exe files won't
+    be usable as base files for Ahk2Exe if they are compressed with UPX/mpress.
+  -->
+  <PropertyGroup Condition="false and $(ConfigRelease)">
     <PackerName>upx</PackerName>
     <PackerName Condition="'$(Platform)'=='x64'">mpress</PackerName>
     <PackerPath Condition="'$(PackerPath)'=='' AND exists('$(PackerName).exe')">$(PackerName).exe</PackerPath>
@@ -161,7 +164,7 @@
     <PackerArgs Condition="'$(PackerArgs)'=='' AND '$(PackerName)'=='upx'"> --best --no-lzma --filter=73 --compress-icons=0</PackerArgs>
     <PackerArgs Condition="'$(PackerArgs)'=='' AND '$(PackerName)'=='mpress'"> -x</PackerArgs>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="$(ConfigRelease)">
+  <ItemDefinitionGroup Condition="'$(PackerName)'!=''">
     <PostBuildEvent>
       <Command>echo $(PackerName).exe disabled or not found, skipping compression</Command>
       <Command Condition="exists('$(PackerPath)')">$(PackerPath)$(PackerArgs) "$(TargetPath)" &amp; exit 0</Command>
