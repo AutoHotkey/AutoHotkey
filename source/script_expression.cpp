@@ -648,9 +648,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		ExprTokenType &right = *STACK_POP;
 		if (right.symbol == SYM_MISSING)
 		{
-			if (this_token.symbol == SYM_OR_MAYBE) // ?? is the only operator that permits SYM_MISSING.
+			if (this_token.symbol == SYM_OR_MAYBE) // SYM_MISSING is to ?? what False is to ||.
 				continue; // Continue on to evaluate the right branch.
-			goto abort_with_exception;
+			if (this_token.symbol != SYM_ASSIGN) // Anything other than := is not permitted.
+				goto abort_with_exception;
 		}
 
 		switch (this_token.symbol)
@@ -1297,8 +1298,7 @@ push_this_token:
 		STACK_PUSH(&this_token);   // Push the result onto the stack for use as an operand by a future operator.
 	} // For each item in the postfix array.
 
-	if (stack_count != 1  // Even for multi-statement expressions, the stack should have only one item left on it:
-		|| stack[0]->symbol == SYM_MISSING) // Some other things might rely on SYM_MISSING not being returned as the overall result.
+	if (stack_count != 1) // Even for multi-statement expressions, the stack should have only one item left on it:
 		goto abort_with_exception; // the overall result.  Any conditions that cause this *should* be detected at load time.
 
 	ExprTokenType &result_token = *stack[0];  // For performance and convenience.  Even for multi-statement, the bottommost item on the stack is the final result so that things like var1:=1,var2:=2 work.
@@ -1321,6 +1321,9 @@ push_this_token:
 			goto abort;
 		goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 	}
+
+	if (result_token.symbol == SYM_MISSING) // No valid cases permit this as a final result except those already handled above.  Some sections below might not handle it.
+		goto abort_with_exception;
 
 	if (mActionType == ACT_IF || mActionType == ACT_WHILE || mActionType == ACT_UNTIL)
 	{

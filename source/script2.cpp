@@ -3322,7 +3322,8 @@ BOOL TokenToBOOL(ExprTokenType &aToken)
 		return ResultToBOOL(aToken.marker);
 	default:
 		// The only remaining valid symbol is SYM_OBJECT, which is always TRUE.
-		return TRUE;
+		// Check symbol anyway, in case SYM_MISSING or something else sneaks in.
+		return aToken.symbol == SYM_OBJECT;
 	}
 }
 

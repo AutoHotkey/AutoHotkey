@@ -41,6 +41,13 @@ ResultType Var::Assign(Var &aVar)
 	Var &target_var = *ResolveAlias();
 	Var &source_var = *aVar.ResolveAlias();
 
+	if (source_var.mAttrib & VAR_ATTRIB_UNINITIALIZED)
+	{
+		target_var.Assign();
+		target_var.MarkUninitialized();
+		return OK;
+	}
+
 	switch (source_var.mAttrib & VAR_ATTRIB_TYPES) // This switch() method should squeeze a little more performance out of it compared to doing "&" for every attribute.  Only works for attributes that are mutually-exclusive, which these are.
 	{
 	case VAR_ATTRIB_IS_INT64:
@@ -62,13 +69,25 @@ ResultType Var::Assign(ExprTokenType &aToken)
 // Caller must ensure that aToken.symbol is an operand (not an operator or other symbol).
 {
 	if (mType == VAR_VIRTUAL)
+	{
+		if (aToken.symbol == SYM_MISSING)
+			return g_script.RuntimeError(ERR_INVALID_ASSIGNMENT);
 		return AssignVirtual(aToken);
+	}
 	switch (aToken.symbol)
 	{
+	case SYM_STRING:  return Assign(aToken.marker, aToken.marker_length);
 	case SYM_INTEGER: return Assign(aToken.value_int64); // Listed first for performance because it's Likely the most common from our callers.
 	case SYM_VAR:     return Assign(*aToken.var);
 	case SYM_OBJECT:  return Assign(aToken.object);
 	case SYM_FLOAT:   return Assign(aToken.value_double); // Listed last because it's probably the least common.
+	default:
+		ASSERT(!"Unhandled symbol");
+	case SYM_MISSING:
+		if (!Assign())
+			return FAIL;
+		MarkUninitialized();
+		return OK;
 	}
 	// Since above didn't return, it can only be SYM_STRING.
 	return Assign(aToken.marker, aToken.marker_length);

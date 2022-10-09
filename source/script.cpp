@@ -9114,8 +9114,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 	} // End of loop that builds postfix array from the infix array.
 end_of_infix_to_postfix:
 
-	if (!postfix_count // The code below relies on this check.  This can't be an empty (omitted) expression because an earlier check would've turned it into a non-expression.
-		|| postfix[postfix_count - 1]->symbol == SYM_MISSING) // Some other things might rely on SYM_MISSING not being returned as the overall result.
+	if (!postfix_count) // The code below relies on this check.  This can't be an empty (omitted) expression because an earlier check would've turned it into a non-expression.
 		return LineError(ERR_EXPR_SYNTAX, FAIL, mArgc > 1 ? aArg.text : _T(""));
 
 	// The following enables ExpandExpression() to be skipped in common cases for ACT_ASSIGNEXPR
@@ -9267,7 +9266,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		else if (postfix_symbol != SYM_FUNC)
 		{
 			if (stack_count < 2
-				|| TOKEN_MAY_MISS(stack[stack_count - 1])
+				|| TOKEN_MAY_MISS(stack[stack_count - 1]) && postfix_symbol != SYM_ASSIGN
 				|| TOKEN_MAY_MISS(stack[stack_count - 2]))
 				return LineError(ERR_EXPR_SYNTAX);
 			--stack_count; // Pop RHS
@@ -9353,10 +9352,10 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		} // SYM_FUNC
 	} // postfix loop
 
-#undef TOKEN_MAY_MISS
-
-	if (stack_count != 1)
+	if (stack_count != 1 || TOKEN_MAY_MISS(stack[stack_count - 1]) && mActionType != ACT_ASSIGNEXPR)
 		return LineError(ERR_EXPR_SYNTAX);
+
+#undef TOKEN_MAY_MISS
 
 	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
 	{
@@ -11517,7 +11516,8 @@ ResultType Line::PerformAssign()
 		//		x := 1.0
 		//		x := "quoted literal string"
 		//		x := normal_var  ; but not VAR_VIRTUAL or VAR_CONSTANT
-		if (mArg[1].postfix->symbol == SYM_VAR && mArg[1].postfix->var->IsUninitialized())
+		if (mArg[1].postfix->symbol == SYM_VAR && mArg[1].postfix->var->IsUninitialized()
+			&& mArg[1].postfix->var_usage == VARREF_READ)
 			return g_script.VarUnsetError(mArg[1].postfix->var); // !is_expression implies VAR_NORMAL, so InitializeConstant() isn't needed here.
 		Var *output_var = VAR(mArg[0]);
 		return output_var->Assign(*mArg[1].postfix);
