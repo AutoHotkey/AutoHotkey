@@ -1194,10 +1194,8 @@ BIF_DECL(BIF_Sort)
 	// changed since it was originally set by the above call TokenSetResult.
 
 end:
-	if (!item)
-		free(item);
-	if (mem_to_free)
-		free(mem_to_free);
+	free(item);
+	free(mem_to_free);
 	if (g_SortFunc)
 		g_SortFunc->Release();
 	g_SortFunc = sort_func_orig;
