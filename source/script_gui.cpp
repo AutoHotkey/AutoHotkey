@@ -10256,7 +10256,7 @@ ResultType GuiType::SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToR
 
 	// Fix for v1.0.35: Keyboard navigation of a tab control should still launch the tab's event handler
 	// if it has one:
-	Event(GUI_HWND_TO_INDEX(aTabControl.hwnd), TCN_SELCHANGE);
+	Event(GUI_HWND_TO_INDEX(aTabControl.hwnd), TCN_SELCHANGE, GUI_EVENT_CHANGE);
 
 	return OK;
 }
