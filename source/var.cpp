@@ -858,8 +858,9 @@ void Var::Free(int aWhenToFree, bool aClearAliasesAndRequireInit)
 
 	if (mAttrib & VAR_ATTRIB_IS_OBJECT)
 	{
-		ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
-		return; // Best to return at this point since Release() may have caused reentry into this function.
+		mAttrib &= ~VAR_ATTRIB_IS_OBJECT;
+		mObject->Release(); // Called after removing the attribute in case it triggers __Delete.
+		return; // Must return at this point since __Delete may have assigned some other value.
 	}
 
 	switch (mHowAllocated)

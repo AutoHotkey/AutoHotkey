@@ -338,6 +338,9 @@ public:
 		ASSERT(IsObject());
 		// Remove the attributes applied by AssignSkipAddRef().
 		mAttrib &= ~(VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_NOT_NUMERIC);
+		// Mark the variable as uninitialized so that any attempt to access it from __Delete
+		// causes an error (but our caller can assign a new value and remove the attribute).
+		mAttrib |= VAR_ATTRIB_UNINITIALIZED;
 		// MUST BE DONE AFTER THE ABOVE IN CASE IT TRIGGERS __Delete:
 		// Release this variable's object.  Setting mObject = NULL is not necessary
 		// since the value of mObject, mContentsInt64 and mContentsDouble is never used
