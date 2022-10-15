@@ -929,19 +929,12 @@ public:
 		Var& var = *ResolveAlias();
 		var.mAttrib |= VAR_ATTRIB_UNINITIALIZED;
 	}
-	ResultType Uninitialize() 
+
+	ResultType Uninitialize(int aWhenToFree = VAR_FREE_IF_LARGE) 
 	{
 		Var& var = *ResolveAlias();
-		auto obj = (var.mAttrib & VAR_ATTRIB_IS_OBJECT) ? mObject : nullptr;
-		if (obj)
-			obj -> AddRef();
-		auto result = var.Assign();
-		if (result)
-			var.MarkUninitialized();
-		if (obj)
-			obj->Release();
-		
-		return result;
+		var.Free(aWhenToFree, true);
+		return OK;
 	}
 
 }; // class Var

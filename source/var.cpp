@@ -83,7 +83,8 @@ ResultType Var::Assign(ExprTokenType &aToken)
 	default:
 		ASSERT(!"Unhandled symbol");
 	case SYM_MISSING:
-		return Uninitialize() ? OK : FAIL;
+		Uninitialize();
+		return OK;
 	}
 	// Since above didn't return, it can only be SYM_STRING.
 	return Assign(aToken.marker, aToken.marker_length);
@@ -580,20 +581,12 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 		return OK;
 	}
 
-	if (mAttrib & VAR_ATTRIB_IS_OBJECT)
-		ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
-
-	// The below is done regardless of whether the section that follows it fails and returns early because
-	// it's the correct thing to do in all cases.
-	// For simplicity, this is done unconditionally even though it should be needed only
-	// when do_assign is true. It's the caller's responsibility to turn on the binary-clip
-	// attribute (if appropriate) by calling Var::Close() with the right option.
-	mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_IS_OBJECT);
-	// HOWEVER, other things like making mLength 0 and mContents blank are not done here for performance
+	// On failure, things like making mByteLength 0 and mCharContents blank are not done here for performance
 	// reasons (it seems too rare that early return/failure will occur below, since it's only due to
 	// out-of-memory... and even if it does happen, there are probably no consequences to leaving the variable
 	// the way it is now (rather than forcing it to be blank) since the script thread that caused the error
 	// will be ended.
+	// Another reason is that it seems more consistent with other causes of failure, such as for `x := 0/0`.
 
 	if (space_needed_in_bytes > mByteCapacity)
 	{
@@ -628,7 +621,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 				// from SimpleHeap even though the var already had one. This is by design because it can
 				// happen only a limited number of times per variable. See comments further above for details.
 				if (   !(new_mem = (char *) SimpleHeap::Malloc(new_size))   )
-					return MemoryError(); // Leave all var members unchanged so that they're consistent with each other. Don't bother making the var blank and its length zero for reasons described higher above.
+					return MemoryError(); // Leave all var members unchanged so that they're consistent with each other.
 				mHowAllocated = ALLOC_SIMPLE;  // In case it was previously ALLOC_NONE. This step must be done only after the alloc succeeded.
 				break;
 			}
@@ -669,32 +662,30 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 			{
 				if (memory_was_freed) // Resync members to reflect the fact that it was freed (it's done this way for performance).
 				{
+					mByteLength = 0;
 					mByteCapacity = 0;             // Invariant: Anyone setting mCapacity to 0 must also set
 					mCharContents = sEmptyString;  // mContents to the empty string.
+					if (mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE))
+						mAttrib |= VAR_ATTRIB_CONTENTS_OUT_OF_DATE; // Since the cached string (if any) was freed.
+					else if ((mAttrib & VAR_ATTRIB_TYPES) == 0) // Value was a string and was freed above.
+						mAttrib |= VAR_ATTRIB_UNINITIALIZED; // Since it does not have either of its expected values.
 				}
 				else
 				{
 					// IMPORTANT: It's the empty string (a constant) or it points to memory on SimpleHeap, so don't
 					// change mContents/Capacity (that would cause a memory leak for reasons described elsewhere).
-					// Make the var empty for the following reasons:
-					//  1) This condition could be caused by the script requesting a very high (possibly invalid)
-					//     capacity with VarSetStrCapacity().  The script might be handling the failure using TRY/CATCH,
-					//     so we want the result to be sane.
-					//  2) It's safer and more maintainable.  For instance, VarSetStrCapacity() sets length to 0, which
-					//     can produce bad/undefined results if there is no null-terminator at mCharContents[Length()]
-					//     as some other parts of the code assume.
-					//  3) It's more consistent.  If this var contained a binary number or object, it has already
-					//     been cleared by "mAttrib &=" above.
-					*mCharContents = '\0'; // If it's sEmptyString, that's okay too because it's writable.
+					// Leave mAttrib as-is so that any existing value is left unchanged.  This is consistent
+					// with the ALLOC_SIMPLE failure case and other aborted assignments, such as `x := 0/0`.
 				}
-				mByteLength = 0; // mAttrib was already updated higher above.
-				return MemoryError(); // since an error is most likely to occur at runtime.
+				return MemoryError();
 			}
-
-			// Below is necessary because it might have fallen through from case ALLOC_SIMPLE.
-			// This step must be done only after the alloc succeeded (because otherwise, want to keep it
-			// set to ALLOC_SIMPLE (fall-through), if that's what it was).
-			mHowAllocated = ALLOC_MALLOC;
+			else
+			{
+				// Below is necessary because it might have fallen through from case ALLOC_SIMPLE.
+				// This step must be done only after the alloc succeeded (because otherwise, we want to keep it
+				// set to ALLOC_SIMPLE (fall-through), if that's what it was).
+				mHowAllocated = ALLOC_MALLOC;
+			}
 			break;
 		} // switch()
 
@@ -741,6 +732,14 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 
 	// Writing to union is safe because above already ensured that "this" isn't an alias.
 	mByteLength = aLength * sizeof(TCHAR); // aLength was verified accurate higher above.
+
+	// Update mAttrib and release any object last, after it is known that the assignment has
+	// succeeded, and the new value is fully in place.  This avoids issues of reentrancy due
+	// to Release triggering a __Delete method.
+	auto release_me = (mAttrib & VAR_ATTRIB_IS_OBJECT) ? mObject : nullptr;
+	mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_IS_OBJECT);
+	if (release_me)
+		release_me->Release();
 	return OK;
 }
 
@@ -763,12 +762,15 @@ ResultType Var::AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib
 	else if (mType == VAR_CONSTANT) // Might be impossible due to prior validation of assignments/output vars.
 		return g_script.VarIsReadOnlyError(this);
 
-	if (mAttrib & VAR_ATTRIB_IS_OBJECT) // mObject will be overwritten below via the union.
-		ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
+	auto release_me = (mAttrib & VAR_ATTRIB_IS_OBJECT) ? mObject : nullptr;
 
 	mContentsInt64 = aNumberAsInt64;
 	mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED);
-	mAttrib |= (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | aAttrib); // Must be done prior to below.  aAttrib indicates the type of binary number.
+	mAttrib |= (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | aAttrib); // aAttrib indicates the type of binary number.
+
+	// Call Release only after completing the assignment, as Release may cause __Delete to execute.
+	if (release_me)
+		release_me->Release();
 	return OK;
 }
 
@@ -786,7 +788,15 @@ ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
 		return result;
 	}
 
-	Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
+	if (mAttrib & VAR_ATTRIB_IS_OBJECT)
+	{
+		auto obj = mObject;
+		mObject = aValueToAssign; // Replace the object.  mAttrib should already be correct.
+		obj->Release(); // Called after the assignment in case it triggers __Delete.
+		return OK;
+	}
+
+	Free(); // Free any dynamic memory.
 		
 	// Already done by Free() above:
 	//mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_UNINITIALIZED);
