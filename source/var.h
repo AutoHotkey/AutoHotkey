@@ -926,8 +926,22 @@ public:
 
 	void MarkUninitialized()
 	{
-		Var &var = *ResolveAlias();
+		Var& var = *ResolveAlias();
 		var.mAttrib |= VAR_ATTRIB_UNINITIALIZED;
+	}
+	ResultType Uninitialize() 
+	{
+		Var& var = *ResolveAlias();
+		auto obj = (var.mAttrib & VAR_ATTRIB_IS_OBJECT) ? mObject : nullptr;
+		if (obj)
+			obj -> AddRef();
+		auto result = var.Assign();
+		if (result)
+			var.MarkUninitialized();
+		if (obj)
+			obj->Release();
+		
+		return result;
 	}
 
 }; // class Var

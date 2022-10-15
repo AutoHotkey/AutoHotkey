@@ -2089,9 +2089,11 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved, int aVarC
 			switch (item.symbol)
 			{
 			default:
-				aVal->AssignString(item.string, item.string.Length());
 				if (item.symbol == SYM_MISSING)
-					aVal->MarkUninitialized();
+					aVal->Uninitialize();
+				else
+					aVal->AssignString(item.string, item.string.Length());
+				
 				break;
 			case SYM_INTEGER:	aVal->Assign(item.n_int64);			break;
 			case SYM_FLOAT:		aVal->Assign(item.n_double);		break;

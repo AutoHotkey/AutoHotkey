@@ -43,8 +43,7 @@ ResultType Var::Assign(Var &aVar)
 
 	if (source_var.mAttrib & VAR_ATTRIB_UNINITIALIZED)
 	{
-		target_var.Assign();
-		target_var.MarkUninitialized();
+		target_var.Uninitialize();
 		return OK;
 	}
 
@@ -84,10 +83,7 @@ ResultType Var::Assign(ExprTokenType &aToken)
 	default:
 		ASSERT(!"Unhandled symbol");
 	case SYM_MISSING:
-		if (!Assign())
-			return FAIL;
-		MarkUninitialized();
-		return OK;
+		return Uninitialize() ? OK : FAIL;
 	}
 	// Since above didn't return, it can only be SYM_STRING.
 	return Assign(aToken.marker, aToken.marker_length);

@@ -458,8 +458,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		{
 			// Although 0 or "" is a fairly conventional default, it might not be safe.
 			// For error-detection and to avoid unexpected behaviour, "unset" the var.
-			var->Assign();
-			var->MarkUninitialized();
+			var->Uninitialize();
 		}
 	}
 
