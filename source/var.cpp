@@ -818,7 +818,7 @@ void Var::Get(ResultToken &aResultToken)
 
 
 
-void Var::Free(int aWhenToFree, bool aClearAliasesAndRequireInit)
+void Var::Free(int aWhenToFree)
 // The name "Free" is a little misleading because this function:
 // ALWAYS sets the variable to be blank (except for static variables and aExcludeAliases==true).
 // BUT ONLY SOMETIMES frees the memory, depending on various factors described further below.
@@ -832,7 +832,7 @@ void Var::Free(int aWhenToFree, bool aClearAliasesAndRequireInit)
 
 	if (mType == VAR_ALIAS) // For simplicity and reduced code size, just make a recursive call to self.
 	{
-		if (!aClearAliasesAndRequireInit)
+		if (!(aWhenToFree & VAR_CLEAR_ALIASES))
 		{
 			// For maintainability, it seems best not to use the following method:
 			//    Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
@@ -850,7 +850,7 @@ void Var::Free(int aWhenToFree, bool aClearAliasesAndRequireInit)
 	// removing these attributes:
 	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 
-	if (aClearAliasesAndRequireInit)
+	if (aWhenToFree & VAR_REQUIRE_INIT)
 		// Caller requires this var to be considered uninitialized from now on.  This attribute may
 		// have been removed above, but there was no cost involved.  It might not have been set in
 		// the first place, so we must add it here anyway:
@@ -886,11 +886,11 @@ void Var::Free(int aWhenToFree, bool aClearAliasesAndRequireInit)
 		// only free relatively large vars:
 		if (mByteCapacity)
 		{
-			// aWhenToFree==VAR_FREE_IF_LARGE: the memory is not freed if it is a small area because
+			// aWhenToFree & VAR_FREE_IF_LARGE: the memory is not freed if it is a small area because
 			// it might help reduce memory fragmentation and improve performance in cases where
 			// the memory will soon be needed again (in which case one free+malloc is saved).
-			if (   aWhenToFree == VAR_ALWAYS_FREE
-				|| aWhenToFree == VAR_FREE_IF_LARGE && mByteCapacity > (4 * 1024)   )
+			if (   (aWhenToFree & VAR_ALWAYS_FREE)
+				|| (aWhenToFree & VAR_FREE_IF_LARGE) && mByteCapacity > 4096   )
 			{
 				free(mByteContents);
 				mByteCapacity = 0;             // Invariant: Anyone setting mCapacity to 0 must also set
@@ -1168,7 +1168,7 @@ void Var::FreeAndRestoreFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &
 {
 	int i;
 	for (i = 0; i < aFunc.mVars.mCount; ++i)
-		aFunc.mVars.mItem[i]->Free(VAR_ALWAYS_FREE, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function). Also resets the "uninitialized" attribute.
+		aFunc.mVars.mItem[i]->Free(VAR_ALWAYS_FREE | VAR_CLEAR_ALIASES | VAR_REQUIRE_INIT); // Clear aliases, since their targets should not be freed (they don't belong to this function).
 
 	// The freeing (above) MUST be done prior to the restore-from-backup below (otherwise there would be
 	// a memory leak).  Static variables are never backed up and thus do not exist in the aVarBackup array.

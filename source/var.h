@@ -540,10 +540,12 @@ public:
 	}
 
 	// Not an enum so that it can be global more easily:
-	#define VAR_ALWAYS_FREE                    0
-	#define VAR_NEVER_FREE                     3
-	#define VAR_FREE_IF_LARGE                  4
-	void Free(int aWhenToFree = VAR_ALWAYS_FREE, bool aExcludeAliasesAndRequireInit = false);
+	#define VAR_NEVER_FREE			0
+	#define VAR_ALWAYS_FREE			1
+	#define VAR_FREE_IF_LARGE		2
+	#define VAR_CLEAR_ALIASES		4
+	#define VAR_REQUIRE_INIT		8
+	void Free(int aWhenToFree = VAR_ALWAYS_FREE);
 	ResultType Append(LPTSTR aStr, VarSizeType aLength);
 	ResultType AppendIfRoom(LPTSTR aStr, VarSizeType aLength);
 	void AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength);
@@ -935,8 +937,7 @@ public:
 
 	ResultType Uninitialize(int aWhenToFree = VAR_FREE_IF_LARGE) 
 	{
-		Var& var = *ResolveAlias();
-		var.Free(aWhenToFree, true);
+		Free(aWhenToFree | VAR_REQUIRE_INIT);
 		return OK;
 	}
 
@@ -952,7 +953,7 @@ public:
 
 	~VarRef()
 	{
-		Free(VAR_ALWAYS_FREE, true);
+		Free(VAR_ALWAYS_FREE | VAR_CLEAR_ALIASES | VAR_REQUIRE_INIT);
 	}
 
 	IObject_Type_Impl("VarRef");

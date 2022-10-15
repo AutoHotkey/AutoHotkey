@@ -10788,7 +10788,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, L
 		if (mArg[i].type == ARG_TYPE_OUTPUT_VAR)
 		{
 			Var *var = VAR(mArg[i]);
-			var->Free(VAR_NEVER_FREE, true); // Release var's reference to the VarRef.
+			var->Free(VAR_NEVER_FREE | VAR_CLEAR_ALIASES); // Release var's reference to the VarRef.
 			var->Restore(var_bkp[i]);
 		}
 		if (var_param[i]->symbol == SYM_OBJECT)
