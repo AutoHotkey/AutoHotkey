@@ -1297,7 +1297,7 @@ void ReleaseVarObjects(VarList &aVars)
 	for (int v = 0; v < aVars.mCount; ++v)
 	{
 		Var &var = *aVars.mItem[v];
-		if (var.IsObject())
+		if (var.IsObject() && var.Type() == VAR_NORMAL)
 			var.ReleaseObject(); // ReleaseObject() vs Free() for performance (though probably not important at this point).
 		// Otherwise, maybe best not to free it in case an object's __Delete meta-function uses it?
 	}
