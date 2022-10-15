@@ -935,10 +935,9 @@ public:
 		var.mAttrib |= VAR_ATTRIB_UNINITIALIZED;
 	}
 
-	ResultType Uninitialize(int aWhenToFree = VAR_FREE_IF_LARGE) 
+	void Uninitialize(int aWhenToFree = VAR_FREE_IF_LARGE) 
 	{
 		Free(aWhenToFree | VAR_REQUIRE_INIT);
-		return OK;
 	}
 
 }; // class Var
