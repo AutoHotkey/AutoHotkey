@@ -242,11 +242,11 @@ struct input_type
 	}
 	inline bool InProgress() { return Status == INPUT_IN_PROGRESS; }
 	bool IsInteresting(KBDLLHOOKSTRUCT &aEvent);
-	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);
-	void ParseOptions(LPTSTR aOptions);
+	ResultType Setup(LPCTSTR aOptions, LPCTSTR aEndKeys, LPCTSTR aMatchList);
+	void ParseOptions(LPCTSTR aOptions);
 	void SetTimeoutTimer();
-	ResultType SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode = true, UCHAR aFlagsRemove = 0, UCHAR aFlagsAdd = END_KEY_ENABLED);
-	ResultType SetMatchList(LPTSTR aMatchList, size_t aMatchList_length);
+	ResultType SetKeyFlags(LPCTSTR aKeys, bool aEndKeyMode = true, UCHAR aFlagsRemove = 0, UCHAR aFlagsAdd = END_KEY_ENABLED);
+	ResultType SetMatchList(LPCTSTR aMatchList);
 	void Start();
 	void EndByMatch(UINT aMatchIndex);
 	void EndByKey(vk_type aVK, sc_type aSC, bool aBySC, bool aRequiredShift);

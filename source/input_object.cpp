@@ -59,16 +59,10 @@ void InputObject::__New(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	_f_param_string_opt(aEndKeys, 1);
 	_f_param_string_opt(aMatchList, 2);
 	
-	if (!Setup(aOptions, aEndKeys, aMatchList, _tcslen(aMatchList)))
+	if (!input.Setup(aOptions, aEndKeys, aMatchList))
 		_f_return_FAIL;
 
 	_f_return_empty;
-}
-
-
-ResultType InputObject::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length)
-{
-	return input.Setup(aOptions, aEndKeys, aMatchList, aMatchList_length);
 }
 
 
