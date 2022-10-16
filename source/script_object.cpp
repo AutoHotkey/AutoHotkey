@@ -2948,12 +2948,21 @@ ObjectMember Object::sOSErrorMembers[]
 
 
 
+struct ObjectMemberListType
+{
+	ObjectMember *duck = nullptr; // Duck-typed members.
+	ObjectMemberMd *meta = nullptr; // Metadata-based members.
+	ObjectMemberListType() {}
+	ObjectMemberListType(ObjectMember *aList) : duck(aList) {}
+	ObjectMemberListType(ObjectMemberMd *aList) : meta(aList) {}
+};
+
 struct ClassDef
 {
 	LPCTSTR name;
 	Object **proto_var;
 	ClassFactoryDef factory;
-	ObjectMember *members;
+	ObjectMemberListType members;
 	int member_count;
 	std::initializer_list<ClassDef> subclasses;
 };
@@ -2963,7 +2972,12 @@ void DefineClasses(Object *aBaseClass, Object *aBaseProto, std::initializer_list
 	for (auto &c : aClasses)
 	{
 		auto proto = (c.proto_var && *c.proto_var) ? *c.proto_var
-			: Object::CreatePrototype(const_cast<LPTSTR>(c.name), aBaseProto, c.members, c.member_count);
+			: Object::CreatePrototype(const_cast<LPTSTR>(c.name), aBaseProto);
+		if (c.member_count)
+			if (c.members.meta)
+				Object::DefineMetadataMembers(proto, c.name, c.members.meta, c.member_count);
+			else
+				Object::DefineMembers(proto, const_cast<LPTSTR>(c.name), c.members.duck, c.member_count);
 		if (c.proto_var)
 			*c.proto_var = proto;
 		auto cobj = Object::CreateClass(const_cast<LPTSTR>(c.name), aBaseClass, proto, c.factory);
