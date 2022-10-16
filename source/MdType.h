@@ -157,16 +157,16 @@ template<typename T> constexpr void* cast_into_voidp(T in)
 	return u.out;
 }
 
-#define md_method_name_GET(base_name) get_##base_name
-#define md_method_name_SET(base_name) set_##base_name
-#define md_method_name_CALL(base_name) base_name
+#define md_member_name_GET(base_name) get_##base_name
+#define md_member_name_SET(base_name) set_##base_name
+#define md_member_name_CALL(base_name) base_name
 
 // The member function pointer type can be inferred by the template, but we don't want that;
-// md_method_type() is used below to ensure the signature matches the metadata.
-#define md_method_type(class_name, ...) FResult (class_name::*)( MAP_LIST(md_arg_decl, __VA_ARGS__) )
+// md_member_type() is used below to ensure the signature matches the metadata.
+#define md_member_type(class_name, ...) FResult (class_name::*)( MAP_LIST(md_arg_decl, __VA_ARGS__) )
 
-#define md_method(class_name, method_name, invoke_type, ...) \
-	{ _T(#method_name), \
-		cast_into_voidp<md_method_type(class_name, __VA_ARGS__)>(&class_name::md_cat(md_method_name_,invoke_type)(method_name)), \
+#define md_member(class_name, member_name, invoke_type, ...) \
+	{ _T(#member_name), \
+		cast_into_voidp<md_member_type(class_name, __VA_ARGS__)>(&class_name::md_cat(md_member_name_,invoke_type)(member_name)), \
 		IT_##invoke_type, \
 		{ MAP_LIST(md_arg_data, __VA_ARGS__) } }
