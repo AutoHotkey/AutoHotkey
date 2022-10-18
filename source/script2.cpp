@@ -2307,7 +2307,7 @@ bif_impl int GetKeyVK(StrArg aKeyName)
 	vk_type vk;
 	sc_type sc;
 	TextToVKandSC(aKeyName, vk, sc);
-	return vk;
+	return vk ? vk : sc_to_vk(sc);
 }
 
 
@@ -2316,7 +2316,7 @@ bif_impl int GetKeySC(StrArg aKeyName)
 	vk_type vk;
 	sc_type sc;
 	TextToVKandSC(aKeyName, vk, sc);
-	return sc;
+	return sc ? sc : vk_to_sc(vk);
 }
 
 
