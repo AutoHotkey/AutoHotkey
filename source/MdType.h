@@ -142,14 +142,6 @@ template<> struct md_retval<MdType::NzIntWin32> { typedef BOOL t; };
 #endif
 
 
-struct ObjectMemberMd
-{
-	LPCTSTR name;
-	void *method;
-	UCHAR invokeType;
-	MdType argtype[23];
-};
-
 // For use reinterpreting member function pointers (not standard C++).
 template<typename T> constexpr void* cast_into_voidp(T in)
 {

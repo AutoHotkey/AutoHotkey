@@ -97,6 +97,24 @@ struct ObjectMember
 #define MAXP_VARIADIC 255
 
 
+struct ObjectMemberMd
+{
+	LPCTSTR name;
+	void *method;
+	UCHAR invokeType;
+	MdType argtype[23];
+};
+
+struct ObjectMemberListType
+{
+	ObjectMember *duck = nullptr; // Duck-typed members.
+	ObjectMemberMd *meta = nullptr; // Metadata-based members.
+	ObjectMemberListType() {}
+	ObjectMemberListType(ObjectMember *aList) : duck(aList) {}
+	ObjectMemberListType(ObjectMemberMd *aList) : meta(aList) {}
+};
+
+
 // Helper for predefined classes
 struct ClassFactoryDef
 {
@@ -470,6 +488,8 @@ public:
 	static Object *CreateClass(Object *aPrototype);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
+	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberMd aMember[], int aMemberCount);
+	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberListType aMember, int aMemberCount);
 	static Object *DefineMembers(Object *aObject, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount);
 	static Object *DefineMetadataMembers(Object *obj, LPCTSTR aClassName, ObjectMemberMd aMember[], int aMemberCount);
 	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ClassFactoryDef aFactory);

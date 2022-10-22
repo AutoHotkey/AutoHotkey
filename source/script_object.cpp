@@ -1039,6 +1039,20 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 	return DefineMembers(obj, aClassName, aMember, aMemberCount);
 }
 
+Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberMd aMember[], int aMemberCount)
+{
+	auto obj = CreatePrototype(aClassName, aBase);
+	return DefineMetadataMembers(obj, aClassName, aMember, aMemberCount);
+}
+
+Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberListType aMember, int aMemberCount)
+{
+	if (aMember.duck)
+		return CreatePrototype(aClassName, aBase, aMember.duck, aMemberCount);
+	else
+		return CreatePrototype(aClassName, aBase, aMember.meta, aMemberCount);
+}
+
 
 Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount)
 {
@@ -2948,15 +2962,6 @@ ObjectMember Object::sOSErrorMembers[]
 
 
 
-struct ObjectMemberListType
-{
-	ObjectMember *duck = nullptr; // Duck-typed members.
-	ObjectMemberMd *meta = nullptr; // Metadata-based members.
-	ObjectMemberListType() {}
-	ObjectMemberListType(ObjectMember *aList) : duck(aList) {}
-	ObjectMemberListType(ObjectMemberMd *aList) : meta(aList) {}
-};
-
 struct ClassDef
 {
 	LPCTSTR name;
@@ -2972,12 +2977,7 @@ void DefineClasses(Object *aBaseClass, Object *aBaseProto, std::initializer_list
 	for (auto &c : aClasses)
 	{
 		auto proto = (c.proto_var && *c.proto_var) ? *c.proto_var
-			: Object::CreatePrototype(const_cast<LPTSTR>(c.name), aBaseProto);
-		if (c.member_count)
-			if (c.members.meta)
-				Object::DefineMetadataMembers(proto, c.name, c.members.meta, c.member_count);
-			else
-				Object::DefineMembers(proto, const_cast<LPTSTR>(c.name), c.members.duck, c.member_count);
+			: Object::CreatePrototype(const_cast<LPTSTR>(c.name), aBaseProto, c.members, c.member_count);
 		if (c.proto_var)
 			*c.proto_var = proto;
 		auto cobj = Object::CreateClass(const_cast<LPTSTR>(c.name), aBaseClass, proto, c.factory);
