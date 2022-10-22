@@ -597,9 +597,9 @@ ObjectMemberMd GuiControlType::sMembersList[] =
 	md_member_x(GuiControlType, Delete, List_Delete, CALL, (In_Opt, Int32, Index))
 };
 
-ObjectMember GuiControlType::sMembersTab[] =
+ObjectMemberMd GuiControlType::sMembersTab[] =
 {
-	Object_Method_(UseTab, 0, 2, Invoke, M_Tab_UseTab)
+	md_member_x(GuiControlType, UseTab, Tab_UseTab, CALL, (In_Opt, Variant, Tab), (In_Opt, Bool32, ExactMatch))
 };
 
 ObjectMember GuiControlType::sMembersDate[] =
@@ -675,7 +675,7 @@ void GuiControlType::DefineControlClasses()
 
 		// Determine base prototype and control-type-specific members.
 		Object *base_proto = sPrototype, *base_class = ctrl_class;
-		ObjectMember *more_items = nullptr;
+		ObjectMemberListType more_items;
 		int how_many = 0;
 		switch (i)
 		{
@@ -869,63 +869,65 @@ void GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			_o_return(IsWindowVisible(hwnd) ? 1 : 0);
 		}
 
-		case M_Tab_UseTab:
-		{
-			BOOL whole_match = ParamIndexToOptionalBOOL(1, FALSE);
-			int index; // int vs TabControlIndexType for detection of negative/out-of-range values.
-			if (ParamIndexIsOmitted(0)) // Not necessary to use "OrEmpty" because that's handled below.
-				index = -1;
-			else if (TokenIsPureNumeric(*aParam[0]) == SYM_INTEGER)
-				index = ParamIndexToInt(0) - 1; // Convert to zero-based and let 0 indicate "no tab" (-1).
-			else
-			{
-				LPTSTR tab_name = ParamIndexToString(0, _f_number_buf);
-				index = gui->FindTabIndexByName(*this, tab_name, whole_match);
-				if (index == -1 && *tab_name) // Invalid tab name (but "" is a valid way to specify "no tab").
-					index = -2; // Flag it as invalid.
-			}
-			// Validate parameters before making any changes to the Gui's state:
-			if (index < -1 || index >= MAX_TABS_PER_CONTROL)
-				_o_throw_param(0);
-
-			TabIndexType prev_tab_index = gui->mCurrentTabIndex;
-			TabControlIndexType prev_tab_control_index = gui->mCurrentTabControlIndex;
-
-			if (index == -1)
-				gui->mCurrentTabControlIndex = MAX_TAB_CONTROLS; // i.e. "no tab"
-			else
-			{
-				gui->mCurrentTabControlIndex = tab_index;
-				if (gui->mCurrentTabIndex != index)
-				{
-					gui->mCurrentTabIndex = index;
-					// Changing to a different tab should start a new radio group:
-					gui->mInRadioGroup = false;
-				}
-			}
-			if (gui->mCurrentTabControlIndex != prev_tab_control_index)
-			{
-				if (GuiControlType *tab_control = gui->FindTabControl(prev_tab_control_index))
-				{
-					// Autosize the previous tab control.  Has no effect if it is not a Tab3 control or has
-					// already been autosized.  Doing it at this point allows the script to set different
-					// margins for inside and outside the tab control, and is simpler than the alternative:
-					// waiting until the next external control is added.  The main drawback is that the
-					// script is unable to alternate between tab controls and still utilize autosizing.
-					// On the flip side, scripts can use this to their advantage -- to add controls which
-					// should not affect the tab control's size.
-					gui->AutoSizeTabControl(*tab_control);
-				}
-				// Changing to a different tab control (or none at all when there
-				// was one before, or vice versa) should start a new radio group:
-				gui->mInRadioGroup = false;
-			}
-			_o_return_empty;
-		}
-
 		case M_DateTime_SetFormat:
 			return gui->ControlSetDateTimeFormat(*this, ParamIndexToOptionalString(0, _f_number_buf), aResultToken);
 	}
+}
+
+
+FResult GuiControlType::Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact)
+{
+	BOOL whole_match = aExact.value_or(FALSE);
+	int index; // int vs TabControlIndexType for detection of negative/out-of-range values.
+	if (!aTab)
+		index = -1;
+	else if (TokenIsPureNumeric(*aTab) == SYM_INTEGER)
+		index = (int)TokenToInt64(*aTab) - 1; // Convert to zero-based and let 0 indicate "no tab" (-1).
+	else
+	{
+		TCHAR float_buf[MAX_NUMBER_SIZE];
+		auto tab_name = TokenToString(*aTab, float_buf);
+		index = gui->FindTabIndexByName(*this, tab_name, whole_match);
+		if (index == -1 && *tab_name) // Invalid tab name (but "" is a valid way to specify "no tab").
+			index = -2; // Flag it as invalid.
+	}
+	// Validate parameters before making any changes to the Gui's state:
+	if (index < -1 || index >= MAX_TABS_PER_CONTROL)
+		return FR_E_ARG(0);
+
+	TabIndexType prev_tab_index = gui->mCurrentTabIndex;
+	TabControlIndexType prev_tab_control_index = gui->mCurrentTabControlIndex;
+
+	if (index == -1)
+		gui->mCurrentTabControlIndex = MAX_TAB_CONTROLS; // i.e. "no tab"
+	else
+	{
+		gui->mCurrentTabControlIndex = tab_index;
+		if (gui->mCurrentTabIndex != index)
+		{
+			gui->mCurrentTabIndex = index;
+			// Changing to a different tab should start a new radio group:
+			gui->mInRadioGroup = false;
+		}
+	}
+	if (gui->mCurrentTabControlIndex != prev_tab_control_index)
+	{
+		if (GuiControlType *tab_control = gui->FindTabControl(prev_tab_control_index))
+		{
+			// Autosize the previous tab control.  Has no effect if it is not a Tab3 control or has
+			// already been autosized.  Doing it at this point allows the script to set different
+			// margins for inside and outside the tab control, and is simpler than the alternative:
+			// waiting until the next external control is added.  The main drawback is that the
+			// script is unable to alternate between tab controls and still utilize autosizing.
+			// On the flip side, scripts can use this to their advantage -- to add controls which
+			// should not affect the tab control's size.
+			gui->AutoSizeTabControl(*tab_control);
+		}
+		// Changing to a different tab control (or none at all when there
+		// was one before, or vice versa) should start a new radio group:
+		gui->mInRadioGroup = false;
+	}
+	return OK;
 }
 
 
