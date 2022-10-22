@@ -1294,7 +1294,12 @@ void GuiType::ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor,
 ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, BOOL aOneExact)
 {
 	int selection_index = -1;
-	bool is_choose_string = (TokenIsPureNumeric(aParam) != SYM_INTEGER);
+	bool is_choose_string = true;
+	switch (TypeOfToken(aParam))
+	{
+	case SYM_INTEGER: is_choose_string = false; break;
+	case SYM_OBJECT: goto error;
+	}
 	TCHAR buf[MAX_NUMBER_SIZE];
 	
 	UINT msg_set_index = 0, msg_select_string = 0, msg_find_string = 0;
