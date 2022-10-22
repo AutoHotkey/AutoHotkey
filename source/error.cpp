@@ -149,59 +149,6 @@ ResultType Script::Win32Error(DWORD aError, ResultType aErrorType)
 }
 
 
-ResultType Line::ThrowIfTrue(bool aError)
-{
-	return aError ? ThrowRuntimeException(ERR_FAILED) : OK;
-}
-
-ResultType Line::ThrowIntIfNonzero(int aErrorValue)
-{
-	if (!aErrorValue)
-		return OK;
-	TCHAR buf[12];
-	return ThrowRuntimeException(ERR_FAILED, _itot(aErrorValue, buf, 10));
-}
-
-// Logic from the above functions is duplicated in the below functions rather than calling
-// g_script.mCurrLine->Throw() to squeeze out a little extra performance for
-// "success" cases.
-
-ResultType Script::ThrowIfTrue(bool aError)
-{
-	return aError ? ThrowRuntimeException(ERR_FAILED) : OK;
-}
-
-ResultType Script::ThrowIntIfNonzero(int aErrorValue)
-{
-	if (!aErrorValue)
-		return OK;
-	TCHAR buf[12];
-	return ThrowRuntimeException(ERR_FAILED, _itot(aErrorValue, buf, 10));
-}
-
-
-ResultType Line::SetLastErrorMaybeThrow(bool aError, DWORD aLastError)
-{
-	g->LastError = aLastError; // Set this unconditionally.
-	return aError ? g_script.Win32Error(aLastError) : OK;
-}
-
-void ResultToken::SetLastErrorMaybeThrow(bool aError, DWORD aLastError)
-{
-	g->LastError = aLastError; // Set this unconditionally.
-	if (aError)
-		Win32Error(aLastError);
-}
-
-void ResultToken::SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DWORD aLastError)
-{
-	g->LastError = aLastError;
-	CloseHandle(aHandle);
-	if (aError)
-		Win32Error(aLastError);
-}
-
-
 void Script::SetErrorStdOut(LPTSTR aParam)
 {
 	mErrorStdOutCP = Line::ConvertFileEncoding(aParam);

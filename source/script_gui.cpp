@@ -6794,7 +6794,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			InvalidateRect(aControl.hwnd, NULL, TRUE); // Assume there's text in the control.
 
 		if (style_needed_changing && !style_change_ok)
-			return g_script.ThrowIfTrue(true);
+			return g_script.ThrowRuntimeException(ERR_FAILED);
 	} // aControl.hwnd is not NULL
 
 	return OK;
