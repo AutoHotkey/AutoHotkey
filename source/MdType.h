@@ -158,8 +158,10 @@ template<typename T> constexpr void* cast_into_voidp(T in)
 #define md_member_type(class_name, ...) FResult (class_name::*)( MAP_LIST(md_arg_decl, __VA_ARGS__) )
 
 #define md_member(class_name, member_name, invoke_type, ...) \
+	 md_member_x(class_name, member_name, member_name, invoke_type, __VA_ARGS__)
+#define md_member_x(class_name, member_name, impl, invoke_type, ...) \
 	{ _T(#member_name), \
-		cast_into_voidp<md_member_type(class_name, __VA_ARGS__)>(&class_name::md_cat(md_member_name_,invoke_type)(member_name)), \
+		cast_into_voidp<md_member_type(class_name, __VA_ARGS__)>(&class_name::md_cat(md_member_name_,invoke_type)(impl)), \
 		IT_##invoke_type, \
 		{ MAP_LIST(md_arg_data, __VA_ARGS__) } }
 
