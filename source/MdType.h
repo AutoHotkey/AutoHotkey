@@ -170,3 +170,11 @@ template<typename T> constexpr void* cast_into_voidp(T in)
 		cast_into_voidp<md_member_type(class_name, __VA_ARGS__)>(&class_name::md_cat(md_member_name_,invoke_type)(member_name)), \
 		IT_##invoke_type, \
 		{ MAP_LIST(md_arg_data, __VA_ARGS__) } }
+
+#define md_property_get(class_name, member_name, arg_type) \
+	md_member(class_name, member_name, GET, (Ret, arg_type, RetVal))
+#define md_property_set(class_name, member_name, arg_type) \
+	md_member(class_name, member_name, SET, (In, arg_type, Value))
+#define md_property(class_name, member_name, arg_type) \
+	md_property_get(class_name, member_name, arg_type), \
+	md_property_set(class_name, member_name, arg_type)
