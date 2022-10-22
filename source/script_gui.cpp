@@ -1329,7 +1329,10 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 		}
 		break;
 	default:  // Not a supported control type.
-		return g_script.RuntimeError(ERR_GUI_NOT_FOR_THIS_TYPE);
+		// This shouldn't be possible due to checking of type elsewhere.
+		//return g_script.RuntimeError(ERR_GUI_NOT_FOR_THIS_TYPE); // Disabled to reduce code size.
+		ASSERT(!"invalid control type");
+		goto error; // Seems better than returning OK, for the off chance this can happen.
 	} // switch(control.type)
 
 	LPTSTR item_string;
