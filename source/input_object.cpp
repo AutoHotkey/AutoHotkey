@@ -163,12 +163,7 @@ FResult InputObject::set_On(ExprTokenType &aValue, IObject *&aOn)
 	if (obj)
 		obj->AddRef();
 	else if (!TokenIsEmptyString(aValue))
-	{
-		ResultToken result_token; // TODO: Factor out the use of ResultToken just for error-reporting.
-		result_token.SetResult(OK); // Must be initialized.
-		result_token.TypeError(_T("object"), aValue);
-		return result_token.Exited() ? FR_FAIL : FR_ABORTED;
-	}
+		return FTypeError(_T("object"), aValue);
 	auto prev = aOn;
 	aOn = obj;
 	if (prev)

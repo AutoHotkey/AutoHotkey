@@ -551,6 +551,26 @@ struct ResultToken : public ExprTokenType
 		return result;
 	}
 
+	ResultType SoftFail()
+	{
+		SetValue(_T(""), 0);
+		// Caller may rely on FAIL to unwind stack, but this->result is still OK.
+		return FAIL;
+	}
+	
+	ResultType HardFail()
+	{
+		return SetExitResult(FAIL);
+	}
+	
+	// Handle the result of calling a global Error function.
+	// If FAIL (abort thread), sets internal result to FAIL and returns FAIL.
+	// If OK (continue thread), sets return value to "" and returns FAIL.
+	ResultType Fail(ResultType aResultOfShowError)
+	{
+		return aResultOfShowError == OK ? SoftFail() : HardFail();
+	}
+	
 	ResultType Error(LPCTSTR aErrorText);
 	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
 	ResultType Error(LPCTSTR aErrorText, Object *aPrototype);
@@ -561,7 +581,6 @@ struct ResultToken : public ExprTokenType
 	ResultType ValueError(LPCTSTR aErrorText);
 	ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
 	ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
-	ResultType TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPTSTR aExtraInfo = _T(""));
 	ResultType ParamError(int aIndex, ExprTokenType *aParam);
 	ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType);
 	ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction);

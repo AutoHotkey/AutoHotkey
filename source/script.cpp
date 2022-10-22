@@ -10205,7 +10205,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 						// It doesn't make sense to specify case sensitivity for objects, so treat that as an error
 						// (otherwise EvaluateSwitchCase would ignore string_case_sense). 
 						if (switch_value.symbol == SYM_OBJECT)
-							result = ResultToken().TypeError(_T("String"), switch_value);
+							result = TypeError(_T("String"), switch_value);
 					}
 				}
 			}
@@ -10494,7 +10494,7 @@ ResultType Line::EvaluateSwitchCase(ExprTokenType &aSwitch, SymbolType aSwitchIs
 	else // Since CaseSense was specified, unconditionally use string comparison.
 	{
 		if (aCase.symbol == SYM_OBJECT)
-			return ResultToken().TypeError(_T("String"), aCase);
+			return TypeError(_T("String"), aCase);
 		// Caller has unconditionally set aSwitchIsNumeric to PURE_NOT_NUMERIC in this case,
 		// and has already verified aSwitch.symbol != SYM_OBJECT.
 	}

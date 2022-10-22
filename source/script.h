@@ -3307,9 +3307,14 @@ LPTSTR TokenTypeString(ExprTokenType &aToken);
 
 ResultType MemoryError();
 ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType);
+ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
+ResultType TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPCTSTR aExtraInfo);
+ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction);
 
 FResult FError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), Object *aPrototype = nullptr);
 FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
+FResult FTypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
+FResult FParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType = nullptr);
 
 void PauseCurrentThread();
 void ToggleSuspendState();
