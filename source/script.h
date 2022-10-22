@@ -2342,7 +2342,6 @@ struct GuiControlType : public Object
 		M_OnCommand,
 		M_SetFont,
 		M_Redraw,
-		M_DateTime_SetFormat,
 
 		// Properties
 		P_Hwnd,
@@ -2360,7 +2359,7 @@ struct GuiControlType : public Object
 	static ObjectMember sMembers[];
 	static ObjectMemberMd sMembersList[]; // Tab, ListBox, ComboBox, DDL
 	static ObjectMemberMd sMembersTab[];
-	static ObjectMember sMembersDate[];
+	static ObjectMemberMd sMembersDate[];
 	static ObjectMember sMembersLV[];
 	static ObjectMember sMembersTV[];
 	static ObjectMember sMembersSB[];
@@ -2384,6 +2383,8 @@ struct GuiControlType : public Object
 
 	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
+	
+	FResult DT_SetFormat(optl<StrArg> aFormat);
 	
 	FResult List_Add(ExprTokenType &aItems);
 	FResult List_Delete(optl<int> aIndex);
@@ -2693,7 +2694,6 @@ public:
 	void ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText); // DDL, ComboBox, ListBox, Tab
 	void ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
 	void ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	void ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken);
 	void ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	void ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	void ControlSetCheck(GuiControlType &aControl, int aValue, ResultToken &aResultToken); // CheckBox, Radio

@@ -602,9 +602,9 @@ ObjectMemberMd GuiControlType::sMembersTab[] =
 	md_member_x(GuiControlType, UseTab, Tab_UseTab, CALL, (In_Opt, Variant, Tab), (In_Opt, Bool32, ExactMatch))
 };
 
-ObjectMember GuiControlType::sMembersDate[] =
+ObjectMemberMd GuiControlType::sMembersDate[] =
 {
-	Object_Method_(SetFormat, 0, 1, Invoke, M_DateTime_SetFormat)
+	md_member_x(GuiControlType, SetFormat, DT_SetFormat, CALL, (In_Opt, String, Format))
 };
 
 #define FUN1(name, minp, maxp, bif) Object_Member(name, bif, 0, IT_CALL, minp, maxp)
@@ -868,9 +868,6 @@ void GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			}
 			_o_return(IsWindowVisible(hwnd) ? 1 : 0);
 		}
-
-		case M_DateTime_SetFormat:
-			return gui->ControlSetDateTimeFormat(*this, ParamIndexToOptionalString(0, _f_number_buf), aResultToken);
 	}
 }
 
@@ -1895,13 +1892,13 @@ void GuiType::ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, Res
 }
 
 
-void GuiType::ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken)
+FResult GuiControlType::DT_SetFormat(optl<StrArg> aFormat)
 {
 	bool use_custom_format = false; // Set default.
 	// Reset style to "pure" so that new style (or custom format) can take effect.
-	DWORD style = GetWindowLong(aControl.hwnd, GWL_STYLE) // DTS_SHORTDATEFORMAT==0 so can be omitted below.
+	DWORD style = GetWindowLong(hwnd, GWL_STYLE) // DTS_SHORTDATEFORMAT==0 so can be omitted below.
 		& ~(DTS_LONGDATEFORMAT | DTS_SHORTDATECENTURYFORMAT | DTS_TIMEFORMAT);
-	if (*aFormat)
+	if (aFormat.has_nonempty_value())
 	{
 		// DTS_SHORTDATEFORMAT and DTS_SHORTDATECENTURYFORMAT
 		// seem to produce identical results (both display 4-digit year), at least on XP.  Perhaps
@@ -1909,21 +1906,22 @@ void GuiType::ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat,
 		// not a named style.  It can always be applied numerically if desired.  Update:
 		// DTS_SHORTDATECENTURYFORMAT is now applied by default upon creation, which can be overridden
 		// explicitly via -0x0C in the control's options.
-		if (!_tcsicmp(aFormat, _T("LongDate"))) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
+		if (!_tcsicmp(aFormat.value(), _T("LongDate"))) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
 			style |= DTS_LONGDATEFORMAT; // Competing styles were already purged above.
-		else if (!_tcsicmp(aFormat, _T("Time")))
+		else if (!_tcsicmp(aFormat.value(), _T("Time")))
 			style |= DTS_TIMEFORMAT; // Competing styles were already purged above.
-		else if (!_tcsicmp(aFormat, _T("ShortDate")))
+		else if (!_tcsicmp(aFormat.value(), _T("ShortDate")))
 		{} // No change needed since DTS_SHORTDATEFORMAT is 0 and competing styles were already purged above.
 		else // Custom format.
 			use_custom_format = true;
 	}
 	//else aText is blank and use_custom_format==false, which will put DTS_SHORTDATEFORMAT into effect.
 	if (!use_custom_format)
-		SetWindowLong(aControl.hwnd, GWL_STYLE, style);
+		SetWindowLong(hwnd, GWL_STYLE, style);
 	//else leave style unchanged so that if format is later removed, the underlying named style will
 	// not have been altered.
-	DateTime_SetFormat(aControl.hwnd, use_custom_format ? aFormat : NULL); // NULL removes any custom format so that the underlying style format is revealed.
+	DateTime_SetFormat(hwnd, use_custom_format ? aFormat.value() : NULL); // NULL removes any custom format so that the underlying style format is revealed.
+	return OK;
 }
 
 
