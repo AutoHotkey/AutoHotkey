@@ -2336,7 +2336,6 @@ struct GuiControlType : public Object
 		M_Focus,
 		M_Move,
 		M_GetPos,
-		M_Choose,
 		M_OnEvent,
 		M_OnNotify,
 		M_OnCommand,
@@ -2387,6 +2386,7 @@ struct GuiControlType : public Object
 	FResult DT_SetFormat(optl<StrArg> aFormat);
 	
 	FResult List_Add(ExprTokenType &aItems);
+	FResult List_Choose(ExprTokenType &aValue);
 	FResult List_Delete(optl<int> aIndex);
 	
 	FResult Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact);

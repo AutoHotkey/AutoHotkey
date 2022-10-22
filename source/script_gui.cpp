@@ -568,7 +568,6 @@ bif_impl void GuiCtrlFromHwnd(UINT_PTR aHwnd, IObject *&aGuiCtrl)
 
 ObjectMember GuiControlType::sMembers[] =
 {
-	Object_Method(Choose, 1, 1),
 	Object_Method(Focus, 0, 0),
 	Object_Method(GetPos, 0, 4),
 	Object_Method(Move, 0, 4),
@@ -594,6 +593,7 @@ ObjectMember GuiControlType::sMembers[] =
 ObjectMemberMd GuiControlType::sMembersList[] =
 {
 	md_member_x(GuiControlType, Add, List_Add, CALL, (In, Variant, Value)),
+	md_member_x(GuiControlType, Choose, List_Choose, CALL, (In, Variant, Value)),
 	md_member_x(GuiControlType, Delete, List_Delete, CALL, (In_Opt, Int32, Index))
 };
 
@@ -767,11 +767,6 @@ void GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			InvalidateRect(gui->mHwnd, &rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
 			_o_return_empty;
 		}
-			
-		case M_Choose:
-			if (!gui->ControlChoose(*this, *aParam[0]))
-				_o_return_FAIL;
-			_o_return_empty;
 
 		case M_OnEvent:
 		case M_OnNotify:
@@ -1420,6 +1415,11 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 
 error:
 	return ValueError(aOneExact ? ERR_INVALID_VALUE : ERR_PARAM1_INVALID, nullptr, FAIL_OR_OK); // Invalid parameter #1 is almost definitely the cause.
+}
+
+FResult GuiControlType::List_Choose(ExprTokenType &aValue)
+{
+	return gui->ControlChoose(*this, aValue) ? OK : FR_FAIL;
 }
 
 
