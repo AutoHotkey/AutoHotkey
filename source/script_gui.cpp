@@ -591,10 +591,10 @@ ObjectMember GuiControlType::sMembers[] =
 	Object_Property_get_set(Visible)
 };
 
-ObjectMember GuiControlType::sMembersList[] =
+ObjectMemberMd GuiControlType::sMembersList[] =
 {
-	Object_Method_(Add, 1, 1, Invoke, M_List_Add),
-	Object_Method_(Delete, 0, 1, Invoke, M_List_Delete)
+	md_member_x(GuiControlType, Add, List_Add, CALL, (In, Variant, Value)),
+	md_member_x(GuiControlType, Delete, List_Delete, CALL, (In_Opt, Int32, Index))
 };
 
 ObjectMember GuiControlType::sMembersTab[] =
@@ -923,54 +923,56 @@ void GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			_o_return_empty;
 		}
 
-		case M_List_Add:
-		{
-			auto obj = TokenToArray(*aParam[0]);
-			if (!obj)
-				_o_throw_param(0, _T("Array"));
-			gui->ControlAddItems(*this, obj);
-			if (type == GUI_CONTROL_TAB)
-			{
-				// Adding tabs may change the space usable by the tab dialog.
-				gui->UpdateTabDialog(hwnd);
-				// Appears to be necessary to resolve a redraw issue, at least for Tab3 on Windows 10.
-				InvalidateRect(gui->mHwnd, NULL, TRUE);
-			}
-			_o_return_empty;
-		}
-
-		case M_List_Delete:
-		{
-			UINT msg_one;
-			UINT msg_all;
-			switch (type)
-			{
-			case GUI_CONTROL_TAB:     msg_one = TCM_DELETEITEM; msg_all = TCM_DELETEALLITEMS; break;
-			case GUI_CONTROL_LISTBOX: msg_one = LB_DELETESTRING; msg_all = LB_RESETCONTENT; break;
-			default:                  msg_one = CB_DELETESTRING; msg_all = CB_RESETCONTENT; break; // ComboBox/DDL.
-			}
-			if (aParamCount > 0) // Delete item with given index.
-			{
-				int index = ParamIndexToInt(0) - 1;
-				if (index < 0) // Something always invalid (possibly non-numeric).
-					_o_throw_param(0);
-				SendMessage(hwnd, msg_one, (WPARAM)index, 0);
-			}
-			else // Delete all items.
-			{
-				SendMessage(hwnd, msg_all, 0, 0);
-			}
-			if (type == GUI_CONTROL_TAB)
-			{
-				// Removing tabs may change the space usable by the tab dialog.
-				gui->UpdateTabDialog(hwnd);
-			}
-			_o_return_empty;
-		}
-
 		case M_DateTime_SetFormat:
 			return gui->ControlSetDateTimeFormat(*this, ParamIndexToOptionalString(0, _f_number_buf), aResultToken);
 	}
+}
+
+
+FResult GuiControlType::List_Add(ExprTokenType &aItems)
+{
+	auto obj = TokenToArray(aItems);
+	if (!obj)
+		return FParamError(0, &aItems, _T("Array"));
+	gui->ControlAddItems(*this, obj);
+	if (type == GUI_CONTROL_TAB)
+	{
+		// Adding tabs may change the space usable by the tab dialog.
+		gui->UpdateTabDialog(hwnd);
+		// Appears to be necessary to resolve a redraw issue, at least for Tab3 on Windows 10.
+		InvalidateRect(gui->mHwnd, NULL, TRUE);
+	}
+	return OK;
+}
+
+
+FResult GuiControlType::List_Delete(optl<int> aIndex)
+{
+	UINT msg_one;
+	UINT msg_all;
+	switch (type)
+	{
+	case GUI_CONTROL_TAB:     msg_one = TCM_DELETEITEM; msg_all = TCM_DELETEALLITEMS; break;
+	case GUI_CONTROL_LISTBOX: msg_one = LB_DELETESTRING; msg_all = LB_RESETCONTENT; break;
+	default:                  msg_one = CB_DELETESTRING; msg_all = CB_RESETCONTENT; break; // ComboBox/DDL.
+	}
+	if (aIndex.has_value()) // Delete item with given index.
+	{
+		int index = aIndex.value() - 1;
+		if (index < 0)
+			return FR_E_ARG(0);
+		SendMessage(hwnd, msg_one, (WPARAM)index, 0);
+	}
+	else // Delete all items.
+	{
+		SendMessage(hwnd, msg_all, 0, 0);
+	}
+	if (type == GUI_CONTROL_TAB)
+	{
+		// Removing tabs may change the space usable by the tab dialog.
+		gui->UpdateTabDialog(hwnd);
+	}
+	return OK;
 }
 
 

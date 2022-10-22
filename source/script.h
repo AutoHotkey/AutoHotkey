@@ -2343,8 +2343,6 @@ struct GuiControlType : public Object
 		M_SetFont,
 		M_Redraw,
 		M_Tab_UseTab,
-		M_List_Add,
-		M_List_Delete,
 		M_DateTime_SetFormat,
 
 		// Properties
@@ -2361,7 +2359,7 @@ struct GuiControlType : public Object
 	};
 
 	static ObjectMember sMembers[];
-	static ObjectMember sMembersList[]; // Tab, ListBox, ComboBox, DDL
+	static ObjectMemberMd sMembersList[]; // Tab, ListBox, ComboBox, DDL
 	static ObjectMember sMembersTab[];
 	static ObjectMember sMembersDate[];
 	static ObjectMember sMembersLV[];
@@ -2387,6 +2385,9 @@ struct GuiControlType : public Object
 
 	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
+	
+	FResult List_Add(ExprTokenType &aItems);
+	FResult List_Delete(optl<int> aIndex);
 
 	void Dispose(); // Called by GuiType::Dispose().
 };
