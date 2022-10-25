@@ -111,8 +111,14 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 			++ac;
 #endif
 		++ac;
-		if (!retval && !MdType_IsBits(aArg[i]))
+		if (aArg[i] == MdType::Params)
 		{
+			ASSERT(out == MdType::Void && !retval && !opt);
+			mIsVariadic = true;
+		}
+		else if (!retval && !MdType_IsBits(aArg[i]))
+		{
+			ASSERT(!mIsVariadic);
 			++pc;
 			if (!opt && pc - 1 == mMinParams)
 				mMinParams = pc;
@@ -189,6 +195,15 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		ASSERT(retval_index != ai || out != MdType::Void && !opt);
 		auto arg_type = *atp;
 		auto &arg_value = args[ai];
+		
+		if (arg_type == MdType::Params)
+		{
+			auto p = (VariantParams *)_alloca(sizeof(VariantParams));
+			p->count = aParamCount - pi;
+			p->value = aParam + pi;
+			arg_value = (UINT_PTR)p;
+			continue; // Not break, since there might be a retval parameter after it.
+		}
 		
 		if (out != MdType::Void && !(opt && ParamIndexIsOmitted(pi)))
 		{

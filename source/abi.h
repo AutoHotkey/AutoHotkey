@@ -69,3 +69,10 @@ public:
 	bool has_value() { return _value != nullptr; }
 	IObject *value() { return _value; }
 };
+
+
+struct VariantParams
+{
+	ExprTokenType **value;
+	int count;
+};

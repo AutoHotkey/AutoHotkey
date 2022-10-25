@@ -26,6 +26,7 @@ enum class MdType : UINT8
 	ResultType,
 	FResult,
 	NzIntWin32, // BOOL result where FALSE means failure and GetLastError() is applicable.
+	Params,
 	TypeMask	= 0xF,
 	BitsBase	= 99, // For encoding a small literal value to insert into the parameter list.
 	Optional	= 0x80,
@@ -64,6 +65,7 @@ template<> struct md_argtype<MdType::Object> { typedef IObject *t; };
 template<> struct md_argtype<MdType::Void> { typedef void t; };
 template<> struct md_argtype<MdType::Variant> { typedef ExprTokenType &t; };
 template<> struct md_argtype<MdType::Bool32> { typedef BOOL t; };
+template<> struct md_argtype<MdType::Params> { typedef VariantParams &t; };
 
 template<MdType T = MdType::Int32> struct md_outtype { typedef typename md_argtype<T>::t &t; };
 template<> struct md_outtype<MdType::String> { typedef StrRet &t; };
