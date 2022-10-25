@@ -251,6 +251,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_BASE _T("Invalid base.")
 #define ERR_INTERNAL_CALL _T("An internal function call failed.") // Win32 function failed.  Eventually an error message should be generated based on GetLastError().
 #define ERR_FAILED _T("Failed") // A function failed to achieve its primary purpose for unspecified reason.  Equivalent to v1 throwing 1 (ErrorLevel).
+#define ERR_LOAD_ICON _T("Can't load icon.")
 #define ERR_STRING_NOT_TERMINATED _T("String not null-terminated.")
 #define ERR_SOUND_DEVICE _T("Device not found")
 #define ERR_SOUND_COMPONENT _T("Component not found")
@@ -634,7 +635,6 @@ enum BuiltInFunctionID {
 	FID_TV_Add = 0, FID_TV_Modify, FID_TV_Delete,
 	FID_TV_GetNext = 0, FID_TV_GetPrev, FID_TV_GetParent, FID_TV_GetChild, FID_TV_GetSelection, FID_TV_GetCount,
 	FID_TV_Get = 0, FID_TV_GetText,
-	FID_SB_SetText = 0, FID_SB_SetParts, FID_SB_SetIcon,
 	FID_Trim = 0, FID_LTrim, FID_RTrim,
 	FID_RegExMatch = 0, FID_RegExReplace,
 	FID_Input = 0, FID_InputEnd,
@@ -2361,14 +2361,13 @@ struct GuiControlType : public Object
 	static ObjectMemberMd sMembersDate[];
 	static ObjectMember sMembersLV[];
 	static ObjectMember sMembersTV[];
-	static ObjectMember sMembersSB[];
+	static ObjectMemberMd sMembersSB[];
 
 	static Object *sPrototype, *sPrototypeList;
 	static Object *sPrototypes[GUI_CONTROL_TYPE_COUNT];
 	static void DefineControlClasses();
 	static Object *GetPrototype(GuiControls aType);
 
-	void StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void LV_GetText(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void LV_AddInsertModify(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -2388,6 +2387,10 @@ struct GuiControlType : public Object
 	FResult List_Add(ExprTokenType &aItems);
 	FResult List_Choose(ExprTokenType &aValue);
 	FResult List_Delete(optl<int> aIndex);
+	
+	FResult SB_SetIcon(StrArg aFilename, optl<int> aIconNumber, optl<UINT> aPartNumber, UINT_PTR &aRetVal);
+	FResult SB_SetParts(VariantParams &aParam, UINT& aRetVal);
+	FResult SB_SetText(StrArg aNewText, optl<UINT> aPartNumber, optl<UINT> aStyle);
 	
 	FResult Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact);
 

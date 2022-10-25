@@ -641,11 +641,11 @@ ObjectMember GuiControlType::sMembersTV[] =
 	FUN1(SetImageList, 1, 2, TV_SetImageList),
 };
 
-ObjectMember GuiControlType::sMembersSB[] =
+ObjectMemberMd GuiControlType::sMembersSB[] =
 {
-	FUNn(SetText, 1, 3, StatusBar, SB),
-	FUNn(SetParts, 0, 255, StatusBar, SB),
-	FUNn(SetIcon, 1, 3, StatusBar, SB),
+	md_member_x(GuiControlType, SetIcon, SB_SetIcon, CALL, (In, String, Filename), (In_Opt, Int32, IconNumber), (In_Opt, UInt32, PartNumber), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, SetParts, SB_SetParts, CALL, (In, Params, Filename), (Ret, UInt32, RetVal)),
+	md_member_x(GuiControlType, SetText, SB_SetText, CALL, (In, String, NewText), (In_Opt, UInt32, PartNumber), (In_Opt, UInt32, Style))
 };
 
 #undef FUN1

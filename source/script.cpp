@@ -930,7 +930,7 @@ ResultType Script::SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueTy
 		if ( !(new_icon = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, aIconNumber, false, NULL, &icon_module)) )
 			DestroyIcon(new_icon_small);
 	if ( !new_icon )
-		return g_script.RuntimeError(_T("Can't load icon."), aIconFile);
+		return g_script.RuntimeError(ERR_LOAD_ICON, aIconFile);
 
 	GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // This destroys it if non-NULL and it's not used by an GUI windows.
 

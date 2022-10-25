@@ -86,6 +86,9 @@
     <ClCompile Include="source\lib\Gui.ListView.cpp">
       <Filter>Built-in library\Gui</Filter>
     </ClCompile>
+    <ClCompile Include="source\lib\Gui.StatusBar.cpp">
+      <Filter>Built-in library\Gui</Filter>
+    </ClCompile>
     <ClCompile Include="source\lib\Gui.TreeView.cpp">
       <Filter>Built-in library\Gui</Filter>
     </ClCompile>
