@@ -610,19 +610,19 @@ ObjectMemberMd GuiControlType::sMembersDate[] =
 #define FUN1(name, minp, maxp, bif) Object_Member(name, bif, 0, IT_CALL, minp, maxp)
 #define FUNn(name, minp, maxp, bif, cat) Object_Member(name, bif, FID_##cat##_##name, IT_CALL, minp, maxp)
 
-ObjectMember GuiControlType::sMembersLV[] =
+ObjectMemberMd GuiControlType::sMembersLV[] =
 {
-	FUNn(GetNext, 0, 2, LV_GetNextOrCount, LV),
-	FUNn(GetCount, 0, 1, LV_GetNextOrCount, LV),
-	FUN1(GetText, 1, 2, LV_GetText),
-	FUNn(Add, 0, MAXP_VARIADIC, LV_AddInsertModify, LV),
-	FUNn(Insert, 1, MAXP_VARIADIC, LV_AddInsertModify, LV),
-	FUNn(Modify, 1, MAXP_VARIADIC, LV_AddInsertModify, LV),
-	FUN1(Delete, 0, 1, LV_Delete),
-	FUNn(InsertCol, 1, 3, LV_InsertModifyDeleteCol, LV),
-	FUNn(ModifyCol, 0, 3, LV_InsertModifyDeleteCol, LV),
-	FUNn(DeleteCol, 1, 1, LV_InsertModifyDeleteCol, LV),
-	FUN1(SetImageList, 1, 2, LV_SetImageList),
+	md_member_x(GuiControlType, GetNext, LV_GetNext, CALL, (In_Opt, Int32, StartIndex), (In_Opt, String, RowType), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, GetCount, LV_GetCount, CALL, (In_Opt, String, Mode), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, GetText, LV_GetText, CALL, (In, Int32, Row), (In_Opt, Int32, Column), (Ret, String, RetVal)),
+	md_member_x(GuiControlType, Add, LV_Add, CALL, (In_Opt, String, Options), (In, Params, Columns), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, Insert, LV_Insert, CALL, (In, Int32, Row), (In_Opt, String, Options), (In, Params, Columns), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, Modify, LV_Modify, CALL, (In, Int32, Row), (In_Opt, String, Options), (In, Params, Columns)),
+	md_member_x(GuiControlType, Delete, LV_Delete, CALL, (In_Opt, Int32, Row)),
+	md_member_x(GuiControlType, InsertCol, LV_InsertCol, CALL, (In_Opt, Int32, Column), (In_Opt, String, Options), (In_Opt, String, Title), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, ModifyCol, LV_ModifyCol, CALL, (In_Opt, Int32, Column), (In_Opt, String, Options), (In_Opt, String, Title)),
+	md_member_x(GuiControlType, DeleteCol, LV_DeleteCol, CALL, (In, Int32, Column)),
+	md_member_x(GuiControlType, SetImageList, LV_SetImageList, CALL, (In, UIntPtr, ImageListID), (In_Opt, Int32, IconType), (Ret, UIntPtr, RetVal))
 };
 
 ObjectMember GuiControlType::sMembersTV[] =

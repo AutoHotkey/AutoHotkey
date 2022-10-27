@@ -629,9 +629,6 @@ enum BuiltInFunctionID {
 	FID_Object_New = -1,
 	FID_GetMethod = 0, FID_HasMethod,
 	FID_DllCall = 0, FID_ComCall,
-	FID_LV_GetNext = 0, FID_LV_GetCount,
-	FID_LV_Add = 0, FID_LV_Insert, FID_LV_Modify,
-	FID_LV_InsertCol = 0, FID_LV_ModifyCol, FID_LV_DeleteCol,
 	FID_TV_Add = 0, FID_TV_Modify, FID_TV_Delete,
 	FID_TV_GetNext = 0, FID_TV_GetPrev, FID_TV_GetParent, FID_TV_GetChild, FID_TV_GetSelection, FID_TV_GetCount,
 	FID_TV_Get = 0, FID_TV_GetText,
@@ -2359,7 +2356,7 @@ struct GuiControlType : public Object
 	static ObjectMemberMd sMembersList[]; // Tab, ListBox, ComboBox, DDL
 	static ObjectMemberMd sMembersTab[];
 	static ObjectMemberMd sMembersDate[];
-	static ObjectMember sMembersLV[];
+	static ObjectMemberMd sMembersLV[];
 	static ObjectMember sMembersTV[];
 	static ObjectMemberMd sMembersSB[];
 
@@ -2368,12 +2365,6 @@ struct GuiControlType : public Object
 	static void DefineControlClasses();
 	static Object *GetPrototype(GuiControls aType);
 
-	void LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_GetText(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_AddInsertModify(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_InsertModifyDeleteCol(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void TV_AddModifyDelete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void TV_GetRelatedItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void TV_Get(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -2387,6 +2378,22 @@ struct GuiControlType : public Object
 	FResult List_Add(ExprTokenType &aItems);
 	FResult List_Choose(ExprTokenType &aValue);
 	FResult List_Delete(optl<int> aIndex);
+	
+	FResult LV_AddInsertModify(optl<int> aRow, optl<StrArg> aOptions, VariantParams &aCol, int *aRetVal, bool aModify);
+	FResult LV_Add(optl<StrArg> aOptions, VariantParams &aCol, int &aRetVal)				{ return LV_AddInsertModify(nullptr, aOptions, aCol, &aRetVal, false); }
+	FResult LV_Insert(int aRow, optl<StrArg> aOptions, VariantParams &aCol, int &aRetVal)	{ return LV_AddInsertModify(aRow, aOptions, aCol, &aRetVal, false); }
+	FResult LV_Modify(int aRow, optl<StrArg> aOptions, VariantParams &aCol)					{ return LV_AddInsertModify(aRow, aOptions, aCol, nullptr, true); }
+	
+	FResult LV_InsertModifyCol(optl<int> aColumn, optl<StrArg> aOptions, optl<StrArg> aTitle, int *aRetVal, bool aModify);
+	FResult LV_InsertCol(optl<int> aColumn, optl<StrArg> aOptions, optl<StrArg> aTitle, int &aRetVal)	{ return LV_InsertModifyCol(aColumn, aOptions, aTitle, &aRetVal, false); }
+	FResult LV_ModifyCol(optl<int> aColumn, optl<StrArg> aOptions, optl<StrArg> aTitle)			{ return LV_InsertModifyCol(aColumn, aOptions, aTitle, nullptr, true); }
+
+	FResult LV_Delete(optl<int> aRow);
+	FResult LV_DeleteCol(int aColumn);
+	FResult LV_GetCount(optl<StrArg> aMode, int &aRetVal);
+	FResult LV_GetNext(optl<int> aStartIndex, optl<StrArg> aRowType, int &aRetVal);
+	FResult LV_GetText(int aRow, optl<int> aColumn, StrRet &aRetVal);
+	FResult LV_SetImageList(UINT_PTR aImageListID, optl<int> aIconType, UINT_PTR &aRetVal);
 	
 	FResult SB_SetIcon(StrArg aFilename, optl<int> aIconNumber, optl<UINT> aPartNumber, UINT_PTR &aRetVal);
 	FResult SB_SetParts(VariantParams &aParam, UINT& aRetVal);
