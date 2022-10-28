@@ -625,20 +625,20 @@ ObjectMemberMd GuiControlType::sMembersLV[] =
 	md_member_x(GuiControlType, SetImageList, LV_SetImageList, CALL, (In, UIntPtr, ImageListID), (In_Opt, Int32, IconType), (Ret, UIntPtr, RetVal))
 };
 
-ObjectMember GuiControlType::sMembersTV[] =
+ObjectMemberMd GuiControlType::sMembersTV[] =
 {
-	FUNn(Add, 1, 3, TV_AddModifyDelete, TV),
-	FUNn(Modify, 1, 3, TV_AddModifyDelete, TV),
-	FUNn(Delete, 0, 1, TV_AddModifyDelete, TV),
-	FUNn(GetParent, 1, 1, TV_GetRelatedItem, TV),
-	FUNn(GetChild, 1, 1, TV_GetRelatedItem, TV),
-	FUNn(GetPrev, 1, 1, TV_GetRelatedItem, TV),
-	FUNn(GetCount, 0, 0, TV_GetRelatedItem, TV),
-	FUNn(GetSelection, 0, 0, TV_GetRelatedItem, TV),
-	FUNn(GetNext, 0, 2, TV_GetRelatedItem, TV),
-	FUNn(Get, 2, 2, TV_Get, TV),
-	FUNn(GetText, 1, 1, TV_Get, TV),
-	FUN1(SetImageList, 1, 2, TV_SetImageList),
+	md_member_x(GuiControlType, Add, TV_Add, CALL, (In, String, Name), (In_Opt, UIntPtr, ParentItemID), (In_Opt, String, Options), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, Delete, TV_Delete, CALL, (In_Opt, UIntPtr, ItemID)),
+	md_member_x(GuiControlType, Get, TV_Get, CALL, (In, UIntPtr, ItemID), (In, String, Attribute), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetChild, TV_GetChild, CALL, (In, UIntPtr, ItemID), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetCount, TV_GetCount, CALL, (Ret, UInt32, RetVal)),
+	md_member_x(GuiControlType, GetNext, TV_GetNext, CALL, (In_Opt, UIntPtr, ItemID), (In_Opt, String, ItemType), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetParent, TV_GetParent, CALL, (In, UIntPtr, ItemID), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetPrev, TV_GetPrev, CALL, (In, UIntPtr, ItemID), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetSelection, TV_GetSelection, CALL, (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetText, TV_GetText, CALL, (In, UIntPtr, ItemID), (Ret, String, RetVal)),
+	md_member_x(GuiControlType, Modify, TV_Modify, CALL, (In, UIntPtr, ItemID), (In_Opt, String, Options), (In_Opt, String, NewName), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, SetImageList, TV_SetImageList, CALL, (In, UIntPtr, ImageListID), (In_Opt, Int32, IconType), (Ret, UIntPtr, RetVal))
 };
 
 ObjectMemberMd GuiControlType::sMembersSB[] =

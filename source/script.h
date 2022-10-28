@@ -2357,18 +2357,13 @@ struct GuiControlType : public Object
 	static ObjectMemberMd sMembersTab[];
 	static ObjectMemberMd sMembersDate[];
 	static ObjectMemberMd sMembersLV[];
-	static ObjectMember sMembersTV[];
+	static ObjectMemberMd sMembersTV[];
 	static ObjectMemberMd sMembersSB[];
 
 	static Object *sPrototype, *sPrototypeList;
 	static Object *sPrototypes[GUI_CONTROL_TYPE_COUNT];
 	static void DefineControlClasses();
 	static Object *GetPrototype(GuiControls aType);
-
-	void TV_AddModifyDelete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void TV_GetRelatedItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void TV_Get(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void TV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
@@ -2400,6 +2395,20 @@ struct GuiControlType : public Object
 	FResult SB_SetText(StrArg aNewText, optl<UINT> aPartNumber, optl<UINT> aStyle);
 	
 	FResult Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact);
+	
+	FResult TV_AddModify(bool aAdd, UINT_PTR aItemID, UINT_PTR aParentItemID, optl<StrArg> aOptions, optl<StrArg> aName, UINT_PTR &aRetVal);
+	FResult TV_Add(StrArg aName, optl<UINT_PTR> aParentItemID, optl<StrArg> aOptions, UINT_PTR &aRetVal) { return TV_AddModify(true, 0, aParentItemID.value_or(0), aOptions, aName, aRetVal); }
+	FResult TV_Modify(UINT_PTR aItemID, optl<StrArg> aOptions, optl<StrArg> aNewName, UINT_PTR &aRetVal) { return TV_AddModify(false, aItemID, 0, aOptions, aNewName, aRetVal); }
+	FResult TV_Delete(optl<UINT_PTR> aItemID);
+	FResult TV_Get(UINT_PTR aItemID, StrArg aAttribute, UINT_PTR &aRetVal);
+	FResult TV_GetChild(UINT_PTR aItemID, UINT_PTR &aRetVal);
+	FResult TV_GetCount(UINT &aRetVal);
+	FResult TV_GetNext(optl<UINT_PTR> aItemID, optl<StrArg> aItemType, UINT_PTR &aRetVal);
+	FResult TV_GetParent(UINT_PTR aItemID, UINT_PTR &aRetVal);
+	FResult TV_GetPrev(UINT_PTR aItemID, UINT_PTR &aRetVal);
+	FResult TV_GetSelection(UINT_PTR &aRetVal);
+	FResult TV_GetText(UINT_PTR aItemID, StrRet &aRetVal);
+	FResult TV_SetImageList(UINT_PTR aImageListID, optl<int> aIconType, UINT_PTR &aRetVal);
 
 	void Dispose(); // Called by GuiType::Dispose().
 };
