@@ -371,7 +371,7 @@ BIF_DECL(BIF_Random)
 
 
 
-FResult DateAdd(StrArg aDateTime, double aTime, StrArg aTimeUnits, StrRet &aRetVal)
+bif_impl FResult DateAdd(StrArg aDateTime, double aTime, StrArg aTimeUnits, StrRet &aRetVal)
 {
 	FILETIME ft;
 	if (!YYYYMMDDToFileTime(aDateTime, ft))
@@ -416,7 +416,7 @@ FResult DateAdd(StrArg aDateTime, double aTime, StrArg aTimeUnits, StrRet &aRetV
 
 
 
-FResult DateDiff(StrArg aTime1, StrArg aTime2, StrArg aTimeUnits, __int64 &aRetVal)
+bif_impl FResult DateDiff(StrArg aTime1, StrArg aTime2, StrArg aTimeUnits, __int64 &aRetVal)
 {
 	FResult fr;
 	// If either parameter is blank, it will default to the current time:
