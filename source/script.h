@@ -251,6 +251,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_BASE _T("Invalid base.")
 #define ERR_INTERNAL_CALL _T("An internal function call failed.") // Win32 function failed.  Eventually an error message should be generated based on GetLastError().
 #define ERR_FAILED _T("Failed") // A function failed to achieve its primary purpose for unspecified reason.  Equivalent to v1 throwing 1 (ErrorLevel).
+#define ERR_LOAD_ICON _T("Can't load icon.")
 #define ERR_STRING_NOT_TERMINATED _T("String not null-terminated.")
 #define ERR_SOUND_DEVICE _T("Device not found")
 #define ERR_SOUND_COMPONENT _T("Component not found")
@@ -628,13 +629,9 @@ enum BuiltInFunctionID {
 	FID_Object_New = -1,
 	FID_GetMethod = 0, FID_HasMethod,
 	FID_DllCall = 0, FID_ComCall,
-	FID_LV_GetNext = 0, FID_LV_GetCount,
-	FID_LV_Add = 0, FID_LV_Insert, FID_LV_Modify,
-	FID_LV_InsertCol = 0, FID_LV_ModifyCol, FID_LV_DeleteCol,
 	FID_TV_Add = 0, FID_TV_Modify, FID_TV_Delete,
 	FID_TV_GetNext = 0, FID_TV_GetPrev, FID_TV_GetParent, FID_TV_GetChild, FID_TV_GetSelection, FID_TV_GetCount,
 	FID_TV_Get = 0, FID_TV_GetText,
-	FID_SB_SetText = 0, FID_SB_SetParts, FID_SB_SetIcon,
 	FID_Trim = 0, FID_LTrim, FID_RTrim,
 	FID_RegExMatch = 0, FID_RegExReplace,
 	FID_Input = 0, FID_InputEnd,
@@ -1299,15 +1296,6 @@ public:
 	ResultType ValidateVarUsage(Var *aVar, int aUsage);
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
 	ResultType LineUnexpectedError();
-
-	// Must not use "= GetLastError()" as a parameter default since the order of evaluation
-	// of parameters is not guaranteed left to right; i.e. if the first parameter is a call
-	// to a Win32 function, GetLastError() might be called too soon.  Use overloads instead:
-	ResultType SetLastErrorMaybeThrow(bool aError) { return SetLastErrorMaybeThrow(aError, GetLastError()); }
-	ResultType SetLastErrorMaybeThrow(bool aError, DWORD aLastError);
-	ResultType Throw() { return ThrowIfTrue(true); }
-	ResultType ThrowIfTrue(bool aError);
-	ResultType ThrowIntIfNonzero(int aErrorValue);
 
 	Line(FileIndexType aFileIndex, LineNumberType aFileLineNumber, ActionTypeType aActionType
 		, ArgStruct aArg[], ArgCountType aArgc) // Constructor
@@ -2345,16 +2333,11 @@ struct GuiControlType : public Object
 		M_Focus,
 		M_Move,
 		M_GetPos,
-		M_Choose,
 		M_OnEvent,
 		M_OnNotify,
 		M_OnCommand,
 		M_SetFont,
 		M_Redraw,
-		M_Tab_UseTab,
-		M_List_Add,
-		M_List_Delete,
-		M_DateTime_SetFormat,
 
 		// Properties
 		P_Hwnd,
@@ -2370,32 +2353,62 @@ struct GuiControlType : public Object
 	};
 
 	static ObjectMember sMembers[];
-	static ObjectMember sMembersList[]; // Tab, ListBox, ComboBox, DDL
-	static ObjectMember sMembersTab[];
-	static ObjectMember sMembersDate[];
-	static ObjectMember sMembersLV[];
-	static ObjectMember sMembersTV[];
-	static ObjectMember sMembersSB[];
+	static ObjectMemberMd sMembersList[]; // Tab, ListBox, ComboBox, DDL
+	static ObjectMemberMd sMembersTab[];
+	static ObjectMemberMd sMembersDate[];
+	static ObjectMemberMd sMembersLV[];
+	static ObjectMemberMd sMembersTV[];
+	static ObjectMemberMd sMembersSB[];
 
 	static Object *sPrototype, *sPrototypeList;
 	static Object *sPrototypes[GUI_CONTROL_TYPE_COUNT];
 	static void DefineControlClasses();
 	static Object *GetPrototype(GuiControls aType);
 
-	void StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_GetText(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_AddInsertModify(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_InsertModifyDeleteCol(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void LV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void TV_AddModifyDelete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void TV_GetRelatedItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void TV_Get(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void TV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-
 	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
+	
+	FResult DT_SetFormat(optl<StrArg> aFormat);
+	
+	FResult List_Add(ExprTokenType &aItems);
+	FResult List_Choose(ExprTokenType &aValue);
+	FResult List_Delete(optl<int> aIndex);
+	
+	FResult LV_AddInsertModify(optl<int> aRow, optl<StrArg> aOptions, VariantParams &aCol, int *aRetVal, bool aModify);
+	FResult LV_Add(optl<StrArg> aOptions, VariantParams &aCol, int &aRetVal)				{ return LV_AddInsertModify(nullptr, aOptions, aCol, &aRetVal, false); }
+	FResult LV_Insert(int aRow, optl<StrArg> aOptions, VariantParams &aCol, int &aRetVal)	{ return LV_AddInsertModify(aRow, aOptions, aCol, &aRetVal, false); }
+	FResult LV_Modify(int aRow, optl<StrArg> aOptions, VariantParams &aCol)					{ return LV_AddInsertModify(aRow, aOptions, aCol, nullptr, true); }
+	
+	FResult LV_InsertModifyCol(optl<int> aColumn, optl<StrArg> aOptions, optl<StrArg> aTitle, int *aRetVal, bool aModify);
+	FResult LV_InsertCol(optl<int> aColumn, optl<StrArg> aOptions, optl<StrArg> aTitle, int &aRetVal)	{ return LV_InsertModifyCol(aColumn, aOptions, aTitle, &aRetVal, false); }
+	FResult LV_ModifyCol(optl<int> aColumn, optl<StrArg> aOptions, optl<StrArg> aTitle)			{ return LV_InsertModifyCol(aColumn, aOptions, aTitle, nullptr, true); }
+
+	FResult LV_Delete(optl<int> aRow);
+	FResult LV_DeleteCol(int aColumn);
+	FResult LV_GetCount(optl<StrArg> aMode, int &aRetVal);
+	FResult LV_GetNext(optl<int> aStartIndex, optl<StrArg> aRowType, int &aRetVal);
+	FResult LV_GetText(int aRow, optl<int> aColumn, StrRet &aRetVal);
+	FResult LV_SetImageList(UINT_PTR aImageListID, optl<int> aIconType, UINT_PTR &aRetVal);
+	
+	FResult SB_SetIcon(StrArg aFilename, optl<int> aIconNumber, optl<UINT> aPartNumber, UINT_PTR &aRetVal);
+	FResult SB_SetParts(VariantParams &aParam, UINT& aRetVal);
+	FResult SB_SetText(StrArg aNewText, optl<UINT> aPartNumber, optl<UINT> aStyle);
+	
+	FResult Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact);
+	
+	FResult TV_AddModify(bool aAdd, UINT_PTR aItemID, UINT_PTR aParentItemID, optl<StrArg> aOptions, optl<StrArg> aName, UINT_PTR &aRetVal);
+	FResult TV_Add(StrArg aName, optl<UINT_PTR> aParentItemID, optl<StrArg> aOptions, UINT_PTR &aRetVal) { return TV_AddModify(true, 0, aParentItemID.value_or(0), aOptions, aName, aRetVal); }
+	FResult TV_Modify(UINT_PTR aItemID, optl<StrArg> aOptions, optl<StrArg> aNewName, UINT_PTR &aRetVal) { return TV_AddModify(false, aItemID, 0, aOptions, aNewName, aRetVal); }
+	FResult TV_Delete(optl<UINT_PTR> aItemID);
+	FResult TV_Get(UINT_PTR aItemID, StrArg aAttribute, UINT_PTR &aRetVal);
+	FResult TV_GetChild(UINT_PTR aItemID, UINT_PTR &aRetVal);
+	FResult TV_GetCount(UINT &aRetVal);
+	FResult TV_GetNext(optl<UINT_PTR> aItemID, optl<StrArg> aItemType, UINT_PTR &aRetVal);
+	FResult TV_GetParent(UINT_PTR aItemID, UINT_PTR &aRetVal);
+	FResult TV_GetPrev(UINT_PTR aItemID, UINT_PTR &aRetVal);
+	FResult TV_GetSelection(UINT_PTR &aRetVal);
+	FResult TV_GetText(UINT_PTR aItemID, StrRet &aRetVal);
+	FResult TV_SetImageList(UINT_PTR aImageListID, optl<int> aIconType, UINT_PTR &aRetVal);
 
 	void Dispose(); // Called by GuiType::Dispose().
 };
@@ -2700,7 +2713,6 @@ public:
 	void ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText); // DDL, ComboBox, ListBox, Tab
 	void ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
 	void ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	void ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken);
 	void ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	void ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	void ControlSetCheck(GuiControlType &aControl, int aValue, ResultToken &aResultToken); // CheckBox, Radio
@@ -3234,8 +3246,6 @@ BIF_DECL(BIF_ATan);
 BIF_DECL(BIF_Exp);
 BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_MinMax);
-BIF_DECL(BIF_DateAdd);
-BIF_DECL(BIF_DateDiff);
 BIF_DECL(BIF_Hotkey);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
@@ -3316,9 +3326,14 @@ LPTSTR TokenTypeString(ExprTokenType &aToken);
 
 ResultType MemoryError();
 ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType);
+ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
+ResultType TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPCTSTR aExtraInfo);
+ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction);
 
 FResult FError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), Object *aPrototype = nullptr);
 FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
+FResult FTypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
+FResult FParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType = nullptr);
 
 void PauseCurrentThread();
 void ToggleSuspendState();

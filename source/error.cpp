@@ -149,59 +149,6 @@ ResultType Script::Win32Error(DWORD aError, ResultType aErrorType)
 }
 
 
-ResultType Line::ThrowIfTrue(bool aError)
-{
-	return aError ? ThrowRuntimeException(ERR_FAILED) : OK;
-}
-
-ResultType Line::ThrowIntIfNonzero(int aErrorValue)
-{
-	if (!aErrorValue)
-		return OK;
-	TCHAR buf[12];
-	return ThrowRuntimeException(ERR_FAILED, _itot(aErrorValue, buf, 10));
-}
-
-// Logic from the above functions is duplicated in the below functions rather than calling
-// g_script.mCurrLine->Throw() to squeeze out a little extra performance for
-// "success" cases.
-
-ResultType Script::ThrowIfTrue(bool aError)
-{
-	return aError ? ThrowRuntimeException(ERR_FAILED) : OK;
-}
-
-ResultType Script::ThrowIntIfNonzero(int aErrorValue)
-{
-	if (!aErrorValue)
-		return OK;
-	TCHAR buf[12];
-	return ThrowRuntimeException(ERR_FAILED, _itot(aErrorValue, buf, 10));
-}
-
-
-ResultType Line::SetLastErrorMaybeThrow(bool aError, DWORD aLastError)
-{
-	g->LastError = aLastError; // Set this unconditionally.
-	return aError ? g_script.Win32Error(aLastError) : OK;
-}
-
-void ResultToken::SetLastErrorMaybeThrow(bool aError, DWORD aLastError)
-{
-	g->LastError = aLastError; // Set this unconditionally.
-	if (aError)
-		Win32Error(aLastError);
-}
-
-void ResultToken::SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DWORD aLastError)
-{
-	g->LastError = aLastError;
-	CloseHandle(aHandle);
-	if (aError)
-		Win32Error(aLastError);
-}
-
-
 void Script::SetErrorStdOut(LPTSTR aParam)
 {
 	mErrorStdOutCP = Line::ConvertFileEncoding(aParam);
@@ -841,11 +788,7 @@ ResultType ResultToken::Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aP
 	// isn't expecting a value, or they might be freed twice (if the callee already freed it).
 	//ASSERT(!mem_to_free); // At least one caller frees it after calling this function.
 	ASSERT(symbol != SYM_OBJECT);
-	if (g_script.RuntimeError(aErrorText, aExtraInfo, FAIL_OR_OK, nullptr, aPrototype) == FAIL)
-		return SetExitResult(FAIL);
-	SetValue(_T(""), 0);
-	// Caller may rely on FAIL to unwind stack, but this->result is still OK.
-	return FAIL;
+	return Fail(g_script.RuntimeError(aErrorText, aExtraInfo, FAIL_OR_OK, nullptr, aPrototype));
 }
 
 __declspec(noinline)
@@ -910,7 +853,8 @@ ResultType ResultToken::Win32Error(DWORD aError)
 	return FAIL;
 }
 
-void TokenTypeAndValue(ExprTokenType &aToken, LPTSTR &aType, LPTSTR &aValue, TCHAR *aNBuf)
+
+void TokenTypeAndValue(ExprTokenType &aToken, LPCTSTR &aType, LPCTSTR &aValue, TCHAR *aNBuf)
 {
 	if (aToken.symbol == SYM_VAR && aToken.var->IsUninitializedNormalVar())
 		aType = _T("unset variable"), aValue = aToken.var->mName;
@@ -920,16 +864,17 @@ void TokenTypeAndValue(ExprTokenType &aToken, LPTSTR &aType, LPTSTR &aValue, TCH
 		aType = TokenTypeString(aToken), aValue = TokenToString(aToken, aNBuf);
 }
 
+
 __declspec(noinline)
-ResultType ResultToken::TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue)
+ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue)
 {
 	TCHAR number_buf[MAX_NUMBER_SIZE];
-	LPTSTR actual_type, value_as_string;
+	LPCTSTR actual_type, value_as_string;
 	TokenTypeAndValue(aActualValue, actual_type, value_as_string, number_buf);
 	return TypeError(aExpectedType, actual_type, value_as_string);
 }
 
-ResultType ResultToken::TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPTSTR aExtraInfo)
+ResultType TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPCTSTR aExtraInfo)
 {
 	auto an = [](LPCTSTR thing) {
 		return _tcschr(_T("aeiou"), ctolower(*thing)) ? _T("n") : _T("");
@@ -937,30 +882,29 @@ ResultType ResultToken::TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LP
 	TCHAR msg[512];
 	sntprintf(msg, _countof(msg), _T("Expected a%s %s but got a%s %s.")
 		, an(aExpectedType), aExpectedType, an(aActualType), aActualType);
-	return Error(msg, aExtraInfo, ErrorPrototype::Type);
+	return g_script.RuntimeError(msg, aExtraInfo, FAIL_OR_OK, nullptr, ErrorPrototype::Type);
 }
 
-__declspec(noinline)
-ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam)
+ResultType ResultToken::TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue)
 {
-	return ParamError(aIndex, aParam, nullptr, nullptr);
+	return Fail(::TypeError(aExpectedType, aActualValue));
 }
 
-__declspec(noinline)
-ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType)
+FResult FTypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue)
 {
-	return ParamError(aIndex, aParam, aExpectedType, nullptr);
+	return TypeError(aExpectedType, aActualValue) == OK ? FR_ABORTED : FR_FAIL;
 }
 
+
 __declspec(noinline)
-ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction)
+ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction)
 {
 	auto an = [](LPCTSTR thing) {
 		return _tcschr(_T("aeiou"), ctolower(*thing)) ? _T("n") : _T("");
 	};
 	TCHAR msg[512];
 	TCHAR number_buf[MAX_NUMBER_SIZE];
-	LPTSTR actual_type, value_as_string;
+	LPCTSTR actual_type, value_as_string;
 #ifdef CONFIG_DEBUGGER
 	if (!aFunction)
 		aFunction = g_Debugger.WhatThrew();
@@ -974,7 +918,7 @@ ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aE
 		sntprintf(msg, _countof(msg), _T("Parameter #%i must not be omitted in this case.")
 			, aIndex + 1);
 #endif
-		return Error(msg, nullptr, ErrorPrototype::Value);
+		return g_script.RuntimeError(msg, nullptr, FAIL_OR_OK, nullptr, ErrorPrototype::Value);
 	}
 	TokenTypeAndValue(*aParam, actual_type, value_as_string, number_buf);
 	if (!*value_as_string && !aExpectedType)
@@ -992,7 +936,31 @@ ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aE
 	else
 		sntprintf(msg, _countof(msg), _T("Parameter #%i invalid."), aIndex + 1);
 #endif
-	return Error(msg, value_as_string, aExpectedType ? ErrorPrototype::Type : ErrorPrototype::Value);
+	return g_script.RuntimeError(msg, value_as_string, FAIL_OR_OK, nullptr
+		, aExpectedType ? ErrorPrototype::Type : ErrorPrototype::Value);
+}
+
+__declspec(noinline)
+ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam)
+{
+	return Fail(::ParamError(aIndex, aParam, nullptr, nullptr));
+}
+
+__declspec(noinline)
+ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType)
+{
+	return Fail(::ParamError(aIndex, aParam, aExpectedType, nullptr));
+}
+
+__declspec(noinline)
+ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction)
+{
+	return Fail(::ParamError(aIndex, aParam, aExpectedType, aFunction));
+}
+
+FResult FParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType)
+{
+	return ::ParamError(aIndex, aParam, aExpectedType, nullptr) == OK ? FR_ABORTED : FR_FAIL;
 }
 
 

@@ -1245,13 +1245,14 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 
 
 
-ObjectMember ComObject::sArrayMembers[]
+ObjectMemberMd ComObject::sArrayMembers[]
 {
-	Object_Member(__Item, SafeArrayItem, 0, IT_SET, 1, 8),
-	Object_Method_(__Enum, 0, 1, SafeArrayInvoke, M___Enum),
-	Object_Method_(Clone, 0, 0, SafeArrayInvoke, M_Clone),
-	Object_Method_(MaxIndex, 0, 1, SafeArrayInvoke, M_MaxIndex),
-	Object_Method_(MinIndex, 0, 1, SafeArrayInvoke, M_MinIndex),
+	md_member_x(ComObject, __Item, SafeArray_Item, GET, (Ret, Variant, RetVal), (In, Params, Index)),
+	md_member_x(ComObject, __Item, SafeArray_Item, SET, (In, Variant, Value), (In, Params, Index)),
+	md_member_x(ComObject, __Enum, SafeArray_Enum, CALL, (In_Opt, Int32, N), (Ret, Object, RetVal)),
+	md_member_x(ComObject, Clone, SafeArray_Clone, CALL, (Ret, Object, RetVal)),
+	md_member_x(ComObject, MaxIndex, SafeArray_MaxIndex, CALL, (In_Opt, UInt32, Dims), (Ret, Int32, RetVal)),
+	md_member_x(ComObject, MinIndex, SafeArray_MinIndex, CALL, (In_Opt, UInt32, Dims), (Ret, Int32, RetVal))
 };
 
 ObjectMember ComObject::sRefMembers[]
@@ -1269,7 +1270,7 @@ void DefineComPrototypeMembers()
 {
 	Object::DefineMembers(Object::sComValuePrototype, _T("ComValue"), ComObject::sValueMembers, _countof(ComObject::sValueMembers));
 	Object::DefineMembers(Object::sComRefPrototype, _T("ComValueRef"), ComObject::sRefMembers, _countof(ComObject::sRefMembers));
-	Object::DefineMembers(Object::sComArrayPrototype, _T("ComObjArray"), ComObject::sArrayMembers, _countof(ComObject::sArrayMembers));
+	Object::DefineMetadataMembers(Object::sComArrayPrototype, _T("ComObjArray"), ComObject::sArrayMembers, _countof(ComObject::sArrayMembers));
 }
 
 
@@ -1318,59 +1319,55 @@ void ComObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 }
 
 
-void ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+FResult ComObject::SafeArray_Enum(optl<int> n, IObject *&aRetVal)
 {
-	HRESULT hr = E_UNEXPECTED;
-	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
-
-	LONG retval;
-	switch (aID)
-	{
-	case M___Enum:
-		ComArrayEnum *enm;
-		if (SUCCEEDED(hr = ComArrayEnum::Begin(this, enm, ParamIndexToOptionalInt(0, 2))))
-			aResultToken.SetValue(enm);
-		break;
-	case M_Clone:
-		SAFEARRAY *clone;
-		if (SUCCEEDED(hr = SafeArrayCopy(psa, &clone)))
-			if (!SafeSetTokenObject(aResultToken, new ComObject((__int64)clone, mVarType, F_OWNVALUE)))
-				SafeArrayDestroy(clone);
-		break;
-	case M_MaxIndex:
-		hr = SafeArrayGetUBound(psa, (UINT)ParamIndexToOptionalInt64(0, 1), &retval);
-		if (SUCCEEDED(hr))
-			aResultToken.SetValue(retval);
-		break;
-	case M_MinIndex:
-		hr = SafeArrayGetLBound(psa, (UINT)ParamIndexToOptionalInt64(0, 1), &retval);
-		if (SUCCEEDED(hr))
-			aResultToken.SetValue(retval);
-		break;
-	}
-	if (FAILED(hr))
-		ComError(hr, aResultToken);
+	HRESULT hr;
+	ComArrayEnum *enm;
+	if (SUCCEEDED(hr = ComArrayEnum::Begin(this, enm, n.value_or(2))))
+		aRetVal = enm;
+	return OK;
 }
 
 
-void ComObject::SafeArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+FResult ComObject::SafeArray_Clone(IObject *&aRetVal)
 {
+	HRESULT hr;
+	SAFEARRAY *clone;
+	if (SUCCEEDED(hr = SafeArrayCopy((SAFEARRAY*)mVal64, &clone)))
+		aRetVal = new ComObject((__int64)clone, mVarType, F_OWNVALUE);
+	return hr;
+}
+
+
+FResult ComObject::SafeArray_MaxIndex(optl<UINT> aDims, int &aRetVal)
+{
+	return SafeArrayGetUBound((SAFEARRAY*)mVal64, aDims.value_or(1), (LONG*)&aRetVal);
+}
+
+
+FResult ComObject::SafeArray_MinIndex(optl<UINT> aDims, int &aRetVal)
+{
+	return SafeArrayGetLBound((SAFEARRAY*)mVal64, aDims.value_or(1), (LONG*)&aRetVal);
+}
+
+
+FResult ComObject::SafeArray_Item(VariantParams &aParam, ExprTokenType *aNewValue, ResultToken *aResultToken)
+{
+	ASSERT(aNewValue || aResultToken);
 	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
 	VARTYPE item_type = (mVarType & VT_TYPEMASK);
 
 	UINT dims = SafeArrayGetDim(psa);
 	LONG index[8];
 	// Verify correct number of parameters/dimensions (maximum 8).
-	if (dims > _countof(index) || dims != (IS_INVOKE_SET ? aParamCount - 1 : aParamCount))
-		_o_throw(ERR_PARAM_COUNT_INVALID);
-	// Adjust aParam for assignment rvalue.
-	ExprTokenType *rvalue = IS_INVOKE_SET ? *aParam++ : nullptr;
+	if (dims > _countof(index) || dims != aParam.count)
+		return FR_E_ARGS;
 	// Build array of indices from parameters.
 	for (UINT i = 0; i < dims; ++i)
 	{
-		if (!TokenIsNumeric(*aParam[i]))
-			_o_throw_param(i, _T("Number"));
-		index[i] = (LONG)TokenToInt64(*aParam[i]);
+		if (!TokenIsNumeric(*aParam.value[i]))
+			return FParamError(i, aParam.value[i], _T("Number"));
+		index[i] = (LONG)TokenToInt64(*aParam.value[i]);
 	}
 
 	void *item;
@@ -1380,16 +1377,15 @@ void ComObject::SafeArrayItem(ResultToken &aResultToken, int aID, int aFlags, Ex
 	auto hr = SafeArrayPtrOfIndex(psa, index, &item);
 	if (SUCCEEDED(hr))
 	{
-		if (rvalue)
-			hr = TokenToVarType(*rvalue, item_type, item);
+		if (aNewValue)
+			hr = TokenToVarType(*aNewValue, item_type, item);
 		else
-			VarTypeToToken(item_type, item, aResultToken);
+			VarTypeToToken(item_type, item, *aResultToken);
 	}
 
 	SafeArrayUnlock(psa);
 
-	if (FAILED(hr))
-		ComError(hr, aResultToken);
+	return hr;
 }
 
 

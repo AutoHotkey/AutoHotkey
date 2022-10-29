@@ -26,12 +26,12 @@ GNU General Public License for more details.
 ///////////
 
 
-ResultType input_type::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length)
+ResultType input_type::Setup(LPCTSTR aOptions, LPCTSTR aEndKeys, LPCTSTR aMatchList)
 {
 	ParseOptions(aOptions);
 	if (!SetKeyFlags(aEndKeys))
 		return FAIL;
-	if (!SetMatchList(aMatchList, aMatchList_length))
+	if (!SetMatchList(aMatchList))
 		return FAIL;
 	
 	// For maintainability/simplicity/code size, it's allocated even if BufferLengthMax == 0.
@@ -70,9 +70,9 @@ void InputStart(input_type &input)
 }
 
 
-void input_type::ParseOptions(LPTSTR aOptions)
+void input_type::ParseOptions(LPCTSTR aOptions)
 {
-	for (LPTSTR cp = aOptions; *cp; ++cp)
+	for (auto cp = aOptions; *cp; ++cp)
 	{
 		switch(ctoupper(*cp))
 		{
@@ -128,7 +128,7 @@ void input_type::SetTimeoutTimer()
 }
 
 
-ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsRemove, UCHAR aFlagsAdd)
+ResultType input_type::SetKeyFlags(LPCTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsRemove, UCHAR aFlagsAdd)
 {
 	bool vk_by_number, sc_by_number;
 	vk_type vk;
@@ -136,14 +136,14 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 	modLR_type modifiersLR;
 	size_t key_text_length;
 	UINT single_char_count = 0;
-	TCHAR *end_pos, single_char_string[2];
+	TCHAR single_char_string[2], key_text[32];
 	single_char_string[1] = '\0'; // Init its second character once, since the loop only changes the first char.
 	
 	const bool endchar_mode = aEndKeyMode && EndCharMode;
 	UCHAR * const end_vk = KeyVK;
 	UCHAR * const end_sc = KeySC;
 
-	for (TCHAR *end_key = aKeys; *end_key; ++end_key) // This a modified version of the processing loop used in SendKeys().
+	for (auto end_key = aKeys; *end_key; ++end_key) // This a modified version of the processing loop used in SendKeys().
 	{
 		vk = 0; // Set default.  Not strictly necessary but more maintainable.
 		*single_char_string = '\0';  // Set default as "this key name is not a single-char string".
@@ -153,9 +153,11 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 		case '}': continue;  // Important that these be ignored.
 		case '{':
 		{
-			if (   !(end_pos = _tcschr(end_key + 1, '}'))   )
+			++end_key;
+			auto end_pos = _tcschr(end_key, '}');
+			if (!end_pos)
 				continue;  // Do nothing, just ignore the unclosed '{' and continue.
-			if (   !(key_text_length = end_pos - end_key - 1)   )
+			if (   !(key_text_length = end_pos - end_key)   )
 			{
 				if (end_pos[1] == '}') // The string "{}}" has been encountered, which is interpreted as a single "}".
 				{
@@ -175,19 +177,20 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 					single_char_count++;
 					continue; // It will be processed by another section.
 				}
-				*single_char_string = end_key[1]; // Only used when vk != 0.
+				*single_char_string = *end_key; // Only used when vk != 0.
 			}
 
-			*end_pos = '\0';  // temporarily terminate the string here.
+			tmemcpy(key_text, end_key, key_text_length); // Make a null-terminated copy.
+			key_text[key_text_length] = '\0';
 
 			sc_by_number = false; // Set default.
 			modifiersLR = 0;  // Init prior to below.
 			// Handle the key by VK if it was given by number, such as {vk26}.
 			// Otherwise, for any key name which has a VK shared by two possible SCs
 			// (such as Up and NumpadUp), handle it by SC so it's identified correctly.
-			if (vk = TextToVK(end_key + 1, &modifiersLR, true))
+			if (vk = TextToVK(key_text, &modifiersLR, true))
 			{
-				vk_by_number = ctoupper(end_key[1]) == 'V' && ctoupper(end_key[2]) == 'K';
+				vk_by_number = ctoupper(key_text[0]) == 'V' && ctoupper(key_text[1]) == 'K';
 				if (!vk_by_number && (sc = vk_to_sc(vk, true)))
 				{
 					sc ^= 0x100; // Convert sc to the primary scan code, which is the one named by end_key.
@@ -196,9 +199,7 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 			}
 			else
 				// No virtual key, so try to find a scan code.
-				sc = TextToSC(end_key + 1, &sc_by_number);
-
-			*end_pos = '}';  // undo the temporary termination
+				sc = TextToSC(key_text, &sc_by_number);
 
 			end_key = end_pos;  // In prep for ++end_key at the top of the loop.
 			break; // Break out of the switch() and do the vk handling beneath it (if there is a vk).
@@ -264,13 +265,13 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 				return MemoryError();
 			EndCharsMax = single_char_count;
 		}
-		TCHAR *dst, *src;
-		for (dst = EndChars, src = aKeys; *src; ++src)
+		TCHAR *dst = EndChars;
+		for (auto src = aKeys; *src; ++src)
 		{
 			switch (*src)
 			{
 			case '{':
-				if (end_pos = _tcschr(src + 1, '}'))
+				if (auto end_pos = _tcschr(src + 1, '}'))
 				{
 					if (end_pos == src + 1 && end_pos[1] == '}') // {}}
 						end_pos++;
@@ -298,7 +299,7 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 }
 
 
-ResultType input_type::SetMatchList(LPTSTR aMatchList, size_t aMatchList_length)
+ResultType input_type::SetMatchList(LPCTSTR aMatchList)
 {
 	LPTSTR *realloc_temp;  // Needed since realloc returns NULL on failure but leaves original block allocated.
 	MatchCount = 0;  // Set default.
@@ -312,7 +313,7 @@ ResultType input_type::SetMatchList(LPTSTR aMatchList, size_t aMatchList_length)
 			MatchCountMax = INPUT_ARRAY_BLOCK_SIZE;
 		}
 		// If needed, create or enlarge the buffer that contains all the match phrases:
-		size_t space_needed = aMatchList_length + 1;  // +1 for the final zero terminator.
+		size_t space_needed = _tcslen(aMatchList) + 1;  // +1 for the final zero terminator.
 		if (space_needed > MatchBufSize)
 		{
 			MatchBufSize = (UINT)(space_needed > 4096 ? space_needed : 4096);
@@ -325,9 +326,9 @@ ResultType input_type::SetMatchList(LPTSTR aMatchList, size_t aMatchList_length)
 			}
 		}
 		// Copy aMatchList into the match buffer:
-		LPTSTR source, dest;
-		for (source = aMatchList, dest = match[MatchCount] = MatchBuf
-			; *source; ++source)
+		auto source = aMatchList;
+		auto dest = match[MatchCount] = MatchBuf;
+		for (; *source; ++source)
 		{
 			if (*source != ',') // Not a comma, so just copy it over.
 			{

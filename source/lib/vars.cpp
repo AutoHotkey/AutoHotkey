@@ -144,7 +144,7 @@ BIV_DECL_W(BIV_Clipboard_Set)
 				_f_return_FAIL;
 			return;
 		}
-		_f_throw_type(_T("ClipboardAll"), obj->Type());
+		_f_throw_type(_T("ClipboardAll"), ExprTokenType(obj));
 	}
 	size_t aLength;
 	LPTSTR aBuf = BivRValueToString(&aLength);

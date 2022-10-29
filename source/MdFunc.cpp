@@ -16,16 +16,6 @@ struct MdFuncEntry
 };
 
 
-#if 0 // Currently unused
-// For use reinterpreting member function pointers (not standard C++).
-template<typename T> constexpr void* cast_into_voidp(T in)
-{
-	union { T in; void *out; } u { in };
-	return u.out;
-}
-#endif
-
-
 #define md_mode decl
 #include "lib\functions.h"
 #undef md_mode
@@ -80,14 +70,15 @@ extern "C" double GetDoubleRetval();
 #pragma endregion
 
 
-MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT aArgSize)
+MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT aArgSize, Object *aPrototype)
 	: NativeFunc(aName)
 	, mMcFunc {aMcFunc}
 	, mArgType {aArg}
 	, mRetType {aRetType}
 	, mMaxResultTokens {0}
 	, mArgSlots {0}
-	, mThisCall {false}
+	, mPrototype {aPrototype}
+	, mThisCall {aPrototype != nullptr}
 {
 	// #if _DEBUG, ensure aArg is effectively terminated for the inner loop below.
 	ASSERT(!aArgSize || !MdType_IsMod(aArg[aArgSize - 1]));
@@ -99,6 +90,8 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 	}
 
 	int ac = 0, pc = 0;
+	if (aPrototype)
+		mMinParams = pc = ac = 1;
 	for (UINT i = 0; i < aArgSize; ++i)
 	{
 		bool opt = false, retval = false;
@@ -118,8 +111,14 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 			++ac;
 #endif
 		++ac;
-		if (!retval && !MdType_IsBits(aArg[i]))
+		if (aArg[i] == MdType::Params)
 		{
+			ASSERT(out == MdType::Void && !retval && !opt);
+			mIsVariadic = true;
+		}
+		else if (!retval && !MdType_IsBits(aArg[i]))
+		{
+			ASSERT(!mIsVariadic);
 			++pc;
 			if (!opt && pc - 1 == mMinParams)
 				mMinParams = pc;
@@ -151,14 +150,36 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	int rt_count = 0;
 	
 	UINT_PTR *args = (UINT_PTR *)_alloca(mArgSlots * sizeof(UINT_PTR));
+	int ai = 0, pi = 0;
 
 	ResultType result = OK;
+
+	if (mPrototype) // This implies thiscall and an initial 'this' parameter, excluded from mArgType.
+	{
+		auto obj = ParamIndexToObject(0);
+		// This handling here is similar to that in BuiltInMethod::Call():
+		if (!obj || !obj->IsOfType(mPrototype))
+		{
+			LPCTSTR expected_type;
+			ExprTokenType value;
+			if (mPrototype->GetOwnProp(value, _T("__Class")) && value.symbol == SYM_STRING)
+				expected_type = value.marker;
+			else
+				expected_type = _T("?"); // Script may have tampered with the prototype.
+			result = aResultToken.TypeError(expected_type, *aParam[0]);
+			goto end;
+		}
+		// This is reliant on (IObject*)obj being the same address as (WhateverObject*)obj
+		// (which might not be the case for classes with multiple virtual base classes):
+		args[0] = (UINT_PTR)obj;
+		ai = pi = 1;
+	}
 
 	MdType retval_arg_type = MdType::Void;
 	int retval_index = -1;
 	int output_var_count = 0;
 	auto atp = mArgType;
-	for (int ai = 0, pi = 0; ai < mArgSlots; ++ai, ++atp)
+	for (; ai < mArgSlots; ++ai, ++atp)
 	{
 		bool opt = false;
 		MdType out = MdType::Void;
@@ -174,6 +195,15 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		ASSERT(retval_index != ai || out != MdType::Void && !opt);
 		auto arg_type = *atp;
 		auto &arg_value = args[ai];
+		
+		if (arg_type == MdType::Params)
+		{
+			auto p = (VariantParams *)_alloca(sizeof(VariantParams));
+			p->count = aParamCount - pi;
+			p->value = aParam + pi;
+			arg_value = (UINT_PTR)p;
+			continue; // Not break, since there might be a retval parameter after it.
+		}
 		
 		if (out != MdType::Void && !(opt && ParamIndexIsOmitted(pi)))
 		{
@@ -519,4 +549,57 @@ bool MdFunc::ArgIsOutputVar(int aIndex)
 #endif
 	}
 	return false;
+}
+
+
+Object *Object::DefineMetadataMembers(Object *obj, LPCTSTR aClassName, ObjectMemberMd aMember[], int aMemberCount)
+{
+	if (aMemberCount)
+		obj->mFlags |= NativeClassPrototype;
+
+	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
+	TCHAR *name = full_name + _stprintf(full_name, _T("%s.Prototype."), aClassName);
+
+	for (int i = 0; i < aMemberCount; ++i)
+	{
+		auto &member = aMember[i];
+
+		int ac;
+		for (ac = 0; ac < _countof(member.argtype) && member.argtype[ac] != MdType::Void; ++ac);
+
+		_tcscpy(name, member.name);
+		auto op_name = _tcschr(name, '\0');
+		switch (member.invokeType)
+		{
+		case IT_GET: _tcscpy(op_name, _T(".Get")); break;
+		case IT_SET: _tcscpy(op_name, _T(".Set")); break;
+		}
+
+		auto func = new MdFunc(SimpleHeap::Alloc(full_name), member.method, MdType::FResult, member.argtype, ac, obj);
+
+		if (member.invokeType == IT_CALL)
+		{
+			obj->DefineMethod(name, func);
+		}
+		else
+		{
+			auto prop = obj->DefineProperty(const_cast<LPTSTR>(member.name));
+			if (member.invokeType == IT_GET)
+			{
+				prop->MinParams = func->mMinParams - 1;
+				if (!func->mIsVariadic)
+					prop->MaxParams = func->mParamCount - 1;
+				prop->SetGetter(func);
+			}
+			else
+			{
+				// There should be a getter for every setter; rely on the getter to set Min/MaxParams:
+				//prop->MinParams = func->mMinParams - 2;
+				//prop->MaxParams = func->mParamCount - 2;
+				prop->SetSetter(func);
+			}
+		}
+		func->Release();
+	}
+	return obj;
 }

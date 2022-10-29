@@ -111,6 +111,8 @@ enum ResultType {FAIL = 0, OK, WARN = OK, CRITICAL_ERROR  // Some things might r
 	, FAIL_OR_OK // For LineError/RuntimeError, error is continuable.
 };
 
+typedef HRESULT FResult;
+
 enum ExcptModeType {EXCPTMODE_NONE = 0
 	//, EXCPTMODE_TRY = 1 // Currently unused: Try block present.
 	, EXCPTMODE_CATCH = 2 // Exception will be suppressed or caught.
@@ -551,6 +553,26 @@ struct ResultToken : public ExprTokenType
 		return result;
 	}
 
+	ResultType SoftFail()
+	{
+		SetValue(_T(""), 0);
+		// Caller may rely on FAIL to unwind stack, but this->result is still OK.
+		return FAIL;
+	}
+	
+	ResultType HardFail()
+	{
+		return SetExitResult(FAIL);
+	}
+	
+	// Handle the result of calling a global Error function.
+	// If FAIL (abort thread), sets internal result to FAIL and returns FAIL.
+	// If OK (continue thread), sets return value to "" and returns FAIL.
+	ResultType Fail(ResultType aResultOfShowError)
+	{
+		return aResultOfShowError == OK ? SoftFail() : HardFail();
+	}
+	
 	ResultType Error(LPCTSTR aErrorText);
 	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
 	ResultType Error(LPCTSTR aErrorText, Object *aPrototype);
@@ -561,14 +583,10 @@ struct ResultToken : public ExprTokenType
 	ResultType ValueError(LPCTSTR aErrorText);
 	ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
 	ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
-	ResultType TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPTSTR aExtraInfo = _T(""));
 	ResultType ParamError(int aIndex, ExprTokenType *aParam);
 	ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType);
 	ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction);
 	
-	void SetLastErrorMaybeThrow(bool aError, DWORD aLastError = GetLastError());
-	void SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DWORD aLastError = GetLastError());
-
 	BuiltInFunc *func; // For maintainability, this is separate from the ExprTokenType union.  Its main uses are func->mID and func->mOutputVars.
 
 private:

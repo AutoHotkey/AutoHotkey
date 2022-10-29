@@ -249,7 +249,7 @@ void UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 	case M_SetIcon: // Menu.SetIcon(Item [, IconFile, IconNumber, IconWidth])
 		// Icon width defaults to system small icon size.  Original icon size will be used if "0" is specified.
 		if (!SetItemIcon(menu_item, param2, ATOI(aOptions), ParamIndexToOptionalInt(3, GetSystemMetrics(SM_CXSMICON))))
-			_o_throw(_T("Can't load icon."), param2);
+			_o_throw(ERR_LOAD_ICON, param2);
 		_o_return_empty;
 	} // switch()
 }

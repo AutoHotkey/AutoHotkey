@@ -416,6 +416,8 @@ void GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTy
 			int& margin = member == P_MarginX ? mMarginX : mMarginY;
 			if (IS_INVOKE_SET)
 			{
+				if (!ParamIndexIsNumeric(0))
+					_f_throw_type(_T("Number"), *aParam[0]);
 				margin = Scale(ParamIndexToInt(0)); // Seems okay to allow negative margins.
 				return;
 			}
@@ -568,7 +570,6 @@ bif_impl void GuiCtrlFromHwnd(UINT_PTR aHwnd, IObject *&aGuiCtrl)
 
 ObjectMember GuiControlType::sMembers[] =
 {
-	Object_Method(Choose, 1, 1),
 	Object_Method(Focus, 0, 0),
 	Object_Method(GetPos, 0, 4),
 	Object_Method(Move, 0, 4),
@@ -591,61 +592,62 @@ ObjectMember GuiControlType::sMembers[] =
 	Object_Property_get_set(Visible)
 };
 
-ObjectMember GuiControlType::sMembersList[] =
+ObjectMemberMd GuiControlType::sMembersList[] =
 {
-	Object_Method_(Add, 1, 1, Invoke, M_List_Add),
-	Object_Method_(Delete, 0, 1, Invoke, M_List_Delete)
+	md_member_x(GuiControlType, Add, List_Add, CALL, (In, Variant, Value)),
+	md_member_x(GuiControlType, Choose, List_Choose, CALL, (In, Variant, Value)),
+	md_member_x(GuiControlType, Delete, List_Delete, CALL, (In_Opt, Int32, Index))
 };
 
-ObjectMember GuiControlType::sMembersTab[] =
+ObjectMemberMd GuiControlType::sMembersTab[] =
 {
-	Object_Method_(UseTab, 0, 2, Invoke, M_Tab_UseTab)
+	md_member_x(GuiControlType, UseTab, Tab_UseTab, CALL, (In_Opt, Variant, Tab), (In_Opt, Bool32, ExactMatch))
 };
 
-ObjectMember GuiControlType::sMembersDate[] =
+ObjectMemberMd GuiControlType::sMembersDate[] =
 {
-	Object_Method_(SetFormat, 0, 1, Invoke, M_DateTime_SetFormat)
+	md_member_x(GuiControlType, SetFormat, DT_SetFormat, CALL, (In_Opt, String, Format))
 };
 
 #define FUN1(name, minp, maxp, bif) Object_Member(name, bif, 0, IT_CALL, minp, maxp)
 #define FUNn(name, minp, maxp, bif, cat) Object_Member(name, bif, FID_##cat##_##name, IT_CALL, minp, maxp)
 
-ObjectMember GuiControlType::sMembersLV[] =
+ObjectMemberMd GuiControlType::sMembersLV[] =
 {
-	FUNn(GetNext, 0, 2, LV_GetNextOrCount, LV),
-	FUNn(GetCount, 0, 1, LV_GetNextOrCount, LV),
-	FUN1(GetText, 1, 2, LV_GetText),
-	FUNn(Add, 0, MAXP_VARIADIC, LV_AddInsertModify, LV),
-	FUNn(Insert, 1, MAXP_VARIADIC, LV_AddInsertModify, LV),
-	FUNn(Modify, 1, MAXP_VARIADIC, LV_AddInsertModify, LV),
-	FUN1(Delete, 0, 1, LV_Delete),
-	FUNn(InsertCol, 1, 3, LV_InsertModifyDeleteCol, LV),
-	FUNn(ModifyCol, 0, 3, LV_InsertModifyDeleteCol, LV),
-	FUNn(DeleteCol, 1, 1, LV_InsertModifyDeleteCol, LV),
-	FUN1(SetImageList, 1, 2, LV_SetImageList),
+	md_member_x(GuiControlType, GetNext, LV_GetNext, CALL, (In_Opt, Int32, StartIndex), (In_Opt, String, RowType), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, GetCount, LV_GetCount, CALL, (In_Opt, String, Mode), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, GetText, LV_GetText, CALL, (In, Int32, Row), (In_Opt, Int32, Column), (Ret, String, RetVal)),
+	md_member_x(GuiControlType, Add, LV_Add, CALL, (In_Opt, String, Options), (In, Params, Columns), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, Insert, LV_Insert, CALL, (In, Int32, Row), (In_Opt, String, Options), (In, Params, Columns), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, Modify, LV_Modify, CALL, (In, Int32, Row), (In_Opt, String, Options), (In, Params, Columns)),
+	md_member_x(GuiControlType, Delete, LV_Delete, CALL, (In_Opt, Int32, Row)),
+	md_member_x(GuiControlType, InsertCol, LV_InsertCol, CALL, (In_Opt, Int32, Column), (In_Opt, String, Options), (In_Opt, String, Title), (Ret, Int32, RetVal)),
+	md_member_x(GuiControlType, ModifyCol, LV_ModifyCol, CALL, (In_Opt, Int32, Column), (In_Opt, String, Options), (In_Opt, String, Title)),
+	md_member_x(GuiControlType, DeleteCol, LV_DeleteCol, CALL, (In, Int32, Column)),
+	md_member_x(GuiControlType, SetImageList, LV_SetImageList, CALL, (In, UIntPtr, ImageListID), (In_Opt, Int32, IconType), (Ret, UIntPtr, RetVal))
 };
 
-ObjectMember GuiControlType::sMembersTV[] =
+ObjectMemberMd GuiControlType::sMembersTV[] =
 {
-	FUNn(Add, 1, 3, TV_AddModifyDelete, TV),
-	FUNn(Modify, 1, 3, TV_AddModifyDelete, TV),
-	FUNn(Delete, 0, 1, TV_AddModifyDelete, TV),
-	FUNn(GetParent, 1, 1, TV_GetRelatedItem, TV),
-	FUNn(GetChild, 1, 1, TV_GetRelatedItem, TV),
-	FUNn(GetPrev, 1, 1, TV_GetRelatedItem, TV),
-	FUNn(GetCount, 0, 0, TV_GetRelatedItem, TV),
-	FUNn(GetSelection, 0, 0, TV_GetRelatedItem, TV),
-	FUNn(GetNext, 0, 2, TV_GetRelatedItem, TV),
-	FUNn(Get, 2, 2, TV_Get, TV),
-	FUNn(GetText, 1, 1, TV_Get, TV),
-	FUN1(SetImageList, 1, 2, TV_SetImageList),
+	md_member_x(GuiControlType, Add, TV_Add, CALL, (In, String, Name), (In_Opt, UIntPtr, ParentItemID), (In_Opt, String, Options), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, Delete, TV_Delete, CALL, (In_Opt, UIntPtr, ItemID)),
+	md_member_x(GuiControlType, Get, TV_Get, CALL, (In, UIntPtr, ItemID), (In, String, Attribute), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetChild, TV_GetChild, CALL, (In, UIntPtr, ItemID), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetCount, TV_GetCount, CALL, (Ret, UInt32, RetVal)),
+	md_member_x(GuiControlType, GetNext, TV_GetNext, CALL, (In_Opt, UIntPtr, ItemID), (In_Opt, String, ItemType), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetParent, TV_GetParent, CALL, (In, UIntPtr, ItemID), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetPrev, TV_GetPrev, CALL, (In, UIntPtr, ItemID), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetSelection, TV_GetSelection, CALL, (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, GetText, TV_GetText, CALL, (In, UIntPtr, ItemID), (Ret, String, RetVal)),
+	md_member_x(GuiControlType, Modify, TV_Modify, CALL, (In, UIntPtr, ItemID), (In_Opt, String, Options), (In_Opt, String, NewName), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, SetImageList, TV_SetImageList, CALL, (In, UIntPtr, ImageListID), (In_Opt, Int32, IconType), (Ret, UIntPtr, RetVal))
 };
 
-ObjectMember GuiControlType::sMembersSB[] =
+ObjectMemberMd GuiControlType::sMembersSB[] =
 {
-	FUNn(SetText, 1, 3, StatusBar, SB),
-	FUNn(SetParts, 0, 255, StatusBar, SB),
-	FUNn(SetIcon, 1, 3, StatusBar, SB),
+	md_member_x(GuiControlType, SetIcon, SB_SetIcon, CALL, (In, String, Filename), (In_Opt, Int32, IconNumber), (In_Opt, UInt32, PartNumber), (Ret, UIntPtr, RetVal)),
+	md_member_x(GuiControlType, SetParts, SB_SetParts, CALL, (In, Params, Filename), (Ret, UInt32, RetVal)),
+	md_member_x(GuiControlType, SetText, SB_SetText, CALL, (In, String, NewText), (In_Opt, UInt32, PartNumber), (In_Opt, UInt32, Style))
 };
 
 #undef FUN1
@@ -675,7 +677,7 @@ void GuiControlType::DefineControlClasses()
 
 		// Determine base prototype and control-type-specific members.
 		Object *base_proto = sPrototype, *base_class = ctrl_class;
-		ObjectMember *more_items = nullptr;
+		ObjectMemberListType more_items;
 		int how_many = 0;
 		switch (i)
 		{
@@ -767,11 +769,6 @@ void GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			InvalidateRect(gui->mHwnd, &rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
 			_o_return_empty;
 		}
-			
-		case M_Choose:
-			if (!gui->ControlChoose(*this, *aParam[0]))
-				_o_return_FAIL;
-			_o_return_empty;
 
 		case M_OnEvent:
 		case M_OnNotify:
@@ -868,109 +865,110 @@ void GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			}
 			_o_return(IsWindowVisible(hwnd) ? 1 : 0);
 		}
-
-		case M_Tab_UseTab:
-		{
-			BOOL whole_match = ParamIndexToOptionalBOOL(1, FALSE);
-			int index; // int vs TabControlIndexType for detection of negative/out-of-range values.
-			if (ParamIndexIsOmitted(0)) // Not necessary to use "OrEmpty" because that's handled below.
-				index = -1;
-			else if (TokenIsPureNumeric(*aParam[0]) == SYM_INTEGER)
-				index = ParamIndexToInt(0) - 1; // Convert to zero-based and let 0 indicate "no tab" (-1).
-			else
-			{
-				LPTSTR tab_name = ParamIndexToString(0, _f_number_buf);
-				index = gui->FindTabIndexByName(*this, tab_name, whole_match);
-				if (index == -1 && *tab_name) // Invalid tab name (but "" is a valid way to specify "no tab").
-					index = -2; // Flag it as invalid.
-			}
-			// Validate parameters before making any changes to the Gui's state:
-			if (index < -1 || index >= MAX_TABS_PER_CONTROL)
-				_o_throw_param(0);
-
-			TabIndexType prev_tab_index = gui->mCurrentTabIndex;
-			TabControlIndexType prev_tab_control_index = gui->mCurrentTabControlIndex;
-
-			if (index == -1)
-				gui->mCurrentTabControlIndex = MAX_TAB_CONTROLS; // i.e. "no tab"
-			else
-			{
-				gui->mCurrentTabControlIndex = tab_index;
-				if (gui->mCurrentTabIndex != index)
-				{
-					gui->mCurrentTabIndex = index;
-					// Changing to a different tab should start a new radio group:
-					gui->mInRadioGroup = false;
-				}
-			}
-			if (gui->mCurrentTabControlIndex != prev_tab_control_index)
-			{
-				if (GuiControlType *tab_control = gui->FindTabControl(prev_tab_control_index))
-				{
-					// Autosize the previous tab control.  Has no effect if it is not a Tab3 control or has
-					// already been autosized.  Doing it at this point allows the script to set different
-					// margins for inside and outside the tab control, and is simpler than the alternative:
-					// waiting until the next external control is added.  The main drawback is that the
-					// script is unable to alternate between tab controls and still utilize autosizing.
-					// On the flip side, scripts can use this to their advantage -- to add controls which
-					// should not affect the tab control's size.
-					gui->AutoSizeTabControl(*tab_control);
-				}
-				// Changing to a different tab control (or none at all when there
-				// was one before, or vice versa) should start a new radio group:
-				gui->mInRadioGroup = false;
-			}
-			_o_return_empty;
-		}
-
-		case M_List_Add:
-		{
-			auto obj = TokenToArray(*aParam[0]);
-			if (!obj)
-				_o_throw_param(0, _T("Array"));
-			gui->ControlAddItems(*this, obj);
-			if (type == GUI_CONTROL_TAB)
-			{
-				// Adding tabs may change the space usable by the tab dialog.
-				gui->UpdateTabDialog(hwnd);
-				// Appears to be necessary to resolve a redraw issue, at least for Tab3 on Windows 10.
-				InvalidateRect(gui->mHwnd, NULL, TRUE);
-			}
-			_o_return_empty;
-		}
-
-		case M_List_Delete:
-		{
-			UINT msg_one;
-			UINT msg_all;
-			switch (type)
-			{
-			case GUI_CONTROL_TAB:     msg_one = TCM_DELETEITEM; msg_all = TCM_DELETEALLITEMS; break;
-			case GUI_CONTROL_LISTBOX: msg_one = LB_DELETESTRING; msg_all = LB_RESETCONTENT; break;
-			default:                  msg_one = CB_DELETESTRING; msg_all = CB_RESETCONTENT; break; // ComboBox/DDL.
-			}
-			if (aParamCount > 0) // Delete item with given index.
-			{
-				int index = ParamIndexToInt(0) - 1;
-				if (index < 0) // Something always invalid (possibly non-numeric).
-					_o_throw_param(0);
-				SendMessage(hwnd, msg_one, (WPARAM)index, 0);
-			}
-			else // Delete all items.
-			{
-				SendMessage(hwnd, msg_all, 0, 0);
-			}
-			if (type == GUI_CONTROL_TAB)
-			{
-				// Removing tabs may change the space usable by the tab dialog.
-				gui->UpdateTabDialog(hwnd);
-			}
-			_o_return_empty;
-		}
-
-		case M_DateTime_SetFormat:
-			return gui->ControlSetDateTimeFormat(*this, ParamIndexToOptionalString(0, _f_number_buf), aResultToken);
 	}
+}
+
+
+FResult GuiControlType::Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact)
+{
+	BOOL whole_match = aExact.value_or(FALSE);
+	int index; // int vs TabControlIndexType for detection of negative/out-of-range values.
+	if (!aTab)
+		index = -1;
+	else if (TokenIsPureNumeric(*aTab) == SYM_INTEGER)
+		index = (int)TokenToInt64(*aTab) - 1; // Convert to zero-based and let 0 indicate "no tab" (-1).
+	else
+	{
+		TCHAR float_buf[MAX_NUMBER_SIZE];
+		auto tab_name = TokenToString(*aTab, float_buf);
+		index = gui->FindTabIndexByName(*this, tab_name, whole_match);
+		if (index == -1 && *tab_name) // Invalid tab name (but "" is a valid way to specify "no tab").
+			index = -2; // Flag it as invalid.
+	}
+	// Validate parameters before making any changes to the Gui's state:
+	if (index < -1 || index >= MAX_TABS_PER_CONTROL)
+		return FR_E_ARG(0);
+
+	TabIndexType prev_tab_index = gui->mCurrentTabIndex;
+	TabControlIndexType prev_tab_control_index = gui->mCurrentTabControlIndex;
+
+	if (index == -1)
+		gui->mCurrentTabControlIndex = MAX_TAB_CONTROLS; // i.e. "no tab"
+	else
+	{
+		gui->mCurrentTabControlIndex = tab_index;
+		if (gui->mCurrentTabIndex != index)
+		{
+			gui->mCurrentTabIndex = index;
+			// Changing to a different tab should start a new radio group:
+			gui->mInRadioGroup = false;
+		}
+	}
+	if (gui->mCurrentTabControlIndex != prev_tab_control_index)
+	{
+		if (GuiControlType *tab_control = gui->FindTabControl(prev_tab_control_index))
+		{
+			// Autosize the previous tab control.  Has no effect if it is not a Tab3 control or has
+			// already been autosized.  Doing it at this point allows the script to set different
+			// margins for inside and outside the tab control, and is simpler than the alternative:
+			// waiting until the next external control is added.  The main drawback is that the
+			// script is unable to alternate between tab controls and still utilize autosizing.
+			// On the flip side, scripts can use this to their advantage -- to add controls which
+			// should not affect the tab control's size.
+			gui->AutoSizeTabControl(*tab_control);
+		}
+		// Changing to a different tab control (or none at all when there
+		// was one before, or vice versa) should start a new radio group:
+		gui->mInRadioGroup = false;
+	}
+	return OK;
+}
+
+
+FResult GuiControlType::List_Add(ExprTokenType &aItems)
+{
+	auto obj = TokenToArray(aItems);
+	if (!obj)
+		return FParamError(0, &aItems, _T("Array"));
+	gui->ControlAddItems(*this, obj);
+	if (type == GUI_CONTROL_TAB)
+	{
+		// Adding tabs may change the space usable by the tab dialog.
+		gui->UpdateTabDialog(hwnd);
+		// Appears to be necessary to resolve a redraw issue, at least for Tab3 on Windows 10.
+		InvalidateRect(gui->mHwnd, NULL, TRUE);
+	}
+	return OK;
+}
+
+
+FResult GuiControlType::List_Delete(optl<int> aIndex)
+{
+	UINT msg_one;
+	UINT msg_all;
+	switch (type)
+	{
+	case GUI_CONTROL_TAB:     msg_one = TCM_DELETEITEM; msg_all = TCM_DELETEALLITEMS; break;
+	case GUI_CONTROL_LISTBOX: msg_one = LB_DELETESTRING; msg_all = LB_RESETCONTENT; break;
+	default:                  msg_one = CB_DELETESTRING; msg_all = CB_RESETCONTENT; break; // ComboBox/DDL.
+	}
+	if (aIndex.has_value()) // Delete item with given index.
+	{
+		int index = aIndex.value() - 1;
+		if (index < 0)
+			return FR_E_ARG(0);
+		SendMessage(hwnd, msg_one, (WPARAM)index, 0);
+	}
+	else // Delete all items.
+	{
+		SendMessage(hwnd, msg_all, 0, 0);
+	}
+	if (type == GUI_CONTROL_TAB)
+	{
+		// Removing tabs may change the space usable by the tab dialog.
+		gui->UpdateTabDialog(hwnd);
+	}
+	return OK;
 }
 
 
@@ -1298,7 +1296,12 @@ void GuiType::ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor,
 ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, BOOL aOneExact)
 {
 	int selection_index = -1;
-	bool is_choose_string = (TokenIsPureNumeric(aParam) != SYM_INTEGER);
+	bool is_choose_string = true;
+	switch (TypeOfToken(aParam))
+	{
+	case SYM_INTEGER: is_choose_string = false; break;
+	case SYM_OBJECT: goto error;
+	}
 	TCHAR buf[MAX_NUMBER_SIZE];
 	
 	UINT msg_set_index = 0, msg_select_string = 0, msg_find_string = 0;
@@ -1333,7 +1336,10 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 		}
 		break;
 	default:  // Not a supported control type.
-		return g_script.RuntimeError(ERR_GUI_NOT_FOR_THIS_TYPE);
+		// This shouldn't be possible due to checking of type elsewhere.
+		//return g_script.RuntimeError(ERR_GUI_NOT_FOR_THIS_TYPE); // Disabled to reduce code size.
+		ASSERT(!"invalid control type");
+		goto error; // Seems better than returning OK, for the off chance this can happen.
 	} // switch(control.type)
 
 	LPTSTR item_string;
@@ -1419,6 +1425,11 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 
 error:
 	return ValueError(aOneExact ? ERR_INVALID_VALUE : ERR_PARAM1_INVALID, nullptr, FAIL_OR_OK); // Invalid parameter #1 is almost definitely the cause.
+}
+
+FResult GuiControlType::List_Choose(ExprTokenType &aValue)
+{
+	return gui->ControlChoose(*this, aValue) ? OK : FR_FAIL;
 }
 
 
@@ -1891,13 +1902,13 @@ void GuiType::ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, Res
 }
 
 
-void GuiType::ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken)
+FResult GuiControlType::DT_SetFormat(optl<StrArg> aFormat)
 {
 	bool use_custom_format = false; // Set default.
 	// Reset style to "pure" so that new style (or custom format) can take effect.
-	DWORD style = GetWindowLong(aControl.hwnd, GWL_STYLE) // DTS_SHORTDATEFORMAT==0 so can be omitted below.
+	DWORD style = GetWindowLong(hwnd, GWL_STYLE) // DTS_SHORTDATEFORMAT==0 so can be omitted below.
 		& ~(DTS_LONGDATEFORMAT | DTS_SHORTDATECENTURYFORMAT | DTS_TIMEFORMAT);
-	if (*aFormat)
+	if (aFormat.has_nonempty_value())
 	{
 		// DTS_SHORTDATEFORMAT and DTS_SHORTDATECENTURYFORMAT
 		// seem to produce identical results (both display 4-digit year), at least on XP.  Perhaps
@@ -1905,21 +1916,22 @@ void GuiType::ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat,
 		// not a named style.  It can always be applied numerically if desired.  Update:
 		// DTS_SHORTDATECENTURYFORMAT is now applied by default upon creation, which can be overridden
 		// explicitly via -0x0C in the control's options.
-		if (!_tcsicmp(aFormat, _T("LongDate"))) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
+		if (!_tcsicmp(aFormat.value(), _T("LongDate"))) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
 			style |= DTS_LONGDATEFORMAT; // Competing styles were already purged above.
-		else if (!_tcsicmp(aFormat, _T("Time")))
+		else if (!_tcsicmp(aFormat.value(), _T("Time")))
 			style |= DTS_TIMEFORMAT; // Competing styles were already purged above.
-		else if (!_tcsicmp(aFormat, _T("ShortDate")))
+		else if (!_tcsicmp(aFormat.value(), _T("ShortDate")))
 		{} // No change needed since DTS_SHORTDATEFORMAT is 0 and competing styles were already purged above.
 		else // Custom format.
 			use_custom_format = true;
 	}
 	//else aText is blank and use_custom_format==false, which will put DTS_SHORTDATEFORMAT into effect.
 	if (!use_custom_format)
-		SetWindowLong(aControl.hwnd, GWL_STYLE, style);
+		SetWindowLong(hwnd, GWL_STYLE, style);
 	//else leave style unchanged so that if format is later removed, the underlying named style will
 	// not have been altered.
-	DateTime_SetFormat(aControl.hwnd, use_custom_format ? aFormat : NULL); // NULL removes any custom format so that the underlying style format is revealed.
+	DateTime_SetFormat(hwnd, use_custom_format ? aFormat.value() : NULL); // NULL removes any custom format so that the underlying style format is revealed.
+	return OK;
 }
 
 
@@ -6794,7 +6806,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			InvalidateRect(aControl.hwnd, NULL, TRUE); // Assume there's text in the control.
 
 		if (style_needed_changing && !style_change_ok)
-			return g_script.ThrowIfTrue(true);
+			return g_script.ThrowRuntimeException(ERR_FAILED);
 	} // aControl.hwnd is not NULL
 
 	return OK;

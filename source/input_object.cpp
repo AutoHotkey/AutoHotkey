@@ -9,32 +9,43 @@
 #include "input_object.h"
 
 
-ObjectMember InputObject::sMembers[] =
+ObjectMemberMd InputObject::sMembers[] =
 {
-	Object_Method1(__New, 0, 3),
-	Object_Method1(KeyOpt, 2, 2),
-	Object_Method(Start, 0, 0),
-	Object_Method(Wait, 0, 1),
-	Object_Method(Stop, 0, 0),
-
-	Object_Member(BackspaceIsUndo, BoolOpt, P_BackspaceIsUndo, IT_SET),
-	Object_Member(CaseSensitive, BoolOpt, P_CaseSensitive, IT_SET),
-	Object_Property_get(EndKey),
-	Object_Property_get(EndMods),
-	Object_Property_get(EndReason),
-	Object_Member(FindAnywhere, BoolOpt, P_FindAnywhere, IT_SET),
-	Object_Property_get(InProgress),
-	Object_Property_get(Input),
-	Object_Property_get(Match),
-	Object_Property_get_set(MinSendLevel),
-	Object_Member(NotifyNonText, BoolOpt, P_NotifyNonText, IT_SET),
-	Object_Member(OnChar, OnX, P_OnChar, IT_SET),
-	Object_Member(OnEnd, OnX, P_OnEnd, IT_SET),
-	Object_Member(OnKeyDown, OnX, P_OnKeyDown, IT_SET),
-	Object_Member(OnKeyUp, OnX, P_OnKeyUp, IT_SET),
-	Object_Property_get_set(Timeout),
-	Object_Member(VisibleNonText, BoolOpt, P_VisibleNonText, IT_SET),
-	Object_Member(VisibleText, BoolOpt, P_VisibleText, IT_SET),
+	#define BOOL_OPTION(OPT)  md_property(InputObject, OPT, Bool32)
+	#define ONX_OPTION(X) \
+		md_property_get(InputObject, On##X, Object), \
+		md_property_set(InputObject, On##X, Variant)
+	
+	md_member(InputObject, __New, CALL, (In_Opt, String, Options), (In_Opt, String, EndKeys), (In_Opt, String, MatchList)),
+	md_member(InputObject, KeyOpt, CALL, (In, String, Keys), (In, String, KeyOptions)),
+	md_member(InputObject, Start, CALL, md_arg_none),
+	md_member(InputObject, Stop, CALL, md_arg_none),
+	md_member(InputObject, Wait, CALL, (In_Opt, Float64, MaxTime), (Ret, String, RetVal)),
+	
+	BOOL_OPTION(BackspaceIsUndo),
+	BOOL_OPTION(CaseSensitive),
+	BOOL_OPTION(FindAnywhere),
+	BOOL_OPTION(NotifyNonText),
+	BOOL_OPTION(VisibleNonText),
+	BOOL_OPTION(VisibleText),
+	
+	md_property_get(InputObject, EndKey, String),
+	md_property_get(InputObject, EndMods, String),
+	md_property_get(InputObject, EndReason, String),
+	md_property_get(InputObject, InProgress, Bool32),
+	md_property_get(InputObject, Input, String),
+	md_property_get(InputObject, Match, String),
+	
+	md_property(InputObject, MinSendLevel, Int32),
+	
+	ONX_OPTION(Char),
+	ONX_OPTION(End),
+	ONX_OPTION(KeyDown),
+	ONX_OPTION(KeyUp),
+	
+	md_property(InputObject, Timeout, Float64)
+	#undef BOOL_OPTION
+	#undef ONX_OPTION
 };
 int InputObject::sMemberCount = _countof(sMembers);
 
@@ -53,165 +64,137 @@ Object *InputObject::Create()
 }
 
 
-void InputObject::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+FResult InputObject::__New(optl<StrArg> aOptions, optl<StrArg> aEndKeys, optl<StrArg> aMatchList)
 {
-	_f_param_string_opt(aOptions, 0);
-	_f_param_string_opt(aEndKeys, 1);
-	_f_param_string_opt(aMatchList, 2);
-	
-	if (!Setup(aOptions, aEndKeys, aMatchList, _tcslen(aMatchList)))
-		_f_return_FAIL;
-
-	_f_return_empty;
+	return input.Setup(aOptions.value_or_empty(), aEndKeys.value_or_empty(), aMatchList.value_or_empty()) ? OK : FR_FAIL;
 }
 
 
-ResultType InputObject::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length)
+FResult InputObject::Start()
 {
-	return input.Setup(aOptions, aEndKeys, aMatchList, aMatchList_length);
-}
-
-
-void InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	switch (aID)
+	if (!input.InProgress())
 	{
-	case M_Start:
-		if (!input.InProgress())
+		input.Buffer[input.BufferLength = 0] = '\0';
+		InputStart(input);
+	}
+	return OK;
+}
+
+
+FResult InputObject::Wait(optl<double> aMaxTime, StrRet &aRetVal)
+{
+	auto wait_ms = aMaxTime.has_value() ? (UINT)(aMaxTime.value() * 1000) : UINT_MAX;
+	auto tick_start = GetTickCount();
+	while (input.InProgress() && (GetTickCount() - tick_start) < wait_ms)
+		MsgSleep();
+	return get_EndReason(aRetVal);
+}
+
+
+FResult InputObject::Stop()
+{
+	if (input.InProgress())
+		input.Stop();
+	return OK;
+}
+
+
+FResult InputObject::get_EndReason(StrRet &aRetVal)
+{
+	aRetVal.SetStatic(input.GetEndReason(NULL, 0));
+	return OK;
+}
+
+FResult InputObject::get_EndKey(StrRet &aRetVal)
+{
+	if (input.Status == INPUT_TERMINATED_BY_ENDKEY)
+	{
+		auto buf = aRetVal.CallerBuf();
+		input.GetEndReason(buf, aRetVal.CallerBufSize);
+		aRetVal.SetTemp(buf);
+	}
+	else
+		aRetVal.SetEmpty();
+	return OK;
+}
+
+FResult InputObject::get_EndMods(StrRet &aRetVal)
+{
+	auto buf = aRetVal.CallerBuf(), cp = buf;
+	const auto mod_string = MODLR_STRING;
+	for (int i = 0; i < 8; ++i)
+		if (input.EndingMods & (1 << i))
 		{
-			input.Buffer[input.BufferLength = 0] = '\0';
-			InputStart(input);
+			*cp++ = mod_string[i * 2];
+			*cp++ = mod_string[i * 2 + 1];
 		}
-		_o_return_empty;
+	*cp = '\0';
+	aRetVal.SetTemp(buf, cp - buf);
+	return OK;
+}
 
-	case M_Wait:
-		DWORD wait_ms, tick_start;
-		wait_ms = ParamIndexIsOmitted(0) ? UINT_MAX : (UINT)(ParamIndexToDouble(0) * 1000);
-		tick_start = GetTickCount();
-		while (input.InProgress() && (GetTickCount() - tick_start) < wait_ms)
-			MsgSleep();
-		// Return EndReason:
-	case P_EndReason:
-		_o_return(input.GetEndReason(NULL, 0));
+FResult InputObject::get_Input(StrRet &aRetVal)
+{
+	aRetVal.SetTemp(input.Buffer, input.BufferLength);
+	return OK;
+}
 
-	case M_Stop:
-		if (input.InProgress())
-			input.Stop();
-		_o_return_empty;
-
-	case P_Input:
-		_o_return(input.Buffer, input.BufferLength);
-
-	case P_InProgress:
-		_o_return(input.InProgress());
-
-	case P_EndKey:
-		aResultToken.symbol = SYM_STRING;
-		if (input.Status == INPUT_TERMINATED_BY_ENDKEY)
-			input.GetEndReason(aResultToken.marker = _f_retval_buf, _f_retval_buf_size);
-		else
-			aResultToken.marker = _T("");
-		_o_return_retval;
-
-	case P_EndMods:
-	{
-		aResultToken.symbol = SYM_STRING;
-		TCHAR *cp = aResultToken.marker = aResultToken.buf;
-		const auto mod_string = MODLR_STRING;
-		for (int i = 0; i < 8; ++i)
-			if (input.EndingMods & (1 << i))
-			{
-				*cp++ = mod_string[i * 2];
-				*cp++ = mod_string[i * 2 + 1];
-			}
-		*cp = '\0';
-		_o_return_retval;
-	}
-
-	case P_Match:
-		aResultToken.symbol = SYM_STRING;
-		if (input.Status == INPUT_TERMINATED_BY_MATCH && input.EndingMatchIndex < input.MatchCount)
-			aResultToken.marker = input.match[input.EndingMatchIndex];
-		else
-			aResultToken.marker = _T("");
-		_o_return_retval;
-
-	case P_MinSendLevel:
-		if (IS_INVOKE_SET)
-		{
-			input.MinSendLevel = (SendLevelType)ParamIndexToInt64(0);
-			return;
-		}
-		_o_return(input.MinSendLevel);
-
-	case P_Timeout:
-		if (IS_INVOKE_SET)
-		{
-			input.Timeout = (int)(ParamIndexToDouble(0) * 1000);
-			if (input.InProgress() && input.Timeout > 0)
-				input.SetTimeoutTimer();
-			return;
-		}
-		_o_return(input.Timeout / 1000.0);
-	}
+FResult InputObject::get_Match(StrRet &aRetVal)
+{
+	if (input.Status == INPUT_TERMINATED_BY_MATCH && input.EndingMatchIndex < input.MatchCount)
+		aRetVal.SetTemp(input.match[input.EndingMatchIndex]);
+	else
+		aRetVal.SetEmpty();
+	return OK;
 }
 
 
-void InputObject::BoolOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+FResult InputObject::get_On(IObject *&aRetVal, IObject *&aOn)
 {
-	bool *bool_option = nullptr;
-	switch (aID)
-	{
-	case P_BackspaceIsUndo: bool_option = &input.BackspaceIsUndo; break;
-	case P_CaseSensitive: bool_option = &input.CaseSensitive; break;
-	case P_FindAnywhere: bool_option = &input.FindAnywhere; break;
-	case P_VisibleText: bool_option = &input.VisibleText; break;
-	case P_VisibleNonText: bool_option = &input.VisibleNonText; break;
-	case P_NotifyNonText: bool_option = &input.NotifyNonText; break;
-	}
-	if (IS_INVOKE_SET)
-		*bool_option = ParamIndexToBOOL(0);
-	_o_return(*bool_option);
+	if (aRetVal = aOn)
+		aRetVal->AddRef();
+	return OK;
 }
 
 
-void InputObject::OnX(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+FResult InputObject::set_On(ExprTokenType &aValue, IObject *&aOn)
 {
-	IObject **pon;
-	switch (aID)
-	{
-	case P_OnKeyDown: pon = &onKeyDown; break;
-	case P_OnKeyUp: pon = &onKeyUp; break;
-	case P_OnChar: pon = &onChar; break;
-	default: pon = &onEnd; break;
-	}
-	if (IS_INVOKE_SET)
-	{
-		IObject *obj = ParamIndexToObject(0);
-		if (obj)
-			obj->AddRef();
-		else if (!TokenIsEmptyString(*aParam[0]))
-			_o_throw_type(_T("object"), *aParam[0]);
-		if (*pon)
-			(*pon)->Release();
-		*pon = obj;
-	}
-	if (*pon)
-	{
-		(*pon)->AddRef();
-		aResultToken.SetValue(*pon);
-	}
+	auto obj = TokenToObject(aValue);
+	if (obj)
+		obj->AddRef();
+	else if (!TokenIsEmptyString(aValue))
+		return FTypeError(_T("object"), aValue);
+	auto prev = aOn;
+	aOn = obj;
+	if (prev)
+		prev->Release();
+	return OK;
 }
 
 
-void InputObject::KeyOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+FResult InputObject::set_MinSendLevel(int aValue)
 {
-	_f_param_string(keys, 0);
-	_f_param_string(options, 1);
+	if (aValue < 0 || aValue > 101)
+		return FR_E_ARG(0);
+	input.MinSendLevel = aValue;
+	return OK;
+}
 
+
+FResult InputObject::set_Timeout(double aValue)
+{
+	input.Timeout = (int)(aValue * 1000);
+	if (input.InProgress() && input.Timeout > 0)
+		input.SetTimeoutTimer();
+	return OK;
+}
+
+
+FResult InputObject::KeyOpt(StrArg keys, StrArg options)
+{
 	bool adding = true;
 	UCHAR flag, add_flags = 0, remove_flags = 0;
-	for (LPTSTR cp = options; *cp; ++cp)
+	for (auto cp = options; *cp; ++cp)
 	{
 		switch (ctoupper(*cp))
 		{
@@ -235,7 +218,7 @@ void InputObject::KeyOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 			add_flags = 0;
 			remove_flags = INPUT_KEY_OPTION_MASK;
 			continue;
-		default: _o_throw_value(ERR_INVALID_OPTION, cp);
+		default: return FValueError(ERR_INVALID_OPTION, cp);
 		}
 		if (adding)
 			add_flags |= flag; // Add takes precedence over remove, so remove_flags isn't changed.
@@ -254,9 +237,8 @@ void InputObject::KeyOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 			input.KeyVK[i] = (input.KeyVK[i] & ~remove_flags) | add_flags;
 		for (int i = 0; i < _countof(input.KeySC); ++i)
 			input.KeySC[i] = (input.KeySC[i] & ~remove_flags) | add_flags;
-		_o_return_empty;
+		return OK;
 	}
 
-	if (!input.SetKeyFlags(keys, false, remove_flags, add_flags))
-		_o_return_FAIL;
+	return input.SetKeyFlags(keys, false, remove_flags, add_flags) ? OK : FR_FAIL;
 }

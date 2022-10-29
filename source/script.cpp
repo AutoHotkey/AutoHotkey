@@ -52,8 +52,6 @@ FuncEntry g_BIF[] =
 	BIF1(ComObjType, 1, 2),
 	BIF1(ComObjValue, 1, 1),
 	BIF1(Cos, 1, 1),
-	BIF1(DateAdd, 3, 3),
-	BIF1(DateDiff, 3, 3),
 	BIFn(DetectHiddenText, 1, 1, BIF_SetBIV),
 	BIFn(DetectHiddenWindows, 1, 1, BIF_SetBIV),
 #ifdef ENABLE_DLLCALL
@@ -930,7 +928,7 @@ ResultType Script::SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueTy
 		if ( !(new_icon = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, aIconNumber, false, NULL, &icon_module)) )
 			DestroyIcon(new_icon_small);
 	if ( !new_icon )
-		return g_script.RuntimeError(_T("Can't load icon."), aIconFile);
+		return g_script.RuntimeError(ERR_LOAD_ICON, aIconFile);
 
 	GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // This destroys it if non-NULL and it's not used by an GUI windows.
 
@@ -10205,7 +10203,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 						// It doesn't make sense to specify case sensitivity for objects, so treat that as an error
 						// (otherwise EvaluateSwitchCase would ignore string_case_sense). 
 						if (switch_value.symbol == SYM_OBJECT)
-							result = ResultToken().TypeError(_T("String"), switch_value);
+							result = TypeError(_T("String"), switch_value);
 					}
 				}
 			}
@@ -10494,7 +10492,7 @@ ResultType Line::EvaluateSwitchCase(ExprTokenType &aSwitch, SymbolType aSwitchIs
 	else // Since CaseSense was specified, unconditionally use string comparison.
 	{
 		if (aCase.symbol == SYM_OBJECT)
-			return ResultToken().TypeError(_T("String"), aCase);
+			return TypeError(_T("String"), aCase);
 		// Caller has unconditionally set aSwitchIsNumeric to PURE_NOT_NUMERIC in this case,
 		// and has already verified aSwitch.symbol != SYM_OBJECT.
 	}

@@ -1039,6 +1039,20 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 	return DefineMembers(obj, aClassName, aMember, aMemberCount);
 }
 
+Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberMd aMember[], int aMemberCount)
+{
+	auto obj = CreatePrototype(aClassName, aBase);
+	return DefineMetadataMembers(obj, aClassName, aMember, aMemberCount);
+}
+
+Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberListType aMember, int aMemberCount)
+{
+	if (aMember.duck)
+		return CreatePrototype(aClassName, aBase, aMember.duck, aMemberCount);
+	else
+		return CreatePrototype(aClassName, aBase, aMember.meta, aMemberCount);
+}
+
 
 Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount)
 {
@@ -2953,7 +2967,7 @@ struct ClassDef
 	LPCTSTR name;
 	Object **proto_var;
 	ClassFactoryDef factory;
-	ObjectMember *members;
+	ObjectMemberListType members;
 	int member_count;
 	std::initializer_list<ClassDef> subclasses;
 };

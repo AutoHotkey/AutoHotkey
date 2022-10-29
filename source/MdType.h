@@ -2,6 +2,10 @@
 
 #include "abi.h"
 
+struct ExprTokenType;
+struct ResultToken;
+struct IObject;
+
 enum class MdType : UINT8
 {
 	Void		= 0,
@@ -22,6 +26,7 @@ enum class MdType : UINT8
 	ResultType,
 	FResult,
 	NzIntWin32, // BOOL result where FALSE means failure and GetLastError() is applicable.
+	Params,
 	TypeMask	= 0xF,
 	BitsBase	= 99, // For encoding a small literal value to insert into the parameter list.
 	Optional	= 0x80,
@@ -60,6 +65,7 @@ template<> struct md_argtype<MdType::Object> { typedef IObject *t; };
 template<> struct md_argtype<MdType::Void> { typedef void t; };
 template<> struct md_argtype<MdType::Variant> { typedef ExprTokenType &t; };
 template<> struct md_argtype<MdType::Bool32> { typedef BOOL t; };
+template<> struct md_argtype<MdType::Params> { typedef VariantParams &t; };
 
 template<MdType T = MdType::Int32> struct md_outtype { typedef typename md_argtype<T>::t &t; };
 template<> struct md_outtype<MdType::String> { typedef StrRet &t; };
@@ -136,3 +142,35 @@ template<> struct md_retval<MdType::NzIntWin32> { typedef BOOL t; };
 #define md_func_x(...) md_func_decl(__VA_ARGS__)
 //#define md_func_x(...) md_func_data(__VA_ARGS__)
 #endif
+
+
+// For use reinterpreting member function pointers (not standard C++).
+template<typename T> constexpr void* cast_into_voidp(T in)
+{
+	union { T in; void *out; } u { in };
+	return u.out;
+}
+
+#define md_member_name_GET(base_name) get_##base_name
+#define md_member_name_SET(base_name) set_##base_name
+#define md_member_name_CALL(base_name) base_name
+
+// The member function pointer type can be inferred by the template, but we don't want that;
+// md_member_type() is used below to ensure the signature matches the metadata.
+#define md_member_type(class_name, ...) FResult (class_name::*)( MAP_LIST(md_arg_decl, __VA_ARGS__) )
+
+#define md_member(class_name, member_name, invoke_type, ...) \
+	 md_member_x(class_name, member_name, member_name, invoke_type, __VA_ARGS__)
+#define md_member_x(class_name, member_name, impl, invoke_type, ...) \
+	{ _T(#member_name), \
+		cast_into_voidp<md_member_type(class_name, __VA_ARGS__)>(&class_name::md_cat(md_member_name_,invoke_type)(impl)), \
+		IT_##invoke_type, \
+		{ MAP_LIST(md_arg_data, __VA_ARGS__) } }
+
+#define md_property_get(class_name, member_name, arg_type) \
+	md_member(class_name, member_name, GET, (Ret, arg_type, RetVal))
+#define md_property_set(class_name, member_name, arg_type) \
+	md_member(class_name, member_name, SET, (In, arg_type, Value))
+#define md_property(class_name, member_name, arg_type) \
+	md_property_get(class_name, member_name, arg_type), \
+	md_property_set(class_name, member_name, arg_type)
