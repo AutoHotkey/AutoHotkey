@@ -65,18 +65,21 @@ public:
 		P_Ptr,
 		// ComValueRef
 		P___Item,
-		// ComObjArray
-		M___Enum,
-		M_Clone,
-		M_MaxIndex,
-		M_MinIndex,
 	};
-	static ObjectMember sArrayMembers[], sRefMembers[], sValueMembers[];
+	static ObjectMember sRefMembers[], sValueMembers[];
+	static ObjectMemberMd sArrayMembers[];
+	
+	FResult SafeArray_Item(VariantParams &aParam, ExprTokenType *aNewValue, ResultToken *aResultToken);
+	FResult set_SafeArray_Item(ExprTokenType &aNewValue, VariantParams &aParam) { return SafeArray_Item(aParam, &aNewValue, nullptr); }
+	FResult get_SafeArray_Item(ResultToken &aResultToken, VariantParams &aParam) { return SafeArray_Item(aParam, nullptr, &aResultToken); }
+	
+	FResult SafeArray_Clone(IObject *&aRetVal);
+	FResult SafeArray_Enum(optl<int>, IObject *&aRetVal);
+	FResult SafeArray_MaxIndex(optl<UINT> aDims, int &aRetVal);
+	FResult SafeArray_MinIndex(optl<UINT> aDims, int &aRetVal);
 
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void SafeArrayInvoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void SafeArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	LPTSTR Type();
 	Object *Base();
 	IObject_DebugWriteProperty_Def;

@@ -587,7 +587,8 @@ Object *Object::DefineMetadataMembers(Object *obj, LPCTSTR aClassName, ObjectMem
 			if (member.invokeType == IT_GET)
 			{
 				prop->MinParams = func->mMinParams - 1;
-				prop->MaxParams = func->mParamCount - 1;
+				if (!func->mIsVariadic)
+					prop->MaxParams = func->mParamCount - 1;
 				prop->SetGetter(func);
 			}
 			else
