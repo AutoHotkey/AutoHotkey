@@ -52,13 +52,10 @@ FuncEntry g_BIF[] =
 	BIF1(ComObjType, 1, 2),
 	BIF1(ComObjValue, 1, 1),
 	BIF1(Cos, 1, 1),
-	BIFn(DetectHiddenText, 1, 1, BIF_SetBIV),
-	BIFn(DetectHiddenWindows, 1, 1, BIF_SetBIV),
 #ifdef ENABLE_DLLCALL
 	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
 	BIF1(Exp, 1, 1),
-	BIFn(FileEncoding, 1, 1, BIF_SetBIV),
 	BIF1(FileOpen, 2, 3),
 	BIFn(Floor, 1, 1, BIF_FloorCeil),
 	BIF1(Format, 1, NA),
@@ -122,9 +119,6 @@ FuncEntry g_BIF[] =
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
 	BIF1(RunWait, 1, 4, {4}),
-	BIFn(SetRegView, 1, 1, BIF_SetBIV),
-	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
-	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
 	BIF1(Sin, 1, 1),
 	BIF1(Sort, 1, 3),
 	BIFn(SoundGetInterface, 1, 3, BIF_Sound),

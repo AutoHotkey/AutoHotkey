@@ -53,6 +53,9 @@ md_func_v(Critical, (In_Opt, String, OnOffNumber))
 md_func(DateAdd, (In, String, DateTime), (In, Float64, Time), (In, String, TimeUnits), (Ret, String, RetVal))
 md_func(DateDiff, (In, String, DateTime1), (In, String, DateTime2), (In, String, TimeUnits), (Ret, Int64, RetVal))
 
+md_func_v(DetectHiddenText, (In, Bool32, Mode))
+md_func_v(DetectHiddenWindows, (In, Bool32, Mode))
+
 md_func(DirCopy, (In, String, Source), (In, String, Dest), (In_Opt, Int32, Overwrite))
 md_func(DirCreate, (In, String, Path))
 md_func(DirDelete, (In, String, Path), (In_Opt, Bool32, Recurse))
@@ -98,6 +101,7 @@ md_func(FileCreateShortcut, (In, String, Target), (In, String, LinkFile), (In_Op
 	(In_Opt, String, Args), (In_Opt, String, Description), (In_Opt, String, IconFile),
 	(In_Opt, String, ShortcutKey), (In_Opt, Int32, IconNumber), (In_Opt, Int32, RunState))
 md_func(FileDelete, (In, String, Pattern))
+md_func(FileEncoding, (In, String, Encoding))
 md_func_v(FileExist, (In, String, Pattern), (Ret, String, RetVal))
 md_func(FileGetAttrib, (In_Opt, String, Path), (Ret, String, RetVal))
 md_func(FileGetShortcut, (In, String, LinkFile), (Out_Opt, String, Target), (Out_Opt, String, WorkingDir),
@@ -236,10 +240,13 @@ md_func(SetDefaultMouseSpeed, (In, Int32, Speed))
 md_func(SetKeyDelay, (In_Opt, Int32, Delay), (In_Opt, Int32, Duration), (In_Opt, String, Mode))
 md_func(SetMouseDelay, (In, Int32, Delay), (In_Opt, String, Mode))
 md_func(SetNumLockState, (In_Opt, String, State))
+md_func(SetRegView, (In, String, RegView))
 md_func(SetScrollLockState, (In_Opt, String, State))
+md_func_v(SetStoreCapsLockMode, (In, Bool32, Mode))
 
 md_func(SetTimer, (In_Opt, Object, Function), (In_Opt, Int64, Period), (In_Opt, Int32, Priority))
 
+md_func(SetTitleMatchMode, (In, String, Mode))
 md_func(SetWinDelay, (In, Int32, Delay))
 md_func(SetWorkingDir, (In, String, Path))
 

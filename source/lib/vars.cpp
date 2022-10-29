@@ -260,21 +260,28 @@ BIV_DECL_R(BIV_TitleMatchMode)
 	_f_return_i(g->TitleMatchMode);
 }
 
+bif_impl FResult SetTitleMatchMode(StrArg aMode)
+{
+	auto mode = Line::ConvertTitleMatchMode(aMode);
+	switch (mode)
+	{
+	case FIND_FAST:
+	case FIND_SLOW:
+		g->TitleFindFast = (mode == FIND_FAST);
+		return OK;
+	case MATCHMODE_INVALID:
+		return FR_E_ARG(0);
+	default:
+		g->TitleMatchMode = mode;
+		return OK;
+	}
+}
+
 BIV_DECL_W(BIV_TitleMatchMode_Set)
 {
-	LPTSTR aBuf = BivRValueToString();
-	switch (Line::ConvertTitleMatchMode(aBuf))
-	{
-	case FIND_IN_LEADING_PART: g->TitleMatchMode = FIND_IN_LEADING_PART; break;
-	case FIND_ANYWHERE: g->TitleMatchMode = FIND_ANYWHERE; break;
-	case FIND_REGEX: g->TitleMatchMode = FIND_REGEX; break;
-	case FIND_EXACT: g->TitleMatchMode = FIND_EXACT; break;
-	// For simplicity, this function handles both variables.
-	case FIND_FAST: g->TitleFindFast = true; break;
-	case FIND_SLOW: g->TitleFindFast = false; break;
-	default:
-		_f_throw_value(ERR_INVALID_VALUE, aBuf);
-	}
+	auto value = BivRValueToString();
+	if (SetTitleMatchMode(value) != OK)
+		_f_throw_value(ERR_INVALID_VALUE, value);
 }
 
 BIV_DECL_R(BIV_TitleMatchModeSpeed)
@@ -293,6 +300,11 @@ BIV_DECL_W(BIV_DetectHiddenWindows_Set)
 	g->DetectHiddenWindows = BivRValueToBOOL();
 }
 
+bif_impl void DetectHiddenWindows(BOOL aMode)
+{
+	g->DetectHiddenWindows = aMode;
+}
+
 BIV_DECL_R(BIV_DetectHiddenText)
 {
 	_f_return_b(g->DetectHiddenText);
@@ -301,6 +313,11 @@ BIV_DECL_R(BIV_DetectHiddenText)
 BIV_DECL_W(BIV_DetectHiddenText_Set)
 {
 	g->DetectHiddenText = BivRValueToBOOL();
+}
+
+bif_impl void DetectHiddenText(BOOL aMode)
+{
+	g->DetectHiddenText = aMode;
 }
 
 int& BIV_xDelay(LPTSTR aVarName)
@@ -402,6 +419,11 @@ BIV_DECL_R(BIV_StoreCapsLockMode)
 BIV_DECL_W(BIV_StoreCapsLockMode_Set)
 {
 	g->StoreCapslockMode = BivRValueToBOOL();
+}
+
+bif_impl void SetStoreCapsLockMode(BOOL aMode)
+{
+	g->StoreCapslockMode = aMode;
 }
 
 BIV_DECL_R(BIV_Hotkey)
@@ -533,13 +555,20 @@ BIV_DECL_R(BIV_FileEncoding)
 	_f_return_p(enc);
 }
 
+bif_impl FResult FileEncoding(StrArg aEncoding)
+{
+	UINT new_encoding = Line::ConvertFileEncoding(aEncoding);
+	if (new_encoding == -1)
+		return FR_E_ARG(0);
+	g->Encoding = new_encoding;
+	return OK;
+}
+
 BIV_DECL_W(BIV_FileEncoding_Set)
 {
-	LPTSTR aBuf = BivRValueToString();
-	UINT new_encoding = Line::ConvertFileEncoding(aBuf);
-	if (new_encoding == -1)
-		_f_throw_value(ERR_INVALID_VALUE, aBuf);
-	g->Encoding = new_encoding;
+	auto value = BivRValueToString();
+	if (FileEncoding(value) != OK)
+		_f_throw_value(ERR_INVALID_VALUE, value);
 }
 
 
@@ -556,17 +585,24 @@ BIV_DECL_R(BIV_RegView)
 	_f_return_p(value);
 }
 
-BIV_DECL_W(BIV_RegView_Set)
+bif_impl FResult SetRegView(StrArg aRegView)
 {
-	LPTSTR aBuf = BivRValueToString();
-	DWORD reg_view = Line::RegConvertView(aBuf);
+	DWORD reg_view = Line::RegConvertView(aRegView);
 	// Validate the parameter even if it's not going to be used.
 	if (reg_view == -1)
-		_f_throw_value(ERR_INVALID_VALUE, aBuf);
+		return FR_E_ARG(0);
 	// Since these flags cause the registry functions to fail on Win2k and have no effect on
 	// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView = "Default".
 	if (IsOS64Bit())
 		g->RegView = reg_view;
+	return OK;
+}
+
+BIV_DECL_W(BIV_RegView_Set)
+{
+	auto value = BivRValueToString();
+	if (SetRegView(value) != OK)
+		_f_throw_value(ERR_INVALID_VALUE, value);
 }
 
 
@@ -1400,14 +1436,4 @@ BIV_DECL_R(BIV_TimeIdle)
 			_f_return_empty; // Cause any attempt at math to throw.
 	}
 	_f_return_i(GetTickCount() - time_last_input);
-}
-
-
-
-BIF_DECL(BIF_SetBIV)
-{
-	static VirtualVar::Setter sBiv[] = { &BIV_DetectHiddenText_Set, &BIV_DetectHiddenWindows_Set, &BIV_FileEncoding_Set, &BIV_RegView_Set, &BIV_StoreCapsLockMode_Set, &BIV_TitleMatchMode_Set };
-	auto biv = sBiv[_f_callee_id];
-	_f_set_retval_p(_T(""), 0);
-	biv(aResultToken, nullptr, *aParam[0]);
 }

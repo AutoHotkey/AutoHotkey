@@ -656,8 +656,6 @@ enum BuiltInFunctionID {
 	FID_RegRead = 0, FID_RegWrite, FID_RegCreateKey, FID_RegDelete, FID_RegDeleteKey,
 	FID_SoundGetVolume = 0, FID_SoundGetMute, FID_SoundGetName, FID_SoundGetInterface, FID_SoundSetVolume, FID_SoundSetMute,
 	FID_RunWait = 0, FID_ClipWait, FID_KeyWait, FID_WinWait, FID_WinWaitClose, FID_WinWaitActive, FID_WinWaitNotActive,
-	// For BIF_SetBIV (functions corresponding to built-in vars): keep the order of these in sync with the array in BIF_SetBIV.
-	FID_DetectHiddenText = 0, FID_DetectHiddenWindows, FID_FileEncoding, FID_SetRegView, FID_SetStoreCapsLockMode, FID_SetTitleMatchMode,
 	// Hotkey/HotIf/...
 	FID_HotIfWinActive = HOT_IF_ACTIVE, FID_HotIfWinNotActive = HOT_IF_NOT_ACTIVE,
 		FID_HotIfWinExist = HOT_IF_EXIST, FID_HotIfWinNotExist = HOT_IF_NOT_EXIST,
@@ -1022,7 +1020,7 @@ public:
 		default: return _T("");  // Make it be the empty string for REG_NONE and anything else.
 		}
 	}
-	static DWORD RegConvertView(LPTSTR aBuf)
+	static DWORD RegConvertView(LPCTSTR aBuf)
 	{
 		if (!_tcsicmp(aBuf, _T("Default")))
 			return 0;
@@ -1060,7 +1058,7 @@ public:
 		return MIXERCONTROL_CONTROLTYPE_INVALID;
 	}
 
-	static TitleMatchModes ConvertTitleMatchMode(LPTSTR aBuf)
+	static TitleMatchModes ConvertTitleMatchMode(LPCTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return MATCHMODE_INVALID;
 		if (*aBuf == '1' && !*(aBuf + 1)) return FIND_IN_LEADING_PART;
@@ -3296,8 +3294,6 @@ BIF_DECL(BIF_SplitPath);
 BIF_DECL(BIF_CaretGetPos);
 BIF_DECL(BIF_MenuSelect);
 BIF_DECL(BIF_RunWait);
-
-BIF_DECL(BIF_SetBIV);
 
 
 BOOL ResultToBOOL(LPTSTR aResult);
