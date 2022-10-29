@@ -47,14 +47,14 @@ md_func(ControlSetText, (In, String, NewText), MD_CONTROL_ARGS)
 md_func(ControlShow, MD_CONTROL_ARGS)
 md_func(ControlShowDropDown, MD_CONTROL_ARGS)
 
-md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
-md_func_v(Critical, (In_Opt, String, OnOffNumber))
+md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo), (Ret, String, RetVal))
+md_func_v(Critical, (In_Opt, String, OnOffNumber), (Ret, Int32, RetVal))
 
 md_func(DateAdd, (In, String, DateTime), (In, Float64, Time), (In, String, TimeUnits), (Ret, String, RetVal))
 md_func(DateDiff, (In, String, DateTime1), (In, String, DateTime2), (In, String, TimeUnits), (Ret, Int64, RetVal))
 
-md_func_v(DetectHiddenText, (In, Bool32, Mode))
-md_func_v(DetectHiddenWindows, (In, Bool32, Mode))
+md_func_v(DetectHiddenText, (In, Bool32, Mode), (Ret, Bool32, RetVal))
+md_func_v(DetectHiddenWindows, (In, Bool32, Mode), (Ret, Bool32, RetVal))
 
 md_func(DirCopy, (In, String, Source), (In, String, Dest), (In_Opt, Int32, Overwrite))
 md_func(DirCreate, (In, String, Path))
@@ -101,7 +101,7 @@ md_func(FileCreateShortcut, (In, String, Target), (In, String, LinkFile), (In_Op
 	(In_Opt, String, Args), (In_Opt, String, Description), (In_Opt, String, IconFile),
 	(In_Opt, String, ShortcutKey), (In_Opt, Int32, IconNumber), (In_Opt, Int32, RunState))
 md_func(FileDelete, (In, String, Pattern))
-md_func(FileEncoding, (In, String, Encoding))
+md_func(FileEncoding, (In, String, Encoding), (Ret, Variant, RetVal))
 md_func_v(FileExist, (In, String, Pattern), (Ret, String, RetVal))
 md_func(FileGetAttrib, (In_Opt, String, Path), (Ret, String, RetVal))
 md_func(FileGetShortcut, (In, String, LinkFile), (Out_Opt, String, Target), (Out_Opt, String, WorkingDir),
@@ -156,7 +156,7 @@ md_func(KeyHistory, (In_Opt, Int32, MaxEvents))
 md_func(KeyWait, (In, String, KeyName), (In_Opt, String, Options), (Ret, Bool32, RetVal))
 
 md_func_v(ListHotkeys, md_arg_none)
-md_func_v(ListLines, (In_Opt, Int32, Mode))
+md_func_v(ListLines, (In_Opt, Int32, Mode), (Ret, Int32, RetVal))
 md_func_v(ListVars, md_arg_none)
 
 md_func(ListViewGetContent, (In_Opt, String, Options), MD_CONTROL_ARGS, (Ret, Variant, RetVal))
@@ -225,29 +225,29 @@ md_func_v(RunAs, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, St
 md_func_v(Send, (In, String, Keys))
 md_func_v(SendEvent, (In, String, Keys))
 md_func_v(SendInput, (In, String, Keys))
-md_func(SendLevel, (In, Int32, Level))
+md_func(SendLevel, (In, Int32, Level), (Ret, Int32, RetVal))
 
 #undef SendMessage
 md_func_x(SendMessage, ScriptSendMessage, FResult, (In, UInt32, Msg), (In_Opt, Variant, wParam), (In_Opt, Variant, lParam), MD_CONTROL_ARGS_OPT, (In_Opt, Int32, Timeout), (Ret, UIntPtr, RetVal))
 
-md_func(SendMode, (In, String, Mode))
+md_func(SendMode, (In, String, Mode), (Ret, Variant, RetVal))
 md_func_v(SendPlay, (In, String, Keys))
 md_func_v(SendText, (In, String, Text))
 
 md_func(SetCapsLockState, (In_Opt, String, State))
-md_func(SetControlDelay, (In, Int32, Delay))
-md_func(SetDefaultMouseSpeed, (In, Int32, Speed))
+md_func(SetControlDelay, (In, Int32, Delay), (Ret, Int32, RetVal))
+md_func(SetDefaultMouseSpeed, (In, Int32, Speed), (Ret, Int32, RetVal))
 md_func(SetKeyDelay, (In_Opt, Int32, Delay), (In_Opt, Int32, Duration), (In_Opt, String, Mode))
-md_func(SetMouseDelay, (In, Int32, Delay), (In_Opt, String, Mode))
+md_func(SetMouseDelay, (In, Int32, Delay), (In_Opt, String, Mode), (Ret, Int32, RetVal))
 md_func(SetNumLockState, (In_Opt, String, State))
-md_func(SetRegView, (In, String, RegView))
+md_func(SetRegView, (In, String, RegView), (Ret, Variant, RetVal))
 md_func(SetScrollLockState, (In_Opt, String, State))
-md_func_v(SetStoreCapsLockMode, (In, Bool32, Mode))
+md_func_v(SetStoreCapsLockMode, (In, Bool32, Mode), (Ret, Bool32, RetVal))
 
 md_func(SetTimer, (In_Opt, Object, Function), (In_Opt, Int64, Period), (In_Opt, Int32, Priority))
 
-md_func(SetTitleMatchMode, (In, String, Mode))
-md_func(SetWinDelay, (In, Int32, Delay))
+md_func(SetTitleMatchMode, (In, String, Mode), (Ret, Variant, RetVal))
+md_func(SetWinDelay, (In, Int32, Delay), (Ret, Int32, RetVal))
 md_func(SetWorkingDir, (In, String, Path))
 
 md_func(Shutdown, (In, Int32, Flags))

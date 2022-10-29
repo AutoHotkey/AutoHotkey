@@ -799,8 +799,9 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 
 
 
-bif_impl void ListLines(optl<int> aMode)
+bif_impl void ListLines(optl<int> aMode, int &aRetVal)
 {
+	aRetVal = g->ListLinesIsEnabled;
 	if (!aMode.has_value())
 	{
 		ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
@@ -2547,8 +2548,9 @@ bif_impl void ScriptSleep(int aDelay)
 
 
 
-bif_impl void Critical(optl<StrArg> aSetting)
+bif_impl void Critical(optl<StrArg> aSetting, int &aRetVal)
 {
+	aRetVal = g->ThreadIsCritical ? g->PeekFrequency : 0;
 	// v1.0.46: When the current thread is critical, have the script check messages less often to
 	// reduce situations where an OnMessage or GUI message must be discarded due to "thread already
 	// running".  Using 16 rather than the default of 5 solves reliability problems in a custom-menu-draw
