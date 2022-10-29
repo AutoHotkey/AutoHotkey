@@ -1987,7 +1987,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 					this_formal_param.var->UpdateAlias(ref); // Set mAliasFor and mObject.
 					continue;
 				}
-				aResultToken.ParamError(j, &token, _T("variable reference"), mName);
+				aResultToken.ParamError(j - (mClass ? 1 : 0), &token, _T("variable reference"), mName);
 				goto free_and_return;
 			}
 			//else // This parameter is passed "by value".
