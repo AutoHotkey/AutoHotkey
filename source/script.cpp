@@ -3912,6 +3912,8 @@ ResultType Script::UpdateOrCreateTimer(IObject *aCallback
 			timer->mPeriod = (DWORD)aPeriod;
 			timer->mRunOnlyOnce = false;
 		}
+		if (timer->mPeriod == 1)
+			timer->mPeriod = 0; // Allow execution within the same tick (though not guaranteed).
 	}
 
 	if (aUpdatePriority)
