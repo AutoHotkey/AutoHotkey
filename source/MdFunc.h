@@ -23,4 +23,5 @@ public:
 
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 	bool ArgIsOutputVar(int aIndex) override;
+	bool ArgIsOptional(int aIndex) override;
 };

@@ -552,6 +552,30 @@ bool MdFunc::ArgIsOutputVar(int aIndex)
 }
 
 
+bool MdFunc::ArgIsOptional(int aIndex)
+{
+	auto atp = mArgType;
+	for (int ai = 0; ai < mArgSlots; ++ai, ++atp, --aIndex)
+	{
+		bool opt = false;
+		for (; MdType_IsMod(*atp); ++atp)
+		{
+			if (*atp == MdType::Optional)
+				opt = true;
+			else if (*atp == MdType::RetVal)
+				++aIndex;
+		}
+		if (aIndex == 0)
+			return opt;
+#ifndef _WIN64
+		if (MdType_Is64bit(*atp))
+			++ai;
+#endif
+	}
+	return false;
+}
+
+
 Object *Object::DefineMetadataMembers(Object *obj, LPCTSTR aClassName, ObjectMemberMd aMember[], int aMemberCount)
 {
 	if (aMemberCount)

@@ -2557,7 +2557,7 @@ void Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType 
 		{
 			int param = ParamIndexToInt(0);
 			if (param > 0 && (param <= mParamCount || mIsVariadic))
-				_o_return(param > mMinParams);
+				_o_return(ArgIsOptional(param-1));
 			else
 				_o_throw_param(0);
 		}
