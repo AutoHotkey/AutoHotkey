@@ -157,11 +157,16 @@ FResult InputObject::get_On(IObject *&aRetVal, IObject *&aOn)
 }
 
 
-FResult InputObject::set_On(ExprTokenType &aValue, IObject *&aOn)
+FResult InputObject::set_On(ExprTokenType &aValue, IObject *&aOn, int aValidParamCount)
 {
 	auto obj = TokenToObject(aValue);
 	if (obj)
+	{
+		auto fr = ValidateFunctor(obj, aValidParamCount);
+		if (fr != OK)
+			return fr;
 		obj->AddRef();
+	}
 	else if (!TokenIsEmptyString(aValue))
 		return FTypeError(_T("object"), aValue);
 	auto prev = aOn;

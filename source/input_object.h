@@ -5,7 +5,7 @@ class InputObject : public Object
 	input_type input;
 	
 	FResult get_On(IObject *&aRetVal, IObject *&aOn);
-	FResult set_On(ExprTokenType &aValue, IObject *&aOn);
+	FResult set_On(ExprTokenType &aValue, IObject *&aOn, int aValidParamCount);
 	
 public:
 	IObject *onEnd = nullptr, *onKeyDown = nullptr, *onChar = nullptr, *onKeyUp = nullptr;
@@ -44,17 +44,17 @@ public:
 	FResult get_Input(StrRet &aRetVal);
 	FResult get_Match(StrRet &aRetVal);
 	
-	#define ONX_OPTION(X) \
+	#define ONX_OPTION(X, N) \
 		FResult get_On##X(IObject *&aRetVal) { \
 			return get_On(aRetVal, on##X); \
 		} \
 		FResult set_On##X(ExprTokenType &aValue) { \
-			return set_On(aValue, on##X); \
+			return set_On(aValue, on##X, N); \
 		}
-	ONX_OPTION(End);
-	ONX_OPTION(Char);
-	ONX_OPTION(KeyDown);
-	ONX_OPTION(KeyUp);
+	ONX_OPTION(End, 1);
+	ONX_OPTION(Char, 2);
+	ONX_OPTION(KeyDown, 3);
+	ONX_OPTION(KeyUp, 3);
 	#undef ONX_OPTION
 	
 	#define BOOL_OPTION(OPT) \
