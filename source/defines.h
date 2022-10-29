@@ -111,6 +111,8 @@ enum ResultType {FAIL = 0, OK, WARN = OK, CRITICAL_ERROR  // Some things might r
 	, FAIL_OR_OK // For LineError/RuntimeError, error is continuable.
 };
 
+typedef HRESULT FResult;
+
 enum ExcptModeType {EXCPTMODE_NONE = 0
 	//, EXCPTMODE_TRY = 1 // Currently unused: Try block present.
 	, EXCPTMODE_CATCH = 2 // Exception will be suppressed or caught.

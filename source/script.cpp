@@ -52,8 +52,6 @@ FuncEntry g_BIF[] =
 	BIF1(ComObjType, 1, 2),
 	BIF1(ComObjValue, 1, 1),
 	BIF1(Cos, 1, 1),
-	BIF1(DateAdd, 3, 3),
-	BIF1(DateDiff, 3, 3),
 	BIFn(DetectHiddenText, 1, 1, BIF_SetBIV),
 	BIFn(DetectHiddenWindows, 1, 1, BIF_SetBIV),
 #ifdef ENABLE_DLLCALL

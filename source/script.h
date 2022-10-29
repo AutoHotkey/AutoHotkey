@@ -3246,8 +3246,6 @@ BIF_DECL(BIF_ATan);
 BIF_DECL(BIF_Exp);
 BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_MinMax);
-BIF_DECL(BIF_DateAdd);
-BIF_DECL(BIF_DateDiff);
 BIF_DECL(BIF_Hotkey);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.

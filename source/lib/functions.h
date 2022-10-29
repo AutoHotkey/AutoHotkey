@@ -50,6 +50,9 @@ md_func(ControlShowDropDown, MD_CONTROL_ARGS)
 md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
 md_func_v(Critical, (In_Opt, String, OnOffNumber))
 
+md_func(DateAdd, (In, String, DateTime), (In, Float64, Time), (In, String, TimeUnits), (Ret, String, RetVal))
+md_func(DateDiff, (In, String, DateTime1), (In, String, DateTime2), (In, String, TimeUnits), (Ret, Int64, RetVal))
+
 md_func(DirCopy, (In, String, Source), (In, String, Dest), (In_Opt, Int32, Overwrite))
 md_func(DirCreate, (In, String, Path))
 md_func(DirDelete, (In, String, Path), (In_Opt, Bool32, Recurse))

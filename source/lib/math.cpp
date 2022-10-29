@@ -371,18 +371,17 @@ BIF_DECL(BIF_Random)
 
 
 
-BIF_DECL(BIF_DateAdd)
+FResult DateAdd(StrArg aDateTime, double aTime, StrArg aTimeUnits, StrRet &aRetVal)
 {
 	FILETIME ft;
-	if (!YYYYMMDDToFileTime(ParamIndexToString(0, _f_number_buf), ft))
-		_f_throw_value(ERR_PARAM1_INVALID);
+	if (!YYYYMMDDToFileTime(aDateTime, ft))
+		return FR_E_ARG(0);
 
 	// Use double to support a floating point value for days, hours, minutes, etc:
-	double nUnits;
-	nUnits = TokenToDouble(*aParam[1]);
+	double nUnits = aTime;
 
-	// Convert to 10ths of a microsecond (the units of the FILETIME struct):
-	switch (ctoupper(*TokenToString(*aParam[2])))
+	// Convert to seconds:
+	switch (ctoupper(*aTimeUnits))
 	{
 	case 'S': // Seconds
 		break;
@@ -396,7 +395,7 @@ BIF_DECL(BIF_DateAdd)
 		nUnits *= ((double)60 * 60 * 24);
 		break;
 	default: // Invalid
-		_f_throw_param(2);
+		return FR_E_ARG(2);
 	}
 	// Convert ft struct to a 64-bit variable (maybe there's some way to avoid these conversions):
 	ULARGE_INTEGER ul;
@@ -411,31 +410,28 @@ BIF_DECL(BIF_DateAdd)
 	// Convert back into ft struct:
 	ft.dwLowDateTime = ul.LowPart;
 	ft.dwHighDateTime = ul.HighPart;
-	_f_return_p(FileTimeToYYYYMMDD(_f_retval_buf, ft, false));
+	aRetVal.SetTemp(FileTimeToYYYYMMDD(aRetVal.CallerBuf(), ft, false));
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_DateDiff)
+FResult DateDiff(StrArg aTime1, StrArg aTime2, StrArg aTimeUnits, __int64 &aRetVal)
 {
-	LPTSTR error_message;
+	FResult fr;
 	// If either parameter is blank, it will default to the current time:
-	__int64 time_until; // Declaring separate from initializing avoids compiler warning when not inside a block.
-	TCHAR number_buf[MAX_NUMBER_SIZE]; // Additional buf used in case both parameters are pure numbers.
-	time_until = YYYYMMDDSecondsUntil(
-		ParamIndexToString(1, _f_number_buf),
-		ParamIndexToString(0, number_buf),
-		error_message);
-	if (error_message) // Usually caused by an invalid component in the date-time string.
-		_f_throw(error_message);
-	switch (ctoupper(*ParamIndexToString(2)))
+	__int64 time_until = YYYYMMDDSecondsUntil(aTime2, aTime1, fr);
+	if (fr != OK) // Usually caused by an invalid component in the date-time string.
+		return fr;
+	switch (ctoupper(*aTimeUnits))
 	{
 	case 'S': break;
 	case 'M': time_until /= 60; break; // Minutes
 	case 'H': time_until /= 60 * 60; break; // Hours
 	case 'D': time_until /= 60 * 60 * 24; break; // Days
 	default: // Invalid
-		_f_throw_param(2);
+		return FR_E_ARG(2);
 	}
-	_f_return_i(time_until);
+	aRetVal = time_until;
+	return OK;
 }

@@ -259,7 +259,7 @@ LPTSTR SystemTimeToYYYYMMDD(LPTSTR aBuf, SYSTEMTIME &aTime)
 
 
 
-__int64 YYYYMMDDSecondsUntil(LPCTSTR aYYYYMMDDStart, LPCTSTR aYYYYMMDDEnd, LPTSTR &aFailed)
+__int64 YYYYMMDDSecondsUntil(LPCTSTR aYYYYMMDDStart, LPCTSTR aYYYYMMDDEnd, FResult &aStatus)
 // Returns the number of seconds from aYYYYMMDDStart until aYYYYMMDDEnd.
 // If aYYYYMMDDStart is blank, the current time will be used in its place.
 {
@@ -271,7 +271,7 @@ __int64 YYYYMMDDSecondsUntil(LPCTSTR aYYYYMMDDStart, LPCTSTR aYYYYMMDDEnd, LPTST
 	{
 		if (!YYYYMMDDToFileTime(aYYYYMMDDStart, ftStart))
 		{
-			aFailed = ERR_PARAM2_INVALID;
+			aStatus = FR_E_ARG(1);
 			return 0;
 		}
 	}
@@ -284,7 +284,7 @@ __int64 YYYYMMDDSecondsUntil(LPCTSTR aYYYYMMDDStart, LPCTSTR aYYYYMMDDEnd, LPTST
 	{
 		if (!YYYYMMDDToFileTime(aYYYYMMDDEnd, ftEnd))
 		{
-			aFailed = ERR_PARAM1_INVALID;
+			aStatus = FR_E_ARG(0);
 			return 0;
 		}
 	}
@@ -293,7 +293,7 @@ __int64 YYYYMMDDSecondsUntil(LPCTSTR aYYYYMMDDStart, LPCTSTR aYYYYMMDDEnd, LPTST
 		GetSystemTimeAsFileTime(&ftNowUTC);
 		FileTimeToLocalFileTime(&ftNowUTC, &ftEnd);  // Convert UTC to local time.
 	}
-	aFailed = nullptr;  // Indicate success.
+	aStatus = OK;  // Indicate success.
 	return FileTimeSecondsUntil(&ftStart, &ftEnd);
 }
 

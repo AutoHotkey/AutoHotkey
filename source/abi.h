@@ -5,8 +5,6 @@
 // Marks functions which are called by script, for clarity and possible future use.
 #define bif_impl
 
-typedef HRESULT FResult;
-
 constexpr int FR_OUR_FLAG = 0x20000000;
 constexpr int FR_INT_FLAG = 0x40000000;
 constexpr int FR_FACILITY_CONTROL = 0;
