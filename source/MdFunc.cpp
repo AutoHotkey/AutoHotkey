@@ -261,7 +261,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		{
 			if (!opt)
 			{
-				result = aResultToken.Error(ERR_PARAM_REQUIRED);
+				result = aResultToken.ParamError(pi, nullptr);
 				goto end;
 			}
 			// Pass nullptr for this optional parameter to indicate that it has been omitted.
