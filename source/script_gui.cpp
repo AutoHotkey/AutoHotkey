@@ -416,6 +416,8 @@ void GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTy
 			int& margin = member == P_MarginX ? mMarginX : mMarginY;
 			if (IS_INVOKE_SET)
 			{
+				if (!ParamIndexIsNumeric(0))
+					_f_throw_type(_T("Number"), *aParam[0]);
 				margin = Scale(ParamIndexToInt(0)); // Seems okay to allow negative margins.
 				return;
 			}
