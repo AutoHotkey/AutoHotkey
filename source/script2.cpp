@@ -3013,16 +3013,18 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	if (get_count)
 	{
 		int result; // Must be signed to support writing a col count of -1 to aOutputVar.
+		DWORD_PTR msg_result;
 		if (include_focused_only) // Listed first so that it takes precedence over include_selected_only.
 		{
-			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, -1, LVNI_FOCUSED, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
+			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, -1, LVNI_FOCUSED, SMTO_ABORTIFHUNG, 2000, &msg_result)) // Timed out or failed.
 				return SetErrorLevelOrThrow();
-			++result; // i.e. Set it to 0 if not found, or the 1-based row-number otherwise.
+			result = (int)msg_result + 1; // i.e. Set it to 0 if not found, or the 1-based row-number otherwise.
 		}
 		else if (include_selected_only)
 		{
-			if (!SendMessageTimeout(aHwnd, LVM_GETSELECTEDCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
+			if (!SendMessageTimeout(aHwnd, LVM_GETSELECTEDCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &msg_result)) // Timed out or failed.
 				return SetErrorLevelOrThrow();
+			result = (int)msg_result;
 		}
 		else if (col_option) // "Count Col" returns the number of columns.
 			result = (int)col_count;
