@@ -944,16 +944,18 @@ bif_impl FResult ListViewGetContent(optl<StrArg> aOpt, CONTROL_PARAMETERS_DECL, 
 	if (get_count)
 	{
 		int result; // Must be signed to support writing a col count of -1 to aOutputVar.
+		DWORD_PTR msg_result;
 		if (include_focused_only) // Listed first so that it takes precedence over include_selected_only.
 		{
-			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, -1, LVNI_FOCUSED, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
+			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, -1, LVNI_FOCUSED, SMTO_ABORTIFHUNG, 2000, &msg_result)) // Timed out or failed.
 				return FR_E_WIN32;
-			++result; // i.e. Set it to 0 if not found, or the 1-based row-number otherwise.
+			result = (int)msg_result + 1; // i.e. Set it to 0 if not found, or the 1-based row-number otherwise.
 		}
 		else if (include_selected_only)
 		{
-			if (!SendMessageTimeout(aHwnd, LVM_GETSELECTEDCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
+			if (!SendMessageTimeout(aHwnd, LVM_GETSELECTEDCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &msg_result)) // Timed out or failed.
 				return FR_E_WIN32;
+			result = (int)msg_result;
 		}
 		else if (col_option) // "Count Col" returns the number of columns.
 			result = (int)col_count;
@@ -1061,7 +1063,7 @@ bif_impl FResult ListViewGetContent(optl<StrArg> aOpt, CONTROL_PARAMETERS_DECL, 
 			//    mouse/key lag would occur).
 			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, next, include_focused_only ? LVNI_FOCUSED : LVNI_SELECTED
 				, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&next) // Timed out or failed.
-				|| next == -1) // No next item.  Relies on short-circuit boolean order.
+				|| (int)next == -1) // No next item.  Relies on short-circuit boolean order.
 				break; // End of estimation phase (if estimate is too small, the text retrieval below will truncate it).
 		}
 		else
@@ -1106,7 +1108,7 @@ bif_impl FResult ListViewGetContent(optl<StrArg> aOpt, CONTROL_PARAMETERS_DECL, 
 			// Fix for v1.0.37.01: Prevent an infinite loop (for details, see comments in the estimation phase above).
 			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, next, include_focused_only ? LVNI_FOCUSED : LVNI_SELECTED
 				, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&next) // Timed out or failed.
-				|| next == -1) // No next item.
+				|| (int)next == -1) // No next item.
 				break; // See comment above for why unconditional break vs. continue.
 		}
 		else // Retrieve every row, so the "next" row becomes the "i" index.
