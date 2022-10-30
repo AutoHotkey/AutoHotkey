@@ -11211,6 +11211,13 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 						}
 					}
 					#endif
+					if (func && func->mBIF == &BIF_IsSet // IsSet()
+						&& this_infix[-1].symbol == SYM_DYNAMIC // Built-in var or double-deref.
+						&& !SYM_DYNAMIC_IS_DOUBLE_DEREF(this_infix[-1])) // Not double-deref.
+					{
+						// Enable this built-in var to be passed to IsSet().
+						this_infix[-1].symbol = SYM_VAR;
+					}
 
 					// This is SYM_COMMA or SYM_CPAREN/BRACKET/BRACE at the end of a parameter.
 					++in_param_list->param_count;

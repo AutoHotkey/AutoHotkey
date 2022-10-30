@@ -250,6 +250,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 					}
 					break;
 				case VAR_BUILTIN: // v1.0.48.02: Ensure it's VAR_BUILTIN prior to below because mBIV is a union with mCapacity.
+					if (this_postfix[1].symbol == SYM_FUNC && this_postfix[1].deref->func && this_postfix[1].deref->func->mBIF == &BIF_IsSet)
+					{
+						// Instead of evaluating this built-in var and passing its value to IsSet(), which would
+						// throw an exception, directly yield a result of 1 (true) to indicate the var is set.
+						ASSERT(this_postfix[1].deref->param_count == 1);
+						this_postfix++; // The pending call to IsSet() is fully handled by the next two lines.
+						this_token.value_int64 = true;
+						this_token.symbol = SYM_INTEGER;
+						goto push_this_token;
+					}
 					if (this_token.var->mBIV == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
 					{
 						this_token.value_int64 = g->mLoopIteration;
