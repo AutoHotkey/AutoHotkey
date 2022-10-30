@@ -16108,11 +16108,7 @@ BIF_DECL(BIF_IsByRef)
 BIF_DECL(BIF_IsSet)
 {
 	if (aParam[0]->symbol != SYM_VAR)
-	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
 		_f_throw(ERR_PARAM1_INVALID);
-	}
 	else
 		aResultToken.value_int64 = !(aParam[0]->var->IsUninitializedNormalVar());
 }
