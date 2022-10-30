@@ -3093,6 +3093,7 @@ public:
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	ResultType Win32Error(DWORD aError = GetLastError(), ResultType aErrorType = FAIL_OR_OK);
 	
+	Line *GetLine(LPCTSTR aFile, int aNumber, Line *aCandidate = nullptr);
 	ResultType UnhandledException(Line* aLine, ResultType aErrorType = FAIL);
 	static void FreeExceptionToken(ResultToken*& aToken);
 

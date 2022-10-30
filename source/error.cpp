@@ -1008,6 +1008,55 @@ ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], in
 
 
 
+Line *Script::GetLine(LPCTSTR aFile, int aNumber, Line *aCandidate)
+{
+	int file_index;
+	for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
+		if (!_tcsicmp(aFile, Line::sSourceFile[file_index]))
+			break;
+	if (!aCandidate || aCandidate->mFileIndex != file_index || aCandidate->mLineNumber != aNumber) // Keep aLine if it matches, in case of multiple Lines with the same number.
+	{
+		Line *line;
+		for (line = mFirstLine;
+			line && (line->mLineNumber != aNumber || line->mFileIndex != file_index
+				|| !line->mArgc && line->mNextLine && line->mNextLine->mLineNumber == aNumber); // Skip any same-line block-begin/end, try, else or finally.
+			line = line->mNextLine);
+		if (line)
+			return line;
+	}
+	return aCandidate;
+}
+
+
+
+bif_impl FResult _ScriptGetLines(StrArg aFilename, int aLineNumber, optl<int> aRange, StrRet &aRetVal)
+{
+	int range = aRange.value_or(0);
+	Line *line = g_script.GetLine(aFilename, aLineNumber);
+	if (!line)
+		return OK; // Empty
+	// Determine the range of lines to be shown:
+	Line *line_start = line, *line_end = line;
+	for (int i = range
+		; i < 0 && line_start->mPrevLine != NULL
+		; ++i, line_start = line_start->mPrevLine);
+	for (int i = range <= 0 ? -range : range - 1
+		; i > 0 && line_end->mNextLine != NULL
+		; --i, line_end = line_end->mNextLine);
+	// Output
+	TCHAR buf[32768]; // Arbitrary maximum
+	auto cp = buf;
+	for (auto line = line_start; ; line = line->mNextLine)
+	{
+		cp = line->ToText(cp, _countof(buf) - int(cp - buf), true);
+		if (line == line_end)
+			break;
+	}
+	return aRetVal.Copy(buf, cp - buf);
+}
+
+
+
 ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 {
 	LPCTSTR message = _T(""), extra = _T("");
@@ -1069,23 +1118,9 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 			LineNumberType line_no = (LineNumberType)TokenToInt64(t);
 			if (ex->GetOwnProp(t, _T("File")))
 			{
-				LPCTSTR file = TokenToString(t);
 				// Locate the line by number and file index, then display that line instead
 				// of the caller supplied one since it's probably more relevant.
-				int file_index;
-				for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
-					if (!_tcsicmp(file, Line::sSourceFile[file_index]))
-						break;
-				if (!aLine || aLine->mFileIndex != file_index || aLine->mLineNumber != line_no) // Keep aLine if it matches, in case of multiple Lines with the same number.
-				{
-					Line *line;
-					for (line = mFirstLine;
-						line && (line->mLineNumber != line_no || line->mFileIndex != file_index
-							|| !line->mArgc && line->mNextLine && line->mNextLine->mLineNumber == line_no); // Skip any same-line block-begin/end, try, else or finally.
-						line = line->mNextLine);
-					if (line)
-						aLine = line;
-				}
+				aLine = GetLine(TokenToString(t), line_no, aLine);
 			}
 		}
 	}
