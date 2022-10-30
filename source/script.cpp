@@ -105,6 +105,7 @@ VarEntry g_BIV_A[] =
 	A_(IconNumber),
 	A_(IconTip),
 	A_x(Index, BIV_LoopIndex),
+	A_(InitialWorkingDir),
 	A_x(IPAddress1, BIV_IPAddress),
 	A_x(IPAddress2, BIV_IPAddress),
 	A_x(IPAddress3, BIV_IPAddress),
