@@ -766,6 +766,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		if_member("Length", Length)
 		if_member("AtEOF", AtEOF)
 		if_member("__Handle", Handle) // Prefix with underscores because it is designed for advanced users.
+		if_member("Handle", Handle)
 		if_member("Encoding", Encoding)
 		if_member("Close", Close)
 		// Supported for enhanced clarity:
