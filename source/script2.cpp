@@ -3130,7 +3130,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 			//    mouse/key lag would occur).
 			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, next, include_focused_only ? LVNI_FOCUSED : LVNI_SELECTED
 				, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&next) // Timed out or failed.
-				|| next == -1) // No next item.  Relies on short-circuit boolean order.
+				|| (int)next == -1) // No next item.  Relies on short-circuit boolean order.
 				break; // End of estimation phase (if estimate is too small, the text retrieval below will truncate it).
 		}
 		else
@@ -3170,7 +3170,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 			// Fix for v1.0.37.01: Prevent an infinite loop (for details, see comments in the estimation phase above).
 			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, next, include_focused_only ? LVNI_FOCUSED : LVNI_SELECTED
 				, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&next) // Timed out or failed.
-				|| next == -1) // No next item.
+				|| (int)next == -1) // No next item.
 				break; // See comment above for why unconditional break vs. continue.
 		}
 		else // Retrieve every row, so the "next" row becomes the "i" index.
