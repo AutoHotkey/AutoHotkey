@@ -136,14 +136,27 @@ ResultType WinGroup::CloseAndGoToNext(bool aStartWithMostRecent)
 			WinClose(fore_win, 500);
 			DoWinDelay;
 		}
+		if (mIsModeActivate)
+		{
+			HWND new_fore_win = GetForegroundWindow();
+			if (new_fore_win != fore_win && IsMember(new_fore_win, *g))
+			{
+				// new_fore_win appears to have been activated as a result of closing fore_win.
+				// Since new_fore_win belongs to the group, avoid activating some other window
+				// even if !aStartWithMostRecent, since it would be a bit jarring.  Historical
+				// behaviour was to leave it active only if it belonged to the same *spec*,
+				// which doesn't make a lot of sense.
+				return OK;
+			}
+		}
 	}
 	//else do the activation below anyway, even though no close was done.
-	return mIsModeActivate ? Activate(aStartWithMostRecent, win_spec) : Deactivate(aStartWithMostRecent);
+	return mIsModeActivate ? Activate(aStartWithMostRecent) : Deactivate(aStartWithMostRecent);
 }
 
 
 
-ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, Label **aJumpToLabel)
+ResultType WinGroup::Activate(bool aStartWithMostRecent, Label **aJumpToLabel)
 {
 	if (aJumpToLabel) // Initialize early in case of early return.
 		*aJumpToLabel = NULL;
@@ -152,137 +165,56 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, L
 	// Otherwise:
 	if (!Update(true)) // Update our private member vars.
 		return FAIL;  // It already displayed the error for us.
-	WindowSpec *win, *win_to_activate_next = aWinSpec;
-	bool group_is_active = false; // Set default.
-	HWND activate_win, active_window = GetForegroundWindow(); // This value is used in more than one place.
-	if (win_to_activate_next)
+	HWND active_window = GetForegroundWindow();
+	bool group_is_active = IsMember(active_window, *g);
+	if (!group_is_active) // Foreground window is not a member of this group.
 	{
-		// The caller told us which WindowSpec to start off trying to activate.
-		// If the foreground window matches that WindowSpec, do nothing except
-		// marking it as visited, because we want to stay on this window under
-		// the assumption that it was newly revealed due to a window on top
-		// of it having just been closed:
-		if (win_to_activate_next == IsMember(active_window, *g))
-		{
-			group_is_active = true;
-			MarkAsVisited(active_window);
-			return OK;
-		}
-		// else don't mark as visited even if it's a member of the group because
-		// we're about to attempt to activate a different window: the next
-		// unvisited member of this same WindowSpec.  If the below doesn't
-		// find any of those, it continue on through the list normally.
-	}
-	else // Caller didn't tell us which, so determine it.
-	{
-		if (win_to_activate_next = IsMember(active_window, *g)) // Foreground window is a member of this group.
-		{
-			// Set it to activate this same WindowSpec again in case there's
-			// more than one that matches (e.g. multiple notepads).  But first,
-			// mark the current window as having been visited if it hasn't
-			// already by marked by a prior iteration.  Update: This method
-			// doesn't work because if a unvisited matching window became the
-			// foreground window by means other than using GroupActivate
-			// (e.g. launching a new instance of the app: now there's another
-			// matching window in the foreground).  So just call it straight
-			// out.  It has built-in dupe-checking which should prevent the
-			// list from filling up with dupes if there are any special
-			// situations in which that might otherwise happen:
-			//if (!sAlreadyVisitedCount)
-			group_is_active = true;
-			MarkAsVisited(active_window);
-		}
-		else // It's not a member.
-		{
-			win_to_activate_next = mFirstWindow;  // We're starting fresh, so start at the first window.
-			// Reset the list of visited windows:
-			sAlreadyVisitedCount = 0;
-		}
+		// Reset the list of visited windows:
+		sAlreadyVisitedCount = 0;
 	}
 
-	// Activate any unvisited window that matches the win_to_activate_next spec.
-	// If none, activate the next window spec in the series that does have an
-	// existing window:
-	// If the spec we're starting at already has some windows marked as visited,
-	// set this variable so that we know to retry the first spec again in case
-	// a full circuit is made through the window specs without finding a window
-	// to activate.  Note: Using >1 vs. >0 might protect against any infinite-loop
-	// conditions that may be lurking:
-	bool retry_starting_win_spec = (sAlreadyVisitedCount > 1);
-	bool retry_is_in_effect = false;
-	for (win = win_to_activate_next;;)
+	// Find the first/last unvisited window that matches any spec in the group.
+	WindowSearch ws;
+	// This next line is whether to find last or first match.  We always find the oldest
+	// (bottommost) match except when the user has specifically asked to start with the
+	// most recent AND the group isn't currently active (i.e. we're starting fresh).
+	// This allows the order to be the same each time the sequence repeats, instead of
+	// reversing due to the nature of the window z-order.
+	ws.mFindLastMatch = !aStartWithMostRecent || group_is_active;
+	ws.mAlreadyVisited = sAlreadyVisited;
+	ws.mAlreadyVisitedCount = sAlreadyVisitedCount;
+	ws.SetCriteria(*g, *this);
+
+	for (bool retry_needed = sAlreadyVisitedCount > 0; ; retry_needed = false)
 	{
-		// Call this in the mode to find the last match, which  makes things nicer
-		// because when the sequence wraps around to the beginning, the windows will
-		// occur in the same order that they did the first time, rather than going
-		// backwards through the sequence (which is counterintuitive for the user):
-		if (   activate_win = WinActivate(*g, win->mTitle, win->mText, win->mExcludeTitle, win->mExcludeText
-			// This next line is whether to find last or first match.  We always find the oldest
-			// (bottommost) match except when the user has specifically asked to start with the
-			// most recent.  But it only makes sense to start with the most recent if the
-			// group isn't currently active (i.e. we're starting fresh), because otherwise
-			// windows would be activated in an order different from what was already shown
-			// the first time through the enumeration, which doesn't seem to be ever desirable:
-			, !aStartWithMostRecent || group_is_active
-			, sAlreadyVisited, sAlreadyVisitedCount)   )
+		if (group_is_active) // Foreground window is a member of this group.
+		{
+			// Ensure the active window is excluded from both attempts to find a match.
+			MarkAsVisited(active_window);
+		}
+		ws.mAlreadyVisitedCount = sAlreadyVisitedCount;
+		EnumWindows(EnumParentFind, (LPARAM)&ws);
+		if (ws.mFoundParent)
 		{
 			// We found a window to activate, so we're done.
-			// Probably best to do this before WinDelay in case another hotkey fires during the delay:
-			MarkAsVisited(activate_win);
+			SetForegroundWindowEx(ws.mFoundParent);
+			MarkAsVisited(ws.mFoundParent);
 			DoWinDelay;
-			//MsgBox(win->mText, 0, win->mTitle);
-			break;
+			return OK;
 		}
-		// Otherwise, no window was found to activate.
-		if (retry_is_in_effect)
-			// This was the final attempt because we've already gone all the
-			// way around the circular linked list of WindowSpecs.  This check
-			// must be done, otherwise an infinite loop might result if the windows
-			// that formed the basis for determining the value of
-			// retry_starting_win_spec have since been destroyed:
+		if (!retry_needed)
 			break;
-		// Otherwise, go onto the next one in the group:
-		win = win->mNextWindow;
-        // Even if the above didn't change the value of <win> (because there's only
-		// one WinSpec in the list), it's still correct to reset this count because
-		// we want to start the fresh again after all the windows have been
-		// visited.  Note: The only purpose of sAlreadyVisitedCount as used by
-		// this function is to indicate which windows in a given WindowSpec have
-		// been visited, not which windows altogether (i.e. it's not necessary to
-		// remember which windows have been visited once we move on to a new
-		// WindowSpec).
+		// Try again without excluding previously visited windows.
 		sAlreadyVisitedCount = 0;
-		if (win == win_to_activate_next)
-		{
-			// We've made one full circuit of the circular linked list without
-			// finding an existing window to activate. At this point, the user
-			// has pressed a hotkey to do a GroupActivate, but nothing has happened
-			// yet.  We always want something to happen unless there's absolutely
-			// no existing windows to activate, or there's only a single window in
-			// the system that matches the group and it's already active.
-			if (retry_starting_win_spec)
-			{
-				// Mark the foreground window as visited so that it won't be
-				// mistakenly activated again by the next iteration:
-				MarkAsVisited(active_window);
-				retry_is_in_effect = true;
-				// Now continue with the next iteration of the loop so that it
-				// will activate a different instance of this WindowSpec rather
-				// than getting stuck on this one.
-			}
-			else 
-			{
-				if (aJumpToLabel && mJumpToLabel)
-				{
-					// Caller asked us to return in this case, so that it can
-					// use this value to execute a user-specified Gosub:
-					*aJumpToLabel = mJumpToLabel;  // Set output param for the caller.
-				}
-				return FAIL; // Let GroupActivate set ErrorLevel to indicate what happened.
-			}
-		}
 	}
-	return OK;
+	// No window was found to activate.
+	if (aJumpToLabel && mJumpToLabel)
+	{
+		// Caller asked us to return in this case, so that it can
+		// use this value to execute a user-specified Gosub:
+		*aJumpToLabel = mJumpToLabel;  // Set output param for the caller.
+	}
+	return FAIL; // Let GroupActivate set ErrorLevel to indicate what happened.
 }
 
 

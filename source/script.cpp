@@ -12119,7 +12119,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (group)
 			{
 				// Note: This will take care of DoWinDelay if needed:
-				activate_result = group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R")), NULL, &jump_to_label);
+				activate_result = group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R")), &jump_to_label);
 				if (jump_to_label)
 				{
 					if (!line->IsJumpValid(*jump_to_label)) // Should be checked here rather than at the time that GroupAdd specified the label because it's from HERE that the jump will actually be done.
@@ -12707,7 +12707,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 							line_to_execute = NULL; // Do not execute default case.
 							break;
 						}
-						if (case_value.symbol == SYM_STRING)
+						if (case_value.symbol == SYM_STRING && !line->mAttribute)
 						{
 							// Work around the v1 behaviour: SYM_STRING is always considered TRUE.
 							case_value.symbol = SYM_OPERAND;
