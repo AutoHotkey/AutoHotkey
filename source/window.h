@@ -134,6 +134,7 @@ public:
 	}
 
 	ResultType SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText);
+	void SetCriteria(global_struct &aSettings, WinGroup &aGroup);
 	void UpdateCandidateAttributes();
 	HWND IsMatch(bool aInvert = false);
 

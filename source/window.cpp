@@ -1578,6 +1578,19 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 
 
 
+void WindowSearch::SetCriteria(global_struct &aSettings, WinGroup &aGroup)
+{
+	mCriterionExcludeTitle = _T("");
+	mCriterionExcludeTitleLength = 0;
+	mCriterionText = _T("");
+	mCriterionExcludeText = _T("");
+	mSettings = &aSettings;
+	mCriterionGroup = &aGroup;
+	mCriteria = CRITERION_GROUP;
+}
+
+
+
 void WindowSearch::UpdateCandidateAttributes()
 // This function must be kept thread-safe because it may be called (indirectly) by hook thread too.
 {

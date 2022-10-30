@@ -246,9 +246,7 @@ bif_impl FResult GroupActivate(StrArg aGroup, optl<StrArg> aMode, UINT_PTR &aRet
 			return FR_E_ARG(1);
 	}
 
-	HWND activated;
-	group->Activate(mode == 'R', activated);
-	aRetVal = (UINT_PTR)activated;
+	aRetVal = (UINT_PTR)group->Activate(mode == 'R');
 	return OK;
 }
 

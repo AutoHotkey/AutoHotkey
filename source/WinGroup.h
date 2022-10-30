@@ -84,7 +84,7 @@ public:
 	ResultType AddWindow(LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText);
 	void ActUponAll(BuiltInFunctionID aActionType, int aTimeToWaitForClose);
 	void CloseAndGoToNext(bool aStartWithMostRecent);
-	void Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec *aWinSpec = nullptr);
+	HWND Activate(bool aStartWithMostRecent);
 	void Deactivate(bool aStartWithMostRecent);
 	bool IsEmpty() {return mFirstWindow == NULL;}
 	WindowSpec *IsMember(HWND aWnd, ScriptThreadSettings &aSettings);
