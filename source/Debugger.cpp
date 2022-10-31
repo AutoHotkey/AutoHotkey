@@ -34,6 +34,8 @@ Debugger g_Debugger;
 CStringA g_DebuggerHost;
 CStringA g_DebuggerPort;
 
+LPCTSTR g_AutoExecuteThreadDesc = _T("Auto-execute"); // This is used to reduce code size (allow comparing address vs. string).
+
 // The first breakpoint uses sMaxId + 1. Don't change this without also changing breakpoint_remove.
 int Breakpoint::sMaxId = 0;
 
@@ -895,7 +897,7 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 			else if (se->type == DbgStack::SE_Thread)
 			{
 				// !se->line implies se->type == SE_Thread.
-				if (_tcscmp(se->desc, _T("Auto-execute")) && se[1].type == DbgStack::SE_UDF)
+				if (se->desc != g_AutoExecuteThreadDesc && se[1].type == DbgStack::SE_UDF)
 					// Show the function's jump-to line since se->line is most likely whatever line
 					// this thread interrupted.  Don't do it for the auto-execute thread since in
 					// that case the function doesn't represent the thread's overall execution.
@@ -2733,7 +2735,7 @@ void DbgStack::Pop()
 		g_script.mCurrLine = g_Debugger.mCurrLine = mTop->line;
 }
 
-void DbgStack::Push(TCHAR *aDesc)
+void DbgStack::Push(LPCTSTR aDesc)
 {
 	Entry &s = *Push();
 	s.line = NULL;
@@ -2946,13 +2948,18 @@ void GetScriptStack(LPTSTR aBuf, int aBufSize, DbgStack::Entry *aTop)
 	{
 		auto &line = *se->line;
 		auto line_start = aBuf;
-		if (se->type == DbgStack::SE_Thread)
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("> %s\r\n"), se->desc);
-		else
+		if (se->type != DbgStack::SE_Thread || se->desc == g_AutoExecuteThreadDesc)
 		{
+			auto name = se->Name();
+			if (name == g_AutoExecuteThreadDesc)
+				name = _T("");
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s (%i) : [%s] ")
-				, Line::sSourceFile[line.mFileIndex], (int)line.mLineNumber, se->Name());
+				, Line::sSourceFile[line.mFileIndex], (int)line.mLineNumber, name);
 			aBuf = line.ToText(aBuf, BUF_SPACE_REMAINING, true, 0, false, false);
+		}
+		if (se->type == DbgStack::SE_Thread)
+		{
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("> %s\r\n"), se->desc);
 		}
 		if (BUF_SPACE_REMAINING <= 1) // In case of truncation, there should be 1 char left, since the terminator is not counted.
 		{

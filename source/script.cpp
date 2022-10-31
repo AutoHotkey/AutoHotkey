@@ -1005,7 +1005,7 @@ ResultType Script::AutoExecSection()
 		// to avoid an unnecessary Sleep(10) that would otherwise occur in ExecUntil:
 		mLastPeekTime = GetTickCount();
 
-		DEBUGGER_STACK_PUSH(_T("Auto-execute"))
+		DEBUGGER_STACK_PUSH(g_AutoExecuteThreadDesc)
 		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
 		DEBUGGER_STACK_POP()
 
