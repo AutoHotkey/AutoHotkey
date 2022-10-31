@@ -222,7 +222,12 @@ BIF_DECL(BIF_GetMethod)
 	auto method = method_name ? obj->GetMethod(method_name) : obj; // Validate obj itself as a function if method name is omitted.
 	if (method)
 	{
-		int param_count = ParamIndexToOptionalInt(2, -1); // Default to no parameter count validation.
+		int param_count = -1; // Default to no parameter count validation.
+		if (!ParamIndexIsOmitted(2))
+		{
+			Throw_if_Param_NaN(2);
+			param_count = ParamIndexToInt(2);
+		}
 		if (param_count != -1 && method_name)
 			++param_count; // So caller does not need to include the implicit `this` parameter.
 		switch (ValidateFunctor(method, param_count, aResultToken, nullptr, _f_callee_id == FID_GetMethod))

@@ -739,7 +739,12 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	}
 
 	// See if a replacement limit was specified.  If not, use the default (-1 means "replace all").
-	int limit = ParamIndexToOptionalInt(4, -1);
+	int limit = -1;
+	if (!ParamIndexIsOmitted(4))
+	{
+		Throw_if_Param_NaN(4);
+		limit = ParamIndexToInt(4);
+	}
 
 	// aStartingOffset is altered further on in the loop; but for its initial value, the caller has ensured
 	// that it lies within aHaystackLength.  Also, if there are no replacements yet, haystack_pos ignores
@@ -1113,6 +1118,7 @@ BIF_DECL(BIF_RegEx)
 		starting_offset = 0; // The one-based starting position in haystack (if any).  Convert it to zero-based.
 	else
 	{
+		Throw_if_Param_NaN(param_index);
 		starting_offset = ParamIndexToInt(param_index);
 		if (starting_offset <= 0) // Same convention as SubStr(): Treat negative StartingPos as a position relative to the end of the string.
 		{

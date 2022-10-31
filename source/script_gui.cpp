@@ -2399,7 +2399,12 @@ void GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 {
 	// Caller has already converted aParam[0] to aEvent and validated it,
 	// as well as verifying aParamCount >= 2.
-	int max_threads = ParamIndexToOptionalInt(2, 1);
+	int max_threads = 1;
+	if (!ParamIndexIsOmitted(2))
+	{
+		Throw_if_Param_NaN(2);
+		max_threads = ParamIndexToInt(2);
+	}
 	if (max_threads < -1 || max_threads > 1)
 		// An event can currently only run one thread at a time.  By contrast, OnMessage
 		// applies the thread limit per handler, not per message.  It's hard to say which

@@ -370,7 +370,12 @@ BIF_DECL(BIF_StrReplace)
 		_f_throw_param(3);
 
 	Var *output_var_count = ParamIndexToOutputVar(4); 
-	UINT replacement_limit = (UINT)ParamIndexToOptionalInt64(5, UINT_MAX); 
+	UINT replacement_limit = UINT_MAX;
+	if (!ParamIndexIsOmitted(5))
+	{
+		Throw_if_Param_NaN(5);
+		replacement_limit = (UINT)ParamIndexToInt64(5); 
+	}
 	
 
 	// Note: The current implementation of StrReplace() should be able to handle any conceivable inputs
@@ -1259,6 +1264,7 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 	LPTSTR haystack = ParamIndexToString(0, haystack_buf, (size_t *)&haystack_length);
 
 	// Load-time validation has ensured that at least the first two parameters are present:
+	Throw_if_Param_NaN(1);
 	INT_PTR starting_offset = (INT_PTR)ParamIndexToInt64(1); // The one-based starting position in haystack (if any).
 	if (starting_offset > haystack_length || starting_offset == 0)
 		_f_return_retval; // Yield the empty string (a default set higher above).
@@ -1277,6 +1283,7 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 		extract_length = remaining_length_available;
 	else
 	{
+		Throw_if_Param_NaN(2);
 		if (   !(extract_length = (INT_PTR)ParamIndexToInt64(2))   )  // It has asked to extract zero characters.
 			_f_return_retval; // Yield the empty string (a default set higher above).
 		if (extract_length < 0)
@@ -1317,13 +1324,23 @@ BIF_DECL(BIF_InStr)
 		_f_throw_param(2);
 	// BIF_StrReplace sets string_case_sense similarly, maintain together.
 
-	INT_PTR offset = ParamIndexToOptionalIntPtr(3, 1);
-	if (!offset)
-		_f_throw_param(3);
+	INT_PTR offset = 1;
+	if (!ParamIndexIsOmitted(3))
+	{
+		Throw_if_Param_NaN(3);
+		offset = ParamIndexToIntPtr(3);
+		if (!offset)
+			_f_throw_param(3);
+	}
 	
-	int occurrence_number = ParamIndexToOptionalInt(4, 1);
-	if (!occurrence_number)
-		_f_throw_param(4);
+	int occurrence_number = 1;
+	if (!ParamIndexIsOmitted(4))
+	{
+		Throw_if_Param_NaN(4);
+		occurrence_number = ParamIndexToInt(4);
+		if (!occurrence_number)
+			_f_throw_param(4);
+	}
 
 	if (offset < 0)
 	{

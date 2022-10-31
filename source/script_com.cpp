@@ -1304,6 +1304,8 @@ void ComObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 				// with DllCall; i.e. DllCall(..., "ptr*", o := ComValue(13,0)) to wrap a returned ptr.
 				// Assigning zero is permitted and there is no AddRef because the caller wants us to
 				// Release the interface pointer automatically.
+				if (!ParamIndexIsNumeric(0))
+					_f_throw_type(_T("Number"), *aParam[0]);
 				mUnknown = (IUnknown *)ParamIndexToInt64(0);
 				return;
 			}

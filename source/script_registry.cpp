@@ -382,8 +382,10 @@ void RegWrite(ResultToken &aResultToken, ExprTokenType *aValue, DWORD aValueType
 
 		if (aValueType != REG_DWORD)
 			value = TokenToString(*aValue, nbuf, &length);
-		else
+		else if (TokenIsNumeric(*aValue))
 			dwBuf = (DWORD)TokenToInt64(*aValue);
+		else
+			return (void)aResultToken.ParamError(0, aValue, _T("Number"));
 	}
 
 	// Open/Create the registry key

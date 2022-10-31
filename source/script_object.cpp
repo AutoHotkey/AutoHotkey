@@ -2032,7 +2032,12 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 			index = mLength - 1;
 		}
 		
-		index_t count = (index_t)ParamIndexToOptionalInt64(1, 1);
+		index_t count = 1;
+		if (!ParamIndexIsOmitted(1))
+		{
+			Throw_if_Param_NaN(1);
+			count = (index_t)ParamIndexToInt64(1);
+		}
 		if (index + count > mLength)
 			_o_throw_param(1);
 
@@ -2077,7 +2082,7 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 {
 	if (!TokenIsNumeric(aParam))
-		return -1;
+		return BadIndex;
 	auto index = TokenToInt64(aParam);
 	if (index <= 0) // Let -1 be the last item and 0 be the first unused index.
 		index += mLength + 1;
@@ -2882,13 +2887,17 @@ void ClipboardAll::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		else
 		{
 			// Caller supplied an address.
+			Throw_if_Param_NaN(0);
 			caller_data = (size_t)ParamIndexToIntPtr(0);
 			if (caller_data < 65536) // Basic check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
 				_o_throw_param(0);
 			size = -1;
 		}
 		if (!ParamIndexIsOmitted(1))
+		{
+			Throw_if_Param_NaN(1);
 			size = (size_t)ParamIndexToIntPtr(1);
+		}
 		else if (size == -1) // i.e. it can be omitted when size != -1 (a string was passed).
 			_o_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 		if (  !(data = malloc(size))  ) // More likely to be due to invalid parameter than out of memory.

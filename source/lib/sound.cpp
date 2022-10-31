@@ -298,6 +298,8 @@ BIF_DECL(BIF_Sound)
 	{
 		search.target_control = SoundControlType(_f_callee_id - FID_SoundSetVolume);
 		aSetting = ParamIndexToString(0, _f_number_buf);
+		if (!IsNumeric(aSetting, TRUE, FALSE, TRUE))
+			_f_throw_param(0);
 		++aParam;
 		--aParamCount;
 	}
