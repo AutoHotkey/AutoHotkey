@@ -2292,39 +2292,6 @@ ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprT
 }
 
 
-ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount
-	, int aNonWinParamCount, bool aThrowIfNotFound)
-{
-	aWindow = aControl = nullptr;
-	// Only functions which can operate on top-level windows allow Control to be
-	// omitted (and a select few other functions with more optional parameters).
-	// This replaces the old "ahk_parent" string used with ControlSend, but is
-	// also used by SendMessage.
-	LPTSTR control_spec = nullptr;
-	if (!ParamIndexIsOmitted(0))
-	{
-		switch (DetermineTargetHwnd(aWindow, aResultToken, *aParam[0]))
-		{
-		case OK:
-			aControl = aWindow;
-			if (!aControl)
-				return aResultToken.Error(ERR_NO_CONTROL, ErrorPrototype::Target);
-			return OK;
-		case FAIL:
-			return FAIL;
-		}
-		// Since above didn't return, it wasn't a pure Integer or object {Hwnd}.
-		control_spec = ParamIndexToString(0, _f_number_buf);
-	}
-	if (!DetermineTargetWindow(aWindow, aResultToken, aParam + 1, aParamCount - 1, aNonWinParamCount))
-		return FAIL;
-	aControl = control_spec ? ControlExist(aWindow, control_spec) : aWindow;
-	if (!aControl && aThrowIfNotFound)
-		return aResultToken.Error(ERR_NO_CONTROL, ErrorPrototype::Target);
-	return OK;
-}
-
-
 
 BIF_DECL(BIF_WinExistActive)
 {
