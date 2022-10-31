@@ -124,13 +124,13 @@ md_func_x(GetKeySC, GetKeySC, Int32, (In, String, KeyName))
 md_func(GetKeyState, (In, String, KeyName), (In_Opt, String, Mode), (Ret, Variant, RetVal))
 md_func_x(GetKeyVK, GetKeyVK, Int32, (In, String, KeyName))
 
-md_func(GroupActivate, (In, String, GroupName), (In_Opt, String, Mode), (Ret, UIntPtr, RetVal))
+md_func(GroupActivate, (In, String, GroupName), (In_Opt, String, Mode), (Ret, UInt32, RetVal))
 md_func(GroupAdd, (In, String, GroupName), (In_Opt, String, WinTitle), (In_Opt, String, WinText), (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText))
 md_func(GroupClose, (In, String, GroupName), (In_Opt, String, Mode))
 md_func(GroupDeactivate, (In, String, GroupName), (In_Opt, String, Mode))
 
-md_func_v(GuiCtrlFromHwnd, (In, UIntPtr, Hwnd), (Ret, Object, Gui))
-md_func_v(GuiFromHwnd, (In, UIntPtr, Hwnd), (In_Opt, Bool32, Recurse), (Ret, Object, Gui))
+md_func_v(GuiCtrlFromHwnd, (In, UInt32, Hwnd), (Ret, Object, Gui))
+md_func_v(GuiFromHwnd, (In, UInt32, Hwnd), (In_Opt, Bool32, Recurse), (Ret, Object, Gui))
 
 md_func_x(Hotstring, BIF_Hotstring, FResult, (In, String, String), (In_Opt, Variant, Replacement), (In_Opt, String, OnOffToggle), (Ret, Variant, RetVal))
 
@@ -267,7 +267,7 @@ md_func(SysGetIPAddresses, (Ret, Object, RetVal))
 
 md_func(Thread, (In, String, Command), (In_Opt, Int32, Value1), (In_Opt, Int32, Value2))
 
-md_func(ToolTip, (In_Opt, String, Text), (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Index), (Ret, UIntPtr, Hwnd))
+md_func(ToolTip, (In_Opt, String, Text), (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Index), (Ret, UInt32, Hwnd))
 
 md_func(TraySetIcon, (In_Opt, String, File), (In_Opt, Int32, Number), (In_Opt, Bool32, Freeze))
 md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options))

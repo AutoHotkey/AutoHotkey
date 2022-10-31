@@ -553,17 +553,17 @@ void GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 }
 
 
-bif_impl void GuiFromHwnd(UINT_PTR aHwnd, optl<BOOL> aRecurse, IObject *&aGui)
+bif_impl void GuiFromHwnd(UINT aHwnd, optl<BOOL> aRecurse, IObject *&aGui)
 {
-	if (aGui = aRecurse.value_or(FALSE) ? GuiType::FindGuiParent((HWND)aHwnd) : GuiType::FindGui((HWND)aHwnd))
+	if (aGui = aRecurse.value_or(FALSE) ? GuiType::FindGuiParent((HWND)(UINT_PTR)aHwnd) : GuiType::FindGui((HWND)(UINT_PTR)aHwnd))
 		aGui->AddRef();
 }
 
 
-bif_impl void GuiCtrlFromHwnd(UINT_PTR aHwnd, IObject *&aGuiCtrl)
+bif_impl void GuiCtrlFromHwnd(UINT aHwnd, IObject *&aGuiCtrl)
 {
-	if (GuiType* gui = GuiType::FindGuiParent((HWND)aHwnd))
-		if (aGuiCtrl = gui->FindControl((HWND)aHwnd))
+	if (GuiType* gui = GuiType::FindGuiParent((HWND)(UINT_PTR)aHwnd))
+		if (aGuiCtrl = gui->FindControl((HWND)(UINT_PTR)aHwnd))
 			aGuiCtrl->AddRef();
 }
 

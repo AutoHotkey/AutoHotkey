@@ -1108,7 +1108,7 @@ bif_impl FResult MsgBox(optl<StrArg> aText, optl<StrArg> aTitle, optl<StrArg> aO
 // GUI-related: ToolTip //
 //////////////////////////
 
-bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<int> aIndex, UINT_PTR &aRetVal)
+bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<int> aIndex, UINT &aRetVal)
 {
 	int window_index = aIndex.value_or(1) - 1;
 	if (window_index < 0 || window_index >= MAX_TOOLTIPS)
@@ -1294,7 +1294,7 @@ bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<in
 	// And do a TTM_TRACKACTIVATE even if the tooltip window already existed upon entry to this function,
 	// so that in case it was hidden or dismissed while its HWND still exists, it will be shown again:
 	SendMessage(tip_hwnd, TTM_TRACKACTIVATE, TRUE, (LPARAM)&ti);
-	aRetVal = (UINT_PTR)tip_hwnd;
+	aRetVal = (UINT)(UINT_PTR)tip_hwnd;
 	return OK;
 }
 
