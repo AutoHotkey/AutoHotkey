@@ -1038,9 +1038,9 @@ bif_impl FResult _ScriptGetLines(StrArg aFilename, int aLineNumber, optl<int> aR
 	// Determine the range of lines to be shown:
 	Line *line_start = line, *line_end = line;
 	for (int i = range
-		; i < 0 && line_start->mPrevLine != NULL
-		; ++i, line_start = line_start->mPrevLine);
-	for (int i = range <= 0 ? -range : range - 1
+		; i > 0 && line_start->mPrevLine != NULL
+		; --i, line_start = line_start->mPrevLine);
+	for (int i = range
 		; i > 0 && line_end->mNextLine != NULL
 		; --i, line_end = line_end->mNextLine);
 	// Output
