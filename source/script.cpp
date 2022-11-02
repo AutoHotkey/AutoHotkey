@@ -11708,8 +11708,8 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 {
 	if (aBufSize < 3)
 		return aBuf;
-	else
-		aBufSize -= (1 + aCRLF);  // Reserve one char for LF/CRLF after each line (so that it always get added).
+	else if (aCRLF)
+		aBufSize -= 2;  // Reserve two chars for CRLF after each line.
 
 	LPTSTR aBuf_orig = aBuf;
 
@@ -11751,8 +11751,10 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 	// onto one line rather than formatted nicely as separate lines.
 	// Room for LF or CRLF was reserved at the top of this function:
 	if (aCRLF)
+	{
 		*aBuf++ = '\r';
-	*aBuf++ = '\n';
+		*aBuf++ = '\n';
+	}
 	*aBuf = '\0';
 	return aBuf;
 }

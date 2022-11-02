@@ -1029,7 +1029,7 @@ Line *Script::GetLine(LPCTSTR aFile, int aNumber, Line *aCandidate)
 
 
 
-bif_impl FResult _ScriptGetLines(StrArg aFilename, int aLineNumber, optl<int> aRange, StrRet &aRetVal)
+bif_impl FResult _ScriptGetLines(StrArg aFilename, int aLineNumber, optl<int> aRange, IObject *&aRetVal)
 {
 	int range = aRange.value_or(0);
 	Line *line = g_script.GetLine(aFilename, aLineNumber);
@@ -1044,15 +1044,31 @@ bif_impl FResult _ScriptGetLines(StrArg aFilename, int aLineNumber, optl<int> aR
 		; i > 0 && line_end->mNextLine != NULL
 		; --i, line_end = line_end->mNextLine);
 	// Output
+	auto lines = Array::Create();
 	TCHAR buf[32768]; // Arbitrary maximum
-	auto cp = buf;
 	for (auto line = line_start; ; line = line->mNextLine)
 	{
-		cp = line->ToText(cp, _countof(buf) - int(cp - buf), true);
+		auto obj = Object::Create();
+		if (!obj)
+		{
+			lines->Release();
+			return FR_E_OUTOFMEM;
+		}
+		line->ToText(buf, _countof(buf), false, 0, false, false);
+		obj->SetOwnProp(_T("File"), Line::sSourceFile[line->mFileIndex]);
+		obj->SetOwnProp(_T("Number"), line->mLineNumber);
+		obj->SetOwnProp(_T("Text"), buf);
+		if (!lines->Append(ExprTokenType(obj)))
+		{
+			obj->Release();
+			lines->Release();
+			return FR_E_OUTOFMEM;
+		}
 		if (line == line_end)
 			break;
 	}
-	return aRetVal.Copy(buf, cp - buf);
+	aRetVal = lines;
+	return OK;
 }
 
 

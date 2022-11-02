@@ -5,7 +5,7 @@
 #define MD_CONTROL_ARGS_OPT (In_Opt, Variant, Control), MD_WINTITLE_ARGS
 #endif
 
-md_func(_ScriptGetLines, (In, String, Filename), (In, Int32, LineNumber), (In_Opt, Int32, Range), (Ret, String, RetVal))
+md_func(_ScriptGetLines, (In, String, Filename), (In, Int32, LineNumber), (In_Opt, Int32, Range), (Ret, Object, RetVal))
 
 md_func_x(BlockInput, ScriptBlockInput, FResult, (In, String, Mode))
 
