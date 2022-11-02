@@ -2040,7 +2040,7 @@ public:
 	HBRUSH mBrush = NULL; // Background color to apply to menu.
 	COLORREF mColor = CLR_DEFAULT; // The color that corresponds to the above.
 
-	static ObjectMember sMembers[];
+	static ObjectMemberMd sMembers[];
 	static int sMemberCount;
 	static Object *sPrototype, *sBarPrototype;
 
@@ -2080,16 +2080,39 @@ public:
 	};
 	
 	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	
+	FResult Add(optl<StrArg> aName, optl<IObject*> aFuncOrSubmenu, optl<StrArg> aOptions);
+	FResult Add(optl<StrArg> aName, optl<IObject*> aFuncOrSubmenu, optl<StrArg> aOptions, UserMenuItem **insert_at);
+	FResult AddStandard();
+	FResult Check(StrArg aItemName);
+	FResult Delete(optl<StrArg> aItemName);
+	FResult Disable(StrArg aItemName);
+	FResult Enable(StrArg aItemName);
+	FResult Insert(optl<StrArg> aBefore, optl<StrArg> aName, optl<IObject*> aFuncOrSubmenu, optl<StrArg> aOptions);
+	FResult Rename(StrArg aItemName, optl<StrArg> aNewName);
+	FResult SetColor(ExprTokenType *aColor, optl<BOOL> aApplyToSubmenus);
+	FResult SetIcon(StrArg aItemName, StrArg aIconFile, optl<int> aIconNumber, optl<int> aIconWidth);
+	FResult Show(optl<int> aX, optl<int> aY);
+	FResult ToggleCheck(StrArg aItemName);
+	FResult ToggleEnable(StrArg aItemName);
+	FResult Uncheck(StrArg aItemName);
+	
+	FResult get_ClickCount(int &aRetVal);
+	FResult set_ClickCount(int aValue);
+	FResult get_Default(StrRet &aRetVal);
+	FResult set_Default(StrArg aItemName);
+	FResult get_Handle(UINT_PTR &aRetVal);
 
-	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
+	ResultType AddItem(LPCTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPCTSTR aOptions, UserMenuItem **aInsertAt = nullptr);
 	ResultType InternalAppendMenu(UserMenuItem *aMenuItem, UserMenuItem *aInsertBefore = NULL);
 	void DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev, bool aUpdateGuiMenuBars = true);
 	void DeleteAllItems();
-	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions);
-	ResultType UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions);
-	ResultType RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName);
-	ResultType UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName);
+	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, UserMenu *aSubmenu, LPCTSTR aOptions);
+	ResultType UpdateOptions(UserMenuItem *aMenuItem, LPCTSTR aOptions);
+	ResultType RenameItem(UserMenuItem *aMenuItem, LPCTSTR aNewName);
+	ResultType UpdateName(UserMenuItem *aMenuItem, LPCTSTR aNewName);
 	void SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask);
+	FResult SetItemState(StrArg aItemName, UINT aState, UINT aStateMask);
 	void CheckItem(UserMenuItem *aMenuItem);
 	void UncheckItem(UserMenuItem *aMenuItem);
 	void ToggleCheckItem(UserMenuItem *aMenuItem);
@@ -2104,12 +2127,13 @@ public:
 	ResultType AppendStandardItems();
 	ResultType EnableStandardOpenItem(bool aEnable);
 	ResultType Display(bool aForceToForeground = true, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED);
-	UserMenuItem *FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);
+	FResult GetItem(LPCTSTR aNameOrPos, UserMenuItem *&aItem);
+	UserMenuItem *FindItem(LPCTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);
 	UserMenuItem *FindItemByID(UINT aID);
 	bool ContainsMenu(UserMenu *aMenu);
 	void UpdateAccelerators();
 	// L17: Functions for menu icons.
-	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth);
+	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPCTSTR aFilename, int aIconNumber, int aWidth);
 	void ApplyItemIcon(UserMenuItem *aMenuItem);
 	void RemoveItemIcon(UserMenuItem *aMenuItem);
 };
