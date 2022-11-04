@@ -2946,7 +2946,7 @@ void GetScriptStack(LPTSTR aBuf, int aBufSize, DbgStack::Entry *aTop)
 	auto aBuf_orig = aBuf;
 	for (auto se = aTop ? aTop : g_Debugger.mStack.mTop - 1; se >= g_Debugger.mStack.mBottom; --se)
 	{
-		auto &line = *se->line;
+		auto &line = se->line ? *se->line : *g_script.mCurrLine;
 		auto line_start = aBuf;
 		if (se->type != DbgStack::SE_Thread || se->desc == g_AutoExecuteThreadDesc)
 		{
