@@ -1202,6 +1202,8 @@ UINT Line::ConvertFileEncoding(ExprTokenType &aToken)
 		UINT cp = (UINT)TokenToInt64(aToken);
 		return IsValidFileCodePage(cp) ? cp : -1;
 	}
+	if (TokenToObject(aToken))
+		return -1; // Avoid returning CP_ACP in this case.
 	return ConvertFileEncoding(TokenToString(aToken));
 }
 
