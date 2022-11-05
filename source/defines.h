@@ -577,6 +577,7 @@ struct ResultToken : public ExprTokenType
 	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
 	ResultType Error(LPCTSTR aErrorText, Object *aPrototype);
 	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype);
+	ResultType Error(LPCTSTR aErrorText, ExprTokenType &aExtraInfo, Object *aPrototype);
 	ResultType MemoryError();
 	ResultType UnknownMemberError(ExprTokenType &aObject, int aFlags, LPCTSTR aMember);
 	ResultType Win32Error(DWORD aError = GetLastError());

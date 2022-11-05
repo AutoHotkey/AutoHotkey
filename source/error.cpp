@@ -792,6 +792,13 @@ ResultType ResultToken::Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aP
 }
 
 __declspec(noinline)
+ResultType ResultToken::Error(LPCTSTR aErrorText, ExprTokenType &aExtraInfo, Object *aPrototype)
+{
+	TCHAR buf[MAX_NUMBER_SIZE];
+	return Error(aErrorText, TokenToString(aExtraInfo, buf), aPrototype);
+}
+
+__declspec(noinline)
 ResultType ResultToken::MemoryError()
 {
 	return Error(ERR_OUTOFMEM, nullptr, ErrorPrototype::Memory);
