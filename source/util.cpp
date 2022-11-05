@@ -3102,14 +3102,14 @@ bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 
 
 
-LPTSTR InStrAny(LPTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundLen)
+LPCTSTR InStrAny(LPCTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundLen)
 {
 	// For each character in aStr:
 	for ( ; *aStr; ++aStr)
 		// For each needle:
 		for (int i = 0; i < aNeedleCount; ++i)
 			// For each character in this needle:
-			for (LPTSTR needle_pos = aNeedle[i], str_pos = aStr; ; ++needle_pos, ++str_pos)
+			for (LPCTSTR needle_pos = aNeedle[i], str_pos = aStr; ; ++needle_pos, ++str_pos)
 			{
 				if (!*needle_pos)
 				{

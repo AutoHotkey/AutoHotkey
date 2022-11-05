@@ -405,54 +405,55 @@ BIF_DECL(BIF_StrReplace)
 
 
 
-BIF_DECL(BIF_StrSplit)
 // Array := StrSplit(String [, Delimiters, OmitChars, MaxParts])
+bif_impl FResult StrSplit(StrArg aInputString, ExprTokenType *aDelimiters, optl<StrArg> aOmitChars, optl<int> aMaxParts, IObject *&aRetVal)
 {
-	LPTSTR aInputString = ParamIndexToString(0, _f_number_buf);
 	LPTSTR *aDelimiterList = NULL;
 	int aDelimiterCount = 0;
-	LPTSTR aOmitList = _T("");
+	auto aOmitList = aOmitChars.value_or_empty();
 	int splits_left = -2;
 
-	if (aParamCount > 1)
+	if (aDelimiters)
 	{
-		if (auto arr = dynamic_cast<Array *>(TokenToObject(*aParam[1])))
+		if (auto obj = TokenToObject(*aDelimiters))
 		{
+			auto arr = dynamic_cast<Array *>(obj);
+			if (!arr)
+				return FR_E_ARG(1);
 			aDelimiterCount = arr->Length();
 			aDelimiterList = (LPTSTR *)_alloca(aDelimiterCount * sizeof(LPTSTR *));
 			if (!arr->ToStrings(aDelimiterList, aDelimiterCount, aDelimiterCount))
 				// Array contains something other than a string.
-				goto throw_invalid_delimiter;
+				return FR_E_ARG(1);
 			for (int i = 0; i < aDelimiterCount; ++i)
 				if (!*aDelimiterList[i])
 					// Empty string in delimiter list. Although it could be treated similarly to the
 					// "no delimiter" case, it's far more likely to be an error. If ever this check
 					// is removed, the loop below must be changed to support "" as a delimiter.
-					goto throw_invalid_delimiter;
+					return FR_E_ARG(1);
 		}
 		else
 		{
 			aDelimiterList = (LPTSTR *)_alloca(sizeof(LPTSTR *));
-			*aDelimiterList = TokenToString(*aParam[1]);
+			*aDelimiterList = TokenToString(*aDelimiters);
 			aDelimiterCount = **aDelimiterList != '\0'; // i.e. non-empty string.
 		}
-		if (aParamCount > 2)
-		{
-			aOmitList = TokenToString(*aParam[2]);
-			if (aParamCount > 3)
-				splits_left = (int)TokenToInt64(*aParam[3]) - 1;
-		}
 	}
+	if (aMaxParts.has_value())
+		splits_left = aMaxParts.value() - 1;
 	
 	auto output_array = Array::Create();
 	if (!output_array)
-		goto throw_outofmem;
+		return FR_E_OUTOFMEM;
 
 	if (!*aInputString // The input variable is blank, thus there will be zero elements.
 		|| splits_left == -1) // The caller specified 0 parts.
-		_f_return(output_array);
+	{
+		aRetVal = output_array;
+		return OK;
+	}
 	
-	LPTSTR contents_of_next_element, delimiter, new_starting_pos;
+	LPCTSTR contents_of_next_element, delimiter, new_starting_pos;
 	size_t element_length, delimiter_length;
 
 	if (aDelimiterCount) // The user provided a list of delimiters, so process the input variable normally.
@@ -482,11 +483,14 @@ BIF_DECL(BIF_StrSplit)
 	else
 	{
 		// Otherwise aDelimiterList is empty, so store each char of aInputString in its own array element.
-		LPTSTR cp, dp;
+		LPCTSTR cp, dp;
 		for (cp = aInputString; ; ++cp)
 		{
 			if (!*cp)
-				_f_return(output_array); // All done.
+			{
+				aRetVal = output_array;
+				return OK;
+			}
 			for (dp = aOmitList; *dp; ++dp)
 				if (*cp == *dp) // This char is a member of the omitted list, thus it is not included in the output array.
 					break; // (inner loop)
@@ -518,19 +522,16 @@ BIF_DECL(BIF_StrSplit)
 	// If there are no chars to the left of the delim, or if they were all in the list of omitted
 	// chars, the item will be an empty string:
 	if (output_array->Append(contents_of_next_element, element_length))
-		_f_return(output_array); // All done.
+	{
+		aRetVal = output_array;
+		return OK;
+	}
 	//else memory allocation failed, so fall through:
 outofmem:
 	// The fact that this section is executing means that a memory allocation failed and caused the
 	// loop to break, so throw an exception.
 	output_array->Release(); // Since we're not returning it.
-	// Below: Using goto probably won't reduce code size (due to compiler optimizations), but keeping
-	// rarely executed code at the end of the function might help performance due to cache utilization.
-throw_outofmem:
-	// Either goto was used or FELL THROUGH FROM ABOVE.
-	_f_throw_oom;
-throw_invalid_delimiter:
-	_f_throw_param(1);
+	return FR_E_OUTOFMEM;
 }
 
 

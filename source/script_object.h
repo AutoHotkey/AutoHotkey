@@ -567,6 +567,7 @@ public:
 	void       RemoveAt(index_t aIndex, index_t aCount);
 
 	bool Append(ExprTokenType &aValue);
+	bool Append(LPCTSTR aValue, size_t aValueLength = -1) { return Append(const_cast<LPTSTR>(aValue), aValueLength); }
 	bool Append(LPTSTR aValue, size_t aValueLength = -1) { return Append(ExprTokenType(aValue, aValueLength)); }
 	bool Append(__int64 aValue) { return Append(ExprTokenType(aValue)); }
 

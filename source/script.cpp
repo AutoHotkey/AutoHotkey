@@ -136,7 +136,6 @@ FuncEntry g_BIF[] =
 	BIF1(StrPtr, 1, 1),
 	BIFn(StrPut, 1, 4, BIF_StrGetPut),
 	BIF1(StrReplace, 2, 6, {5}),
-	BIF1(StrSplit, 1, 4),
 	BIFn(StrTitle, 1, 1, BIF_StrCase),
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),

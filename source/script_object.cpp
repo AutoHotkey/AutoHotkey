@@ -385,7 +385,7 @@ Array *Array::FromEnumerable(ExprTokenType &aEnumerable)
 
 
 //
-// Array::ToStrings - Used by BIF_StrSplit.
+// Array::ToStrings - Used by StrSplit.
 //
 
 ResultType Array::ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax)

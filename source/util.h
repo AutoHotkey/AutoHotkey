@@ -162,14 +162,15 @@ inline LPTSTR omit_leading_whitespace(LPTSTR aBuf)
 }
 
 
-inline LPTSTR omit_leading_any(LPTSTR aBuf, LPTSTR aOmitList, size_t aLength)
+template<typename T>
+inline T omit_leading_any(T aBuf, LPCTSTR aOmitList, size_t aLength)
 // Returns the address of the first character in aBuf that isn't a member of aOmitList.
 // But no more than aLength characters of aBuf will be considered.  If aBuf is composed
 // entirely of omitted characters, the address of the char after the last char in the
 // string will returned (that char will be the zero terminator unless aLength explicitly
 // caused only part of aBuf to be considered).
 {
-	LPTSTR cp;
+	LPCTSTR cp;
 	for (size_t i = 0; i < aLength; ++i, ++aBuf)
 	{
 		// Check if the current char is a member of the omitted-char list:
@@ -197,13 +198,14 @@ inline LPTSTR omit_trailing_whitespace(LPTSTR aBuf, LPTSTR aBuf_marker)
 
 
 
-inline size_t omit_trailing_any(LPTSTR aBuf, LPTSTR aOmitList, LPTSTR aBuf_marker)
+template<typename T>
+inline size_t omit_trailing_any(T aBuf, LPCTSTR aOmitList, T aBuf_marker)
 // aBuf_marker must be a position in aBuf (to the right of it).
 // Starts at aBuf_marker and keeps moving to the left until a char that isn't a member
 // of aOmitList is found.  The length of the remaining substring is returned.
 // That length will be zero if the string consists entirely of omitted characters.
 {
-	LPTSTR cp;
+	LPCTSTR cp;
 	for (; aBuf_marker > aBuf; --aBuf_marker)
 	{
 		// Check if the current char is a member of the omitted-char list:
@@ -724,7 +726,7 @@ HBITMAP IconToBitmap(HICON ahIcon, bool aDestroyIcon);
 HBITMAP IconToBitmap32(HICON aIcon, bool aDestroyIcon); // Lexikos: Used for menu icons on Vista+. Creates a 32-bit (ARGB) device-independent bitmap from an icon.
 int CALLBACK FontEnumProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *lpntme, DWORD FontType, LPARAM lParam);
 //bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch);
-LPTSTR InStrAny(LPTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundLen);
+LPCTSTR InStrAny(LPCTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundLen);
 
 LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex); // L17: Find integer ID of resource from index. i.e. IconNumber -> resource ID.
 HICON ExtractIconFromExecutable(LPCTSTR aFilespec, int aIconNumber, int aWidth, int aHeight // L17: Extract icon of the appropriate size from an executable (or compatible) file.
