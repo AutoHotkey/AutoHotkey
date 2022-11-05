@@ -421,6 +421,8 @@ bif_impl FResult StrSplit(StrArg aInputString, ExprTokenType *aDelimiters, optl<
 			if (!arr)
 				return FR_E_ARG(1);
 			aDelimiterCount = arr->Length();
+			if (!aDelimiterCount)
+				return FR_E_ARG(1);
 			aDelimiterList = (LPTSTR *)_alloca(aDelimiterCount * sizeof(LPTSTR *));
 			if (!arr->ToStrings(aDelimiterList, aDelimiterCount, aDelimiterCount))
 				// Array contains something other than a string.
