@@ -437,11 +437,12 @@ void GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTy
 
 			if (IS_INVOKE_SET)
 			{
+				COLORREF new_color;
+				if (!ColorToBGR(*aParam[0], new_color))
+					_f_throw_value(ERR_INVALID_VALUE);
+				
 				// AssignColor() takes care of deleting old brush, etc.
-				if (TokenIsPureNumeric(*aParam[0])) // Integer or float; float is invalid, so just truncate it to integer.
-					AssignColor(rgb_to_bgr((COLORREF)ParamIndexToInt64(0)), color, brush);
-				else
-					AssignColor(ParamIndexToString(0), color, brush);
+				AssignColor(new_color, color, brush);
 
 				if (IsWindowVisible(mHwnd))
 					// Force the window to repaint so that colors take effect immediately.
@@ -5508,17 +5509,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 						error_message = ERR_GUI_NOT_FOR_THIS_TYPE;
 						goto return_error;
 					}
-					aOpt.color_bk = ColorNameToBGR(option_value);
-					if (aOpt.color_bk == CLR_NONE) // A matching color name was not found, so check for hex format.
+					if (!ColorToBGR(option_value, aOpt.color_bk))
 					{
-						// It seems _tcstol() automatically handles the optional leading "0x" if present:
-						LPTSTR end_ptr;
-						aOpt.color_bk = rgb_to_bgr(_tcstol(option_value, &end_ptr, 16));
-						if (*end_ptr)
-						{
-							error_message = ERR_INVALID_OPTION;
-							goto return_error;
-						}
+						error_message = ERR_INVALID_OPTION;
+						goto return_error;
 					}
 					if (aOpt.color_bk != CLR_DEFAULT && aControl.RequiresBackgroundBrush())
 					{
@@ -6261,7 +6255,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			}
 			// Since above didn't "continue", there is text after the option letter, so take action accordingly.
 
-			LPTSTR endptr;
 			int option_int = 0; // Only valid for [XYWHTER].
 			float option_float; // Only valid for R.
 			TCHAR option_char2; // Only valid for [XYWH].
@@ -6316,18 +6309,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				break;
 
 			case 'C':  // Color
-				aOpt.color = ColorNameToBGR(option_value);
-				if (aOpt.color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
+				if (!ColorToBGR(option_value, aOpt.color))
 				{
-					// _tcstol() automatically handles the optional leading "0x" if present:
-					aOpt.color = rgb_to_bgr(_tcstol(option_value, &endptr, 16));
-					if (*endptr)
-					{
-						error_message = ERR_INVALID_OPTION;
-						goto return_error;
-					}
-					// if option_value did not contain something hex-numeric, black (0x00) will be assumed,
-					// which seems okay given how rare such a problem would be.
+					error_message = ERR_INVALID_OPTION;
+					goto return_error;
 				}
 				break;
 
@@ -8051,7 +8036,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 
 	int point_size = 0;
 
-	LPTSTR next_option, option_end, endptr;
+	LPTSTR next_option, option_end;
 	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
 	{
 		// Find the end of this option item:
@@ -8090,15 +8075,8 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 			switch (option_char)
 			{
 			case 'C':
-				color = ColorNameToBGR(option_value);
-				if (color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
-				{
-					color = rgb_to_bgr(_tcstol(option_value, &endptr, 16));
-					if (*endptr)
-						goto invalid_option;
-					// if option_value does not contain something hex-numeric, black (0x00) will be assumed,
-					// which seems okay given how rare such a problem would be.
-				}
+				if (!ColorToBGR(option_value, color))
+					goto invalid_option;
 				break;
 			case 'W': font.lfWeight = ATOI(option_value); break;
 			case 'S': point_size = (int)(_tstof(option_value) + 0.5); break; // Round to nearest int.

@@ -3639,6 +3639,23 @@ ResultType ResultToken::Return(LPTSTR aValue, size_t aLength)
 
 
 
+bool ColorToBGR(ExprTokenType &aColorNameOrRGB, COLORREF &aBGR)
+{
+	switch (TypeOfToken(aColorNameOrRGB))
+	{
+	case SYM_INTEGER:
+		aBGR = rgb_to_bgr((COLORREF)TokenToInt64(aColorNameOrRGB));
+		return true;
+	case SYM_STRING:
+		return ColorToBGR(TokenToString(aColorNameOrRGB), aBGR);
+	default:
+		aBGR = 0;
+		return false;
+	}
+}
+
+
+
 int ConvertJoy(LPCTSTR aBuf, int *aJoystickID, bool aAllowOnlyButtons)
 // The caller TextToKey() currently relies on the fact that when aAllowOnlyButtons==true, a value
 // that can fit in a sc_type (USHORT) is returned, which is true since the joystick buttons

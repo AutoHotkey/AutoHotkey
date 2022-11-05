@@ -1668,20 +1668,12 @@ void AssignColor(LPTSTR aColorName, COLORREF &aColor, HBRUSH &aBrush)
 // be determined, it will always be set to CLR_DEFAULT (and aBrush set to NULL to match).
 // It will never be set to CLR_NONE.
 {
-	COLORREF color;
-	if (!*aColorName)
-		color = CLR_DEFAULT;
-	else
-	{
-		color = ColorNameToBGR(aColorName);
-		if (color == CLR_NONE) // A matching color name was not found, so assume it's a hex color value.
-			// It seems strtol() automatically handles the optional leading "0x" if present:
-			color = rgb_to_bgr(_tcstol(aColorName, NULL, 16));
-			// if aColorName does not contain something hex-numeric, black (0x00) will be assumed,
-			// which seems okay given how rare such a problem would be.
-	}
+	COLORREF color = 0;
+	ColorToBGR(aColorName, color);
 	AssignColor(color, aColor, aBrush);
 }
+
+
 
 void AssignColor(COLORREF color, COLORREF &aColor, HBRUSH &aBrush)
 {
@@ -1700,7 +1692,29 @@ void AssignColor(COLORREF color, COLORREF &aColor, HBRUSH &aBrush)
 
 
 
-COLORREF ColorNameToBGR(LPTSTR aColorName)
+bool ColorToBGR(LPCTSTR aColorNameOrRGB, COLORREF &aBGR)
+{
+	if (!*aColorNameOrRGB)
+		aBGR = CLR_DEFAULT;
+	else
+	{
+		aBGR = ColorNameToBGR(aColorNameOrRGB);
+		if (aBGR == CLR_NONE) // A matching color name was not found, so assume it's a hex color value.
+		{
+			wchar_t *endptr;
+			// It seems _tcstol() automatically handles the optional leading "0x" if present:
+			aBGR = rgb_to_bgr(_tcstol(aColorNameOrRGB, &endptr, 16));
+			// If the leading part of aColorNameOrRGB was not hex-numeric, black (0x00) will be assumed.
+			// The return value will indicate whether the value was entirely a valid hex number.
+			return !*endptr;
+		}
+	}
+	return true;
+}
+
+
+
+COLORREF ColorNameToBGR(LPCTSTR aColorName)
 // These are the main HTML color names.  Returns CLR_NONE if a matching HTML color name can't be found.
 // Returns CLR_DEFAULT only if aColorName is the word Default.
 {

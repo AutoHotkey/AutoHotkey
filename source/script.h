@@ -2122,7 +2122,7 @@ public:
 	void SetDefault(UserMenuItem *aMenuItem = NULL, bool aUpdateGuiMenuBars = true);
 	ResultType CreateHandle();
 	void DestroyHandle();
-	void SetColor(ExprTokenType &aColor, bool aApplyToSubmenus);
+	void SetColor(COLORREF aColor, bool aApplyToSubmenus);
 	void ApplyColor(bool aApplyToSubmenus);
 	ResultType AppendStandardItems();
 	ResultType EnableStandardOpenItem(bool aEnable);
@@ -3396,6 +3396,8 @@ FResult ControlSetTab(HWND aHwnd, DWORD aTabIndex);
 FResult PixelSearch(BOOL *aFound, ResultToken *aFoundX, ResultToken *aFoundY
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
 	, int aVariation, LPTSTR aGetColor);
+
+bool ColorToBGR(ExprTokenType &aColorNameOrRGB, COLORREF &aBGR);
 
 ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional = false);
 ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional = false);

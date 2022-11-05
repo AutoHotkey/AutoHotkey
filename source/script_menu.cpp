@@ -178,10 +178,10 @@ FResult UserMenu::Rename(StrArg aItemName, optl<StrArg> aNewName)
 FResult UserMenu::SetColor(ExprTokenType *aColor, optl<BOOL> aApplyToSubmenus)
 {
 	BOOL submenus = aApplyToSubmenus.value_or(TRUE);
-	if (aColor)
-		SetColor(*aColor, submenus);
-	else
-		SetColor(ExprTokenType(_T("")), submenus);
+	COLORREF color = CLR_DEFAULT;
+	if (aColor && !ColorToBGR(*aColor, color))
+		return FR_E_ARG(0);
+	SetColor(color, submenus);
 	return OK;
 }
 
@@ -1028,13 +1028,10 @@ ResultType UserMenu::CreateHandle()
 
 
 
-void UserMenu::SetColor(ExprTokenType &aColor, bool aApplyToSubmenus)
+void UserMenu::SetColor(COLORREF aColor, bool aApplyToSubmenus)
 {
 	// AssignColor() takes care of deleting old brush, etc.
-	if (TokenIsPureNumeric(aColor)) // Integer or float; float is invalid, so just truncate it to integer.
-		AssignColor(rgb_to_bgr((COLORREF)TokenToInt64(aColor)), mColor, mBrush);
-	else
-		AssignColor(TokenToString(aColor), mColor, mBrush);
+	AssignColor(aColor, mColor, mBrush);
 	// To avoid complications, such as a submenu being detached from its parent and then its parent
 	// later being deleted (which causes the HBRUSH to get deleted too), give each submenu it's
 	// own HBRUSH handle by calling SetColor() for each:

@@ -425,10 +425,13 @@ bif_impl FResult ImageSearch(ResultToken &aFoundX, ResultToken &aFoundY
 				// every way (inverted) and a specified numeric color like "Trans0xFFFFAA" was treated as BGR vs. RGB.
 				trans_color = ColorNameToBGR(color_name);
 				if (trans_color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
+				{
+					wchar_t *endptr;
 					// It seems _tcstol() automatically handles the optional leading "0x" if present:
-					trans_color = _tcstol(color_name, NULL, 16);
-					// if color_name did not contain something hex-numeric, black (0x00) will be assumed,
-					// which seems okay given how rare such a problem would be.
+					trans_color = _tcstol(color_name, &endptr, 16);
+					if (*endptr) // Not (entirely) a valid hex number.
+						return FR_E_ARG(6);
+				}
 				else
 					trans_color = bgr_to_rgb(trans_color); // v1.0.44.10: See fix/comment above.
 

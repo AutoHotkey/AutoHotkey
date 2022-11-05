@@ -1948,16 +1948,8 @@ bif_impl FResult WinSetTransColor(ExprTokenType &aValue, WINTITLE_PARAMETERS_DEC
 		}
 		if (*aValue_copy) // Seems more flexible to allow a leading space to omit the color key, rather than interpreting it as black or an error.
 		{
-			color = ColorNameToBGR(aValue_copy);
-			if (color == CLR_NONE)
-			{
-				// A matching color name was not found, so assume it's in hex format.
-				// _tcstol() automatically handles the optional leading "0x" if present:
-				LPTSTR endptr;
-				color = rgb_to_bgr(_tcstol(aValue_copy, &endptr, 16));
-				if (*endptr) // Invalid color name/number.
-					return FR_E_ARG(0);
-			}
+			if (!ColorToBGR(aValue_copy, color))
+				return FR_E_ARG(0);
 		}
 		break;
 	}
