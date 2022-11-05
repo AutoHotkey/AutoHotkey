@@ -27,7 +27,7 @@ public:
 	IObject_Type_Impl("ComEvent") // Unlikely to be called; see above.
 	Object *Base() { return nullptr; }
 
-	HRESULT Connect(LPTSTR pfx = NULL, IObject *ahkObject = NULL);
+	HRESULT Connect(LPCTSTR pfx = NULL, IObject *ahkObject = NULL);
 
 	ComEvent(ComObject *obj, ITypeInfo *tinfo, IID iid)
 		: mCookie(0), mObject(obj), mTypeInfo(tinfo), mIID(iid), mAhkObject(NULL)

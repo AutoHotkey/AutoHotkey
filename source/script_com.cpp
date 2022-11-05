@@ -92,11 +92,14 @@ BIF_DECL(BIF_ComObj) // Handles both ComObjFromPtr and ComValue.Call.
 	if (aParamCount > 1)
 	{
 		// ComValue(vt, value [, flags])
+		if (aParamCount > 2)
+		{
+			Throw_if_Param_NaN(2);
+			flags = (USHORT)TokenToInt64(*aParam[2]);
+		}
 		vt = (VARTYPE)TokenToInt64(*aParam[0]);
 		if (FAILED(hr = TokenToVarType(*aParam[1], vt, &llVal, true)))
 			return ComError(hr, aResultToken);
-		if (aParamCount > 2)
-			flags = (USHORT)TokenToInt64(*aParam[2]);
 		if (vt == VT_BSTR && TypeOfToken(*aParam[1]) != SYM_INTEGER)
 			flags |= ComObject::F_OWNVALUE; // BSTR was allocated above, so make sure it will be freed later.
 	}
@@ -314,11 +317,16 @@ BIF_DECL(BIF_ComObjConnect)
 
 		if (obj->mEventSink)
 		{
-			HRESULT hr;
-			if (aParamCount < 2)
-				hr = obj->mEventSink->Connect(); // Disconnect.
-			else
-				hr = obj->mEventSink->Connect(TokenToString(*aParam[1]), TokenToObject(*aParam[1]));
+			LPCTSTR prefix = nullptr;    // Set default: disconnect.
+			IObject *handlers = nullptr; //
+			if (!ParamIndexIsOmitted(1))
+			{
+				prefix = ParamIndexToString(1);
+				handlers = ParamIndexToObject(1);
+				if (!*prefix && !handlers) // Blank or pure numeric (which is not valid as a prefix).
+					_f_throw_param(1);
+			}
+			auto hr = obj->mEventSink->Connect(prefix, handlers);
 			if (FAILED(hr))
 				ComError(hr, aResultToken);
 			return;
@@ -408,6 +416,8 @@ BIF_DECL(BIF_ComObjType)
 					ptinfo->ReleaseTypeAttr(typeattr);
 				}
 			}
+			else
+				aResultToken.ParamError(1, aParam[1]);
 			ptinfo->Release();
 		}
 	}
@@ -421,9 +431,11 @@ BIF_DECL(BIF_ComObjFlags)
 		_f_throw_param(0, _T("ComValue"));
 	if (aParamCount > 1)
 	{
+		Throw_if_Param_NaN(1);
 		USHORT flags, mask;
 		if (aParamCount > 2)
 		{
+			Throw_if_Param_NaN(2);
 			flags = (USHORT)TokenToInt64(*aParam[1]);
 			mask = (USHORT)TokenToInt64(*aParam[2]);
 		}
@@ -454,6 +466,7 @@ BIF_DECL(ComObjArray_Call)
 	++aParam; // Exclude `this`
 	--aParamCount;
 
+	Throw_if_Param_NaN(0);
 	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
 	SAFEARRAYBOUND bound[8]; // Same limit as ComObject::SafeArrayInvoke().
 	int dims = aParamCount - 1;
@@ -462,6 +475,7 @@ BIF_DECL(ComObjArray_Call)
 	//	_f_throw(ERR_TOO_MANY_PARAMS);
 	for (int i = 0; i < dims; ++i)
 	{
+		Throw_if_Param_NaN(i + 1);
 		bound[i].cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
 		bound[i].lLbound = 0;
 	}
@@ -1062,7 +1076,7 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	return hr;
 }
 
-HRESULT ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
+HRESULT ComEvent::Connect(LPCTSTR pfx, IObject *ahkObject)
 {
 	HRESULT hr;
 
