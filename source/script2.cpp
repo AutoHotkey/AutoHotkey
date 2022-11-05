@@ -2253,7 +2253,7 @@ BIF_DECL(BIF_IsTypeish)
 	_f_return_b(if_condition);
 
 type_mismatch:
-	_f_throw_type(_T("String"), *aParam[0]);
+	_f_throw_param(0, _T("String"));
 }
 
 
