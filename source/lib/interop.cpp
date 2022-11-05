@@ -254,6 +254,8 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 	{
 		// StrPut(String, Address[, Length][, Encoding])
 		ExprTokenType &source_token = *aParam[0];
+		if (TokenToObject(source_token))
+			_f_throw_param(0, _T("String"));
 		source_string = (LPCVOID)TokenToString(source_token, _f_number_buf); // Safe to use _f_number_buf since StrPut won't use it for the result.
 		source_length = (int)((source_token.symbol == SYM_VAR) ? source_token.var->CharLength() : _tcslen((LPCTSTR)source_string));
 		++next_param; // Remove the String param from further consideration.
