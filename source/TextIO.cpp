@@ -800,12 +800,7 @@ class FileObject : public Object
 					buf.f = (float)buf.d;
 			}
 			else
-			{
-				if (size == 8 && !is_signed && !IS_NUMERIC(token_to_write.symbol))
-					buf.i8 = (__int64)ATOU64(TokenToString(token_to_write)); // For comments, search for ATOU64 in BIF_DllCall().
-				else
-					buf.i8 = TokenToInt64(token_to_write);
-			}
+				buf.i8 = TokenToInt64(token_to_write);
 
 			DWORD bytes_written = mFile.Write(&buf, size);
 			// Return bytes_written even if it is 0:
