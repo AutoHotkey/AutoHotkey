@@ -2623,8 +2623,15 @@ bool BoundFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPa
 	this_token.object = mFunc;
 
 	// Call the function or object.
-	return mFunc->Invoke(aResultToken, mFlags, mMember, this_token, aParam, aParamCount);
-	//return CallFunc(*mFunc, aResultToken, params, param_count);
+	switch (mFunc->Invoke(aResultToken, mFlags, mMember, this_token, aParam, aParamCount))
+	{
+	case FAIL:
+		return FAIL;
+	default:
+		return OK;
+	case INVOKE_NOT_HANDLED:
+		return aResultToken.UnknownMemberError(this_token, IT_CALL, mMember);
+	}
 }
 
 BoundFunc *BoundFunc::Bind(IObject *aFunc, int aFlags, LPCTSTR aMember, ExprTokenType **aParam, int aParamCount)
