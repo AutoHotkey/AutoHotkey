@@ -92,8 +92,12 @@ BIF_DECL(BIF_ObjBindMethod)
 	LPCTSTR name = nullptr;
 	if (aParamCount > 1)
 	{
-		if (aParam[1]->symbol != SYM_MISSING)
-			name = TokenToString(*aParam[1], _f_number_buf);
+		switch (TypeOfToken(*aParam[1]))
+		{
+		case SYM_MISSING: break;
+		case SYM_OBJECT: _f_throw_param(1, _T("String"));
+		default: name = TokenToString(*aParam[1], _f_number_buf);
+		}
 		aParam += 2;
 		aParamCount -= 2;
 	}
