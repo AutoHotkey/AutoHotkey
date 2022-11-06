@@ -2022,7 +2022,7 @@ struct MsgMonitorInstance
 
 
 
-#define MAX_MENU_NAME_LENGTH MAX_PATH // For both menu and menu item names.
+#define MAX_MENU_NAME_LENGTH MAX_PATH // The observed limit for Win32 menu item text.
 class UserMenuItem;  // Forward declaration since classes use each other (i.e. a menu *item* can have a submenu).
 class UserMenu : public Object
 {
