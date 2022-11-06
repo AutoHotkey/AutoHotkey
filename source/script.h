@@ -3315,7 +3315,6 @@ BIF_DECL(BIF_Random);
 BIF_DECL(BIF_Sound);
 BIF_DECL(BIF_SplitPath);
 BIF_DECL(BIF_CaretGetPos);
-BIF_DECL(BIF_MenuSelect);
 BIF_DECL(BIF_RunWait);
 
 

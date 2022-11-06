@@ -164,6 +164,9 @@ md_func(ListViewGetContent, (In_Opt, String, Options), MD_CONTROL_ARGS, (Ret, Va
 md_func(LoadPicture, (In, String, Filename), (In_Opt, String, Options), (Out_Opt, Int32, ImageType), (Ret, UIntPtr, Handle))
 
 md_func_v(MenuFromHandle, (In, UIntPtr, Handle), (Ret, Object, Menu))
+md_func(MenuSelect, (In_Opt, Variant, WinTitle), (In_Opt, String, WinText), (In, String, Menu)
+	, (In_Opt, String, SubMenu1), (In_Opt, String, SubMenu2), (In_Opt, String, SubMenu3), (In_Opt, String, SubMenu4), (In_Opt, String, SubMenu5), (In_Opt, String, SubMenu6)
+	, (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText))
 
 md_func(MonitorGet, (In_Opt, Int32, N), (Out_Opt, Int32, Left), (Out_Opt, Int32, Top), (Out_Opt, Int32, Right), (Out_Opt, Int32, Bottom), (Ret, Int32, RetVal))
 md_func_x(MonitorGetCount, MonitorGetCount, Int32, md_arg_none)

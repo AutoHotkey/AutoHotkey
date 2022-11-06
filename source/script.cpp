@@ -88,7 +88,6 @@ FuncEntry g_BIF[] =
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
 	BIFn(LTrim, 1, 2, BIF_Trim),
 	BIFn(Max, 1, NA, BIF_MinMax),
-	BIF1(MenuSelect, 0, 11),
 	BIFn(Min, 1, NA, BIF_MinMax),
 	BIF1(Mod, 2, 2),
 	BIF1(NumGet, 2, 3),
