@@ -399,13 +399,9 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	bool aborted = false;
 	switch (mRetType)
 	{
-	case MdType::Int32: aResultToken.SetValue(ri32); break;
-	case MdType::UInt64:
-	case MdType::Int64: aResultToken.SetValue(ri64); break;
-	case MdType::UInt32: aResultToken.SetValue((UINT)rup); break;
-	case MdType::Float64: aResultToken.SetValue(GetDoubleRetval()); break;
-	case MdType::String: aResultToken.SetValue((LPTSTR)rup); break; // Strictly statically-allocated strings.
-	case MdType::ResultType: aResultToken.SetResult((ResultType)rup); break;
+	// Unused return types are commented out or omitted to reduce code size, and disabled
+	// at compile-time by not providing a valid md_retval<T>::t via template definition.
+	// Place the most common type (FResult) first in case this compiles to an if-else ladder:
 	case MdType::FResult:
 		if (FAILED(res))
 		{
@@ -415,6 +411,13 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		else
 			aborted = (res == FR_ABORTED);
 		break;
+	case MdType::ResultType: aResultToken.SetResult((ResultType)rup); break;
+	case MdType::Int32: aResultToken.SetValue(ri32); break;
+	case MdType::UInt64:
+	case MdType::Int64: aResultToken.SetValue(ri64); break;
+	case MdType::UInt32: aResultToken.SetValue((UINT)rup); break;
+	//case MdType::Float64: aResultToken.SetValue(GetDoubleRetval()); break;
+	//case MdType::String: aResultToken.SetValue((LPTSTR)rup); break; // Strictly statically-allocated strings.
 	case MdType::NzIntWin32:
 		if (!(BOOL)rup)
 			aResultToken.Win32Error();

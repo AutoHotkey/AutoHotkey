@@ -78,7 +78,16 @@ template<> struct md_optout<MdType::Variant> { typedef ResultToken *t; };
 template<MdType T> struct md_optional { typedef typename optl<typename md_argtype<T>::t> t; };
 template<> struct md_optional<MdType::Variant> { typedef ExprTokenType *t; };
 
-template<MdType T> struct md_retval { typedef typename md_argtype<T>::t t; };
+//template<MdType T> struct md_retval { typedef typename md_argtype<T>::t t; };
+template<MdType T> struct md_retval { }; // All return types except those defined below are currently disabled in MdFunc.
+
+template<> struct md_retval<MdType::Void> { typedef void t; };
+template<> struct md_retval<MdType::Int32> { typedef int t; };
+template<> struct md_retval<MdType::UInt32> { typedef UINT t; };
+template<> struct md_retval<MdType::Int64> { typedef __int64 t; };
+template<> struct md_retval<MdType::UInt64> { typedef UINT64 t; };
+template<> struct md_retval<MdType::Bool32> { typedef BOOL t; };
+
 template<> struct md_retval<MdType::FResult> { typedef FResult t; };
 template<> struct md_retval<MdType::ResultType> { typedef ResultType t; };
 template<> struct md_retval<MdType::NzIntWin32> { typedef BOOL t; };
