@@ -1237,8 +1237,7 @@ void Map::CaseSense(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 	if (mCount)
 		_o_throw(_T("Map must be empty"));
 
-	LPTSTR value = ParamIndexToString(0, _f_number_buf);
-	switch (Line::ConvertStringCaseSense(value))
+	switch (TokenToStringCase(*aParam[0]))
 	{
 	case SCS_SENSITIVE:
 		mFlags &= ~(MapCaseless | MapUseLocale);
@@ -1250,7 +1249,7 @@ void Map::CaseSense(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 		mFlags = (mFlags | MapCaseless) & ~MapUseLocale;
 		break;
 	default:
-		_o_throw_value(ERR_INVALID_VALUE, value);
+		_o_throw(ERR_INVALID_VALUE, *aParam[0], ErrorPrototype::Value);
 	}
 }
 
