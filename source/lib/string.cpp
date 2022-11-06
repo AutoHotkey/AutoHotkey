@@ -338,7 +338,7 @@ BIF_DECL(BIF_FormatTime)
 BIF_DECL(BIF_StrCase)
 {
 	size_t length;
-	LPTSTR contents = ParamIndexToString(0, _f_number_buf, &length);
+	_f_param_string(contents, 0, &length);
 
 	// Make a modifiable copy of the string to return:
 	if (!TokenSetResult(aResultToken, contents, length))
@@ -1223,10 +1223,8 @@ BIF_DECL(BIF_StrCompare)
 	//	0,		if str1 is identical to str2.
 	//	> 0,	if str1 is greater than str2.
 	// Param 1 and 2, str1 and str2
-	TCHAR str1_buf[MAX_NUMBER_SIZE];	// numeric input is converted to string.
-	TCHAR str2_buf[MAX_NUMBER_SIZE];
-	LPTSTR str1 = ParamIndexToString(0, str1_buf);
-	LPTSTR str2 = ParamIndexToString(1, str2_buf);
+	_f_param_string(str1, 0);
+	_f_param_string(str2, 0);
 	// Could return 0 here if str1 == str2, but it is probably rare to call StrCompare(str_var, str_var)
 	// so for most cases that would just be an unnecessary cost, albeit low.
 	// Param 3 - CaseSensitive
@@ -1250,7 +1248,7 @@ BIF_DECL(BIF_StrLen)
 {
 	// Caller has ensured that there's exactly one actual parameter.
 	size_t length;
-	ParamIndexToString(0, _f_number_buf, &length); // Allow StrLen(numeric_expr) for flexibility.
+	_f_param_string(value, 0, &length);
 	_f_return_i(length);
 }
 
@@ -1262,9 +1260,8 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 	_f_set_retval_p(_T(""), 0);
 
 	// Get the first arg, which is the string used as the source of the extraction. Call it "haystack" for clarity.
-	TCHAR haystack_buf[MAX_NUMBER_SIZE]; // A separate buf because _f_number_buf is sometimes used to store the result.
 	INT_PTR haystack_length;
-	LPTSTR haystack = ParamIndexToString(0, haystack_buf, (size_t *)&haystack_length);
+	_f_param_string(haystack, 0, (size_t *)&haystack_length);
 
 	// Load-time validation has ensured that at least the first two parameters are present:
 	Throw_if_Param_NaN(1);
@@ -1313,11 +1310,10 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 BIF_DECL(BIF_InStr)
 {
 	// Caller has already ensured that at least two actual parameters are present.
-	TCHAR needle_buf[MAX_NUMBER_SIZE];
 	INT_PTR haystack_length;
-	LPTSTR haystack = ParamIndexToString(0, _f_number_buf, (size_t *)&haystack_length);
+	_f_param_string(haystack, 0, (size_t *)&haystack_length);
 	size_t needle_length;
-	LPTSTR needle = ParamIndexToString(1, needle_buf, &needle_length);
+	_f_param_string(needle, 1, &needle_length);
 	if (!needle_length) // Although arguably legitimate, this is more likely an error, so throw.
 		_f_throw_param(1);
 
@@ -1380,7 +1376,7 @@ BIF_DECL(BIF_Ord)
 {
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
 	// empty string yields zero).
-	LPTSTR cp = ParamIndexToString(0, _f_number_buf);
+	_f_param_string(cp, 0);
 #ifndef UNICODE
 	// This section could convert a single- or multi-byte character to a Unicode code point
 	// for consistency, but since the ANSI build won't be officially supported that doesn't
@@ -1600,17 +1596,18 @@ BIF_DECL(BIF_Format)
 
 BIF_DECL(BIF_Trim) // L31
 {
+	if (ParamIndexToObject(0))
+		_f_throw_param(0, _T("String"));
+
 	BuiltInFunctionID trim_type = _f_callee_id;
 
 	LPTSTR buf = _f_retval_buf;
 	size_t extract_length;
 	LPTSTR str = ParamIndexToString(0, buf, &extract_length);
 
-	LPTSTR result = str; // Prior validation has ensured at least 1 param.
+	_f_param_string_opt_def(omit_list, 1, _T(" \t")); // Default: space and tab.
 
-	TCHAR omit_list_buf[MAX_NUMBER_SIZE]; // Support SYM_INTEGER/SYM_FLOAT even though it doesn't seem likely to happen.
-	LPTSTR omit_list = ParamIndexIsOmitted(1) ? _T(" \t") : ParamIndexToString(1, omit_list_buf); // Default: space and tab.
-
+	LPTSTR result = str;
 	if (trim_type != FID_RTrim) // i.e. it's Trim() or LTrim()
 	{
 		result = omit_leading_any(result, omit_list, extract_length);
