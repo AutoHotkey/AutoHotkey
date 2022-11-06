@@ -362,15 +362,22 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				}
 			}
 			// If necessary, convert integer <-> float within the value union.
-			if (arg_type == MdType::Float64)
+			switch (arg_type)
 			{
+			case MdType::Float64:
 				if (nt.symbol == SYM_INTEGER)
 					nt.value_double = (double)nt.value_int64;
-			}
-			else
-			{
+				break;
+			case MdType::Float32:
+				if (nt.symbol == SYM_INTEGER)
+					*((float*)&nt.value_int64) = (float)nt.value_int64;
+				else
+					*((float*)&nt.value_int64) = (float)nt.value_double;
+				break;
+			default:
 				if (nt.symbol == SYM_FLOAT)
 					nt.value_int64 = (__int64)nt.value_double;
+				break;
 			}
 			void *target = &arg_value;
 			if (opt) // Optional values are represented by a pointer to a value.
@@ -528,6 +535,11 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 	case MdType::UInt64:
 	case MdType::Int64: aToken.SetValue(*(__int64*)aPtr); break;
 	case MdType::Float64: aToken.SetValue(*(double*)aPtr); break;
+	case MdType::Float32: aToken.SetValue(*(float*)aPtr); break;
+	case MdType::Int8: aToken.SetValue(*(INT8*)aPtr); break;
+	case MdType::UInt8: aToken.SetValue(*(UINT8*)aPtr); break;
+	case MdType::Int16: aToken.SetValue(*(INT16*)aPtr); break;
+	case MdType::UInt16: aToken.SetValue(*(UINT16*)aPtr); break;
 	case MdType::Object:
 		if (auto obj = *(IObject**)aPtr)
 			aToken.SetValue(obj);

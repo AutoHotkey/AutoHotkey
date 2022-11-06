@@ -9,17 +9,17 @@ struct IObject;
 enum class MdType : UINT8
 {
 	Void		= 0,
-	TypeInt		= 1,
-	TypeFloat	= 2,
-	Size32		= 0x10, // This is just so Int32 != TypeInt, for debugging purposes.
-	Size64		= 0x20, // Flag for types that are 64-bit even on x86-32.
-	Unsigned	= 0x40,
-	Int32		= TypeInt | Size32,
-	UInt32		= TypeInt | Size32 | Unsigned,
-	Int64		= TypeInt | Size64,
-	UInt64		= TypeInt | Size64 | Unsigned,
-	Float64		= TypeFloat | Size64,
-	String		= 3,
+	Int8		= 1,
+	UInt8		= 2,
+	Int16		= 3,
+	UInt16		= 4,
+	Int32		= 5,
+	UInt32		= 6,
+	Int64		= 7,
+	UInt64		= 8,
+	Float64		= 9,
+	Float32		= 10,
+	String,
 	Object,
 	Variant, // Currently only for input (ExprTokenType) or retval (ResultToken).
 	Bool32,
@@ -27,7 +27,6 @@ enum class MdType : UINT8
 	FResult,
 	//NzIntWin32, // BOOL result where FALSE means failure and GetLastError() is applicable.
 	Params,
-	TypeMask	= 0xF,
 #ifdef ENABLE_MD_BITS
 	BitsBase	= 99, // For encoding a small literal value to insert into the parameter list.
 #endif
@@ -38,17 +37,21 @@ enum class MdType : UINT8
 	ThisCall, // Only valid at the beginning of the args.
 #endif
 	// Only aliases from here on
+	FirstNumberType = Int8,
+	LastNumberType = Float32,
+	FirstIntType = Int8,
+	LastIntType = UInt64,
+	First64bitNumType = Int64,
+	Last64bitNumType = Float64,
 	FirstModifier = Optional,
 	BitsUpperBound = Optional,
 	UIntPtr = Exp32or64(UInt32, UInt64),
 	IntPtr = Exp32or64(Int32, Int64)
 };
 
-#define MdType_Type(t) ((MdType)((int)(t) & (int)MdType::TypeMask))
-#define MdType_IsInt(t) (MdType_Type(t) == MdType::TypeInt)
-#define MdType_IsFloat(t) (MdType_Type(t) == MdType::TypeFloat)
-#define MdType_IsNum(t) (MdType_IsInt(t) || MdType_IsFloat(t))
-#define MdType_Is64bit(t) (((int)(t) & (int)MdType::Size64) != 0)
+#define MdType_IsInt(t) ((t) <= MdType::LastIntType && (t) >= MdType::FirstIntType)
+#define MdType_IsNum(t) ((t) <= MdType::LastNumberType && (t) >= MdType::FirstNumberType)
+#define MdType_Is64bit(t) ((t) >= MdType::First64bitNumType && (t) <= MdType::Last64bitNumType)
 #define MdType_IsMod(t) ((t) >= MdType::FirstModifier)
 
 #define MdType_IsOut(t) ((t) == MdType::Out) // Macro supports the future addition of other Out modifiers.
@@ -63,8 +66,13 @@ enum class MdType : UINT8
 
 
 template<MdType T> struct md_argtype;
+template<> struct md_argtype<MdType::Int8> { typedef INT8 t; };
+template<> struct md_argtype<MdType::UInt8> { typedef UINT8 t; };
+template<> struct md_argtype<MdType::Int16> { typedef INT16 t; };
+template<> struct md_argtype<MdType::UInt16> { typedef UINT16 t; };
 template<> struct md_argtype<MdType::Int32> { typedef int t; };
 template<> struct md_argtype<MdType::UInt32> { typedef UINT t; };
+template<> struct md_argtype<MdType::Float32> { typedef float t; };
 template<> struct md_argtype<MdType::Float64> { typedef double t; };
 template<> struct md_argtype<MdType::Int64> { typedef __int64 t; };
 template<> struct md_argtype<MdType::UInt64> { typedef UINT64 t; };
