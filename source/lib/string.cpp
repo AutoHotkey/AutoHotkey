@@ -1511,22 +1511,23 @@ BIF_DECL(BIF_Format)
 					spec[spec_len++] = '6';
 					spec[spec_len++] = '4';
 					// Integer value; apply I64 prefix to avoid truncation.
-					value.value_int64 = ParamIndexToInt64(param);
+					value.symbol = SYM_INTEGER;
 					spec[spec_len++] = *cp++;
 				}
 				else if (_tcschr(_T("eEfgGaA"), *cp))
 				{
-					value.value_double = ParamIndexToDouble(param);
+					value.symbol = SYM_FLOAT;
 					spec[spec_len++] = *cp++;
 				}
 				else if (_tcschr(_T("cCp"), *cp))
 				{
 					// Input is an integer or pointer, but I64 prefix should not be applied.
-					value.value_int64 = ParamIndexToInt64(param);
+					value.symbol = SYM_INTEGER;
 					spec[spec_len++] = *cp++;
 				}
 				else
 				{
+					value.symbol = SYM_STRING;
 					spec[spec_len++] = 's'; // Default to string if not specified.
 					if (_tcschr(_T("ULlTt"), *cp))
 						custom_format = toupper(*cp++);
@@ -1536,13 +1537,25 @@ BIF_DECL(BIF_Format)
 			}
 			else
 			{
+				value.symbol = SYM_STRING;
 				// spec[0] contains '%'.
 				spec[1] = 's';
 				spec_len = 2;
 			}
-			if (spec[spec_len - 1] == 's')
+			if (value.symbol == SYM_STRING)
 			{
+				if (ParamIndexToObject(param))
+					_f_throw_param(param, _T("String"));
 				value.marker = ParamIndexToString(param, number_buf);
+			}
+			else
+			{
+				if (!ParamIndexIsNumeric(param))
+					_f_throw_param(param, _T("Number"));
+				if (value.symbol == SYM_INTEGER)
+					value.value_int64 = ParamIndexToInt64(param);
+				else
+					value.value_double = ParamIndexToDouble(param);
 			}
 			spec[spec_len] = '\0';
 			
