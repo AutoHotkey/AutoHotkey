@@ -688,12 +688,12 @@ BIF_DECL(BIF_Reg)
 		LPTSTR key_name = ParamIndexToOptionalString(0); // No buf needed since numbers aren't valid root keys.
 		root_key = Line::RegConvertKey(key_name, &sub_key, &close_root);
 		if (!root_key)
-			_f_throw_value(action == FID_RegWrite ? ERR_PARAM3_INVALID : ERR_PARAM1_INVALID, key_name);
+			return (void)aResultToken.ParamError(action == FID_RegWrite ? 2 : 0, aParam[0]);
 	}
 	if (!ParamIndexIsOmitted(1)) // Implies this isn't RegDeleteKey.
 	{
 		if (ParamIndexToObject(1))
-			_f_throw_param(1, _T("String"));
+			return (void)aResultToken.ParamError(action == FID_RegWrite ? 3 : 1, aParam[1], _T("String"));
 		value_name = ParamIndexToString(1, _f_number_buf);
 	}
 
