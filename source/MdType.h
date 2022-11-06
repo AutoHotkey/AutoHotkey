@@ -25,7 +25,7 @@ enum class MdType : UINT8
 	Bool32,
 	ResultType,
 	FResult,
-	NzIntWin32, // BOOL result where FALSE means failure and GetLastError() is applicable.
+	//NzIntWin32, // BOOL result where FALSE means failure and GetLastError() is applicable.
 	Params,
 	TypeMask	= 0xF,
 	BitsBase	= 99, // For encoding a small literal value to insert into the parameter list.
@@ -90,7 +90,7 @@ template<> struct md_retval<MdType::Bool32> { typedef BOOL t; };
 
 template<> struct md_retval<MdType::FResult> { typedef FResult t; };
 template<> struct md_retval<MdType::ResultType> { typedef ResultType t; };
-template<> struct md_retval<MdType::NzIntWin32> { typedef BOOL t; };
+//template<> struct md_retval<MdType::NzIntWin32> { typedef BOOL t; };
 
 #include "map.h"
 

@@ -90,7 +90,7 @@ md_func(EditGetSelectedText, MD_CONTROL_ARGS, (Ret, String, RetVal))
 md_func(EditPaste, (In, String, Value), MD_CONTROL_ARGS)
 
 md_func(EnvGet, (In, String, VarName), (Ret, String, RetVal))
-md_func_x(EnvSet, EnvSet, NzIntWin32, (In, String, VarName), (In_Opt, String, Value))
+md_func(EnvSet, (In, String, VarName), (In_Opt, String, Value))
 
 md_func_x(Exit, Exit, ResultType, (In_Opt, Int32, ExitCode))
 md_func_x(ExitApp, ExitApp, ResultType, (In_Opt, Int32, ExitCode))

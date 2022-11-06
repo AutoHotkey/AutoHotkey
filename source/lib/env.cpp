@@ -65,7 +65,7 @@ bif_impl FResult EnvGet(StrArg aEnvVarName, StrRet &aRetVal)
 }
 
 
-bif_impl BOOL EnvSet(StrArg aName, optl<StrArg> aValue)
+bif_impl FResult EnvSet(StrArg aName, optl<StrArg> aValue)
 {
 	// MSDN: "If [the 2nd] parameter is NULL, the variable is deleted from the current process's environment."
 	// No checking is currently done to ensure that aValue isn't longer than 32K, since testing shows that
@@ -74,7 +74,7 @@ bif_impl BOOL EnvSet(StrArg aName, optl<StrArg> aValue)
 	// Note: It seems that env variable names can contain spaces and other symbols, so it's best not to
 	// validate aEnvVarName the same way we validate script variables (i.e. just let the return value
 	// determine whether there's an error).
-	return SetEnvironmentVariable(aName, aValue.value_or_null());
+	return SetEnvironmentVariable(aName, aValue.value_or_null()) ? OK : FR_E_WIN32;
 }
 
 

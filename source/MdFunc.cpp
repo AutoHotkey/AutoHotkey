@@ -418,10 +418,10 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	case MdType::UInt32: aResultToken.SetValue((UINT)rup); break;
 	//case MdType::Float64: aResultToken.SetValue(GetDoubleRetval()); break;
 	//case MdType::String: aResultToken.SetValue((LPTSTR)rup); break; // Strictly statically-allocated strings.
-	case MdType::NzIntWin32:
-		if (!(BOOL)rup)
-			aResultToken.Win32Error();
-		break;
+	//case MdType::NzIntWin32:
+	//	if (!(BOOL)rup)
+	//		aResultToken.Win32Error();
+	//	break;
 	case MdType::Bool32: aResultToken.SetValue(ri32 ? TRUE : FALSE); break;
 	}
 	if (retval_index != -1)
