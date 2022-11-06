@@ -122,8 +122,12 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 			++pc;
 			if (!opt && pc - 1 == mMinParams)
 				mMinParams = pc;
-			if (aArg[i] == MdType::String || aArg[i] == MdType::Variant && out != MdType::Void)
+			if (aArg[i] == MdType::Variant && out != MdType::Void)
 				++mMaxResultTokens;
+#ifdef ENABLE_IMPLICIT_TOSTRING
+			else if (aArg[i] == MdType::String)
+				++mMaxResultTokens;
+#endif
 		}
 	}
 	mParamCount = pc;
@@ -300,6 +304,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			ExprTokenType *t;
 			if (auto obj = TokenToObject(param))
 			{
+#ifdef ENABLE_IMPLICIT_TOSTRING
 				ResultToken &rt = rtp[rt_count++];
 				rt.InitResult(buf);
 				ObjectToString(rt, param, obj);
@@ -314,6 +319,10 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 					goto end;
 				}
 				t = &rt;
+#else
+				result = aResultToken.ParamError(pi, &param, _T("String"));
+				goto end;
+#endif
 			}
 			else
 				t = &param;
