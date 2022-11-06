@@ -534,12 +534,6 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 		else
 			aToken.SetValue(_T(""), 0);
 		break;
-	case MdType::String: // String*, not String
-		if (auto str = *(LPTSTR*)aPtr)
-			aToken.SetValue(str);
-		else
-			aToken.SetValue(_T(""), 0);
-		break;
 	}
 }
 
