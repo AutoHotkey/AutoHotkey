@@ -2436,8 +2436,8 @@ BIF_DECL(BIF_Number)
 
 BIF_DECL(BIF_Hotkey)
 {
-	_f_param_string_opt(aParam0, 0);
-	_f_param_string_opt(aParam1, 1);
+	_f_param_string_opt(aParam0, 0, nullptr, _f_callee_id == FID_HotIf);
+	_f_param_string_opt(aParam1, 1, nullptr, true);
 	_f_param_string_opt(aParam2, 2);
 	
 	ResultType result = OK;
@@ -3421,6 +3421,50 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf, size_t *aLength)
 	if (aLength) // Caller wants to know the string's length as well.
 		*aLength = _tcslen(result);
 	return result;
+}
+
+
+
+ResultType TokenToStringParam(ResultToken &aResultToken, ExprTokenType *aParam[], int aIndex, LPTSTR aBuf, LPTSTR &aString, size_t *aLength, bool aPermitObject)
+{
+	ExprTokenType &token = *aParam[aIndex];
+	LPTSTR result = nullptr;
+	switch (token.symbol)
+	{
+	case SYM_VAR:
+		if (!aPermitObject && token.var->HasObject())
+			break;
+		aString = token.var->Contents(); // Contents() vs. mCharContents in case mCharContents needs to be updated by Contents().
+		if (aLength)
+			*aLength = token.var->Length();
+		return OK;
+	case SYM_STRING:
+		aString = token.marker;
+		if (aLength)
+			*aLength = token.marker_length != -1 ? token.marker_length : _tcslen(token.marker);
+		return OK;
+	case SYM_INTEGER:
+		aString = ITOA64(token.value_int64, aBuf);
+		if (aLength)
+			*aLength = _tcslen(aBuf);
+		break;
+	case SYM_OBJECT:
+		if (aPermitObject)
+		{
+			aString = _T("");
+			if (aLength)
+				*aLength = 0;
+			return OK;
+		}
+		break;
+	case SYM_FLOAT:
+		int length = FTOA(token.value_double, aString = aBuf, MAX_NUMBER_SIZE);
+		if (aLength)
+			*aLength = length;
+		return OK;
+	//case SYM_MISSING: // Caller should handle this case
+	}
+	return aResultToken.ParamError(aIndex, aParam[aIndex], _T("String"));
 }
 
 

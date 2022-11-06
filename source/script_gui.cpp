@@ -253,14 +253,22 @@ void GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 			_o_throw(_T("Invalid control type."), ctrl_type_name);
 	}
 	_f_param_string_opt(options, 0);
-	_f_param_string_opt(text, 1);
+	TCHAR text_buf[MAX_NUMBER_SIZE], *text = _T("");
 	Array *text_obj = nullptr;
-	if (   !ParamIndexIsOmitted(1)
-		&& GuiControlType::TypeHasAttrib(ctrl_type, GuiControlType::TYPE_HAS_ITEMS)
-		&& !(text_obj = TokenToArray(*aParam[1]))   )
+	if (!ParamIndexIsOmitted(1))
 	{
-		aResultToken.ParamError(aID ? 1 : 2, aParam[1], _T("Array"));
-		return;
+		auto temp_obj = ParamIndexToObject(1);
+		if (GuiControlType::TypeHasAttrib(ctrl_type, GuiControlType::TYPE_HAS_ITEMS)) // Need an Array.
+		{
+			if (  !(text_obj = dynamic_cast<Array*>(temp_obj))  )
+				return (void)aResultToken.ParamError(aID ? 1 : 2, aParam[1], _T("Array"));
+		}
+		else // Need a String.
+		{
+			if (temp_obj)
+				return (void)aResultToken.ParamError(aID ? 1 : 2, aParam[1], _T("String"));
+			text = ParamIndexToString(1, text_buf);
+		}
 	}
 	if (!mHwnd)
 		_o_throw(ERR_GUI_NO_WINDOW);

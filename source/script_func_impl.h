@@ -32,7 +32,7 @@
 #define ParamIndexToOptionalBOOL(index, def)		ParamIndexToOptionalType(BOOL, index, def)
 #define ParamIndexToOptionalVar(index)				(((index) < aParamCount && aParam[index]->symbol == SYM_VAR) ? aParam[index]->var : NULL)
 
-inline LPTSTR _OptionalStringDefaultHelper(LPTSTR aDef, LPTSTR aBuf = NULL, size_t *aLength = NULL)
+inline LPTSTR _OptionalStringDefaultHelper(LPTSTR aDef, LPTSTR aBuf = NULL, size_t *aLength = NULL, bool aPermitObject = false)
 {
 	if (aLength)
 		*aLength = _tcslen(aDef);
@@ -50,11 +50,14 @@ inline LPTSTR _OptionalStringDefaultHelper(LPTSTR aDef, LPTSTR aBuf = NULL, size
 #define ParamIndexToOptionalObject(index)			((index) < aParamCount ? ParamIndexToObject(index) : NULL)
 
 #define _f_param_string(name, index, ...) \
-	TCHAR name##_buf[MAX_NUMBER_SIZE], *name = ParamIndexToString(index, name##_buf, __VA_ARGS__)
-#define _f_param_string_opt(name, index, ...) \
-	TCHAR name##_buf[MAX_NUMBER_SIZE], *name = ParamIndexToOptionalString(index, name##_buf, __VA_ARGS__)
+	TCHAR name##_buf[MAX_NUMBER_SIZE], *name; \
+	if (!TokenToStringParam(aResultToken, aParam, index, name##_buf, name, __VA_ARGS__)) return
 #define _f_param_string_opt_def(name, index, def, ...) \
-	TCHAR name##_buf[MAX_NUMBER_SIZE], *name = ParamIndexToOptionalStringDef(index, def, name##_buf, __VA_ARGS__)
+	TCHAR name##_buf[MAX_NUMBER_SIZE], *name; \
+	if (ParamIndexIsOmitted(index)) name = _OptionalStringDefaultHelper(def, name##_buf, __VA_ARGS__); else \
+	if (!TokenToStringParam(aResultToken, aParam, index, name##_buf, name, __VA_ARGS__)) return
+#define _f_param_string_opt(name, index, ...) \
+	_f_param_string_opt_def(name, index, _T(""), __VA_ARGS__)
 
 #define Throw_if_Param_NaN(ParamIndex) \
 	if (!TokenIsNumeric(*aParam[(ParamIndex)])) \

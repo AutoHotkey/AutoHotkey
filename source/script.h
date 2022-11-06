@@ -3343,6 +3343,8 @@ LPTSTR TokenTypeString(ExprTokenType &aToken);
 #define INTEGER_TYPE_STRING _T("Integer")
 #define FLOAT_TYPE_STRING _T("Float")
 
+ResultType TokenToStringParam(ResultToken &aResultToken, ExprTokenType *aParam[], int aIndex, LPTSTR aBuf, LPTSTR &aString, size_t *aLength = nullptr, bool aPermitObject = false);
+
 ResultType MemoryError();
 ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType);
 ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
