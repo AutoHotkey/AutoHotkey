@@ -691,7 +691,11 @@ BIF_DECL(BIF_Reg)
 			_f_throw_value(action == FID_RegWrite ? ERR_PARAM3_INVALID : ERR_PARAM1_INVALID, key_name);
 	}
 	if (!ParamIndexIsOmitted(1)) // Implies this isn't RegDeleteKey.
+	{
+		if (ParamIndexToObject(1))
+			_f_throw_param(1, _T("String"));
 		value_name = ParamIndexToString(1, _f_number_buf);
+	}
 
 	switch (action)
 	{

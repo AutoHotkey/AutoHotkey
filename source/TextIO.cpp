@@ -855,6 +855,8 @@ class FileObject : public Object
 				size_t chars_to_write = 0;
 				if (aParamCount)
 				{
+					if (ParamIndexToObject(0))
+						_f_throw_param(0, _T("String"));
 					LPTSTR param1 = ParamIndexToString(0, _f_number_buf, &chars_to_write);
 					bytes_written = mFile.Write(param1, (DWORD)chars_to_write);
 				}

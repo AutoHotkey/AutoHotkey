@@ -709,7 +709,13 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 
 	// Get the replacement text (if any) from the incoming parameters.  If it was omitted, treat it as "".
 	TCHAR repl_buf[MAX_NUMBER_SIZE];
-	LPTSTR replacement = ParamIndexToOptionalString(2, repl_buf);
+	LPTSTR replacement = _T("");
+	if (!ParamIndexIsOmitted(2))
+	{
+		if (ParamIndexToObject(2))
+			_f_throw_param(2, _T("String"));
+		replacement = ParamIndexToOptionalString(2, repl_buf);
+	}
 
 	// In PCRE, lengths and such are confined to ints, so there's little reason for using unsigned for anything.
 	int captured_pattern_count, empty_string_is_not_a_match, match_length, ref_num
@@ -1095,6 +1101,11 @@ BIF_DECL(BIF_RegEx)
 // This function is the initial entry point for both RegExMatch() and RegExReplace().
 // Caller has set aResultToken.symbol to a default of SYM_INTEGER.
 {
+	if (ParamIndexToObject(0))
+		_f_throw_param(0, _T("String"));
+	if (ParamIndexToObject(1))
+		_f_throw_param(1, _T("String"));
+
 	bool mode_is_replace = _f_callee_id == FID_RegExReplace;
 	LPTSTR needle = ParamIndexToString(1, _f_number_buf); // Caller has already ensured that at least two actual parameters are present.
 

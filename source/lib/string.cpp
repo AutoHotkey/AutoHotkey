@@ -1431,6 +1431,9 @@ BIF_DECL(BIF_Format)
 	if (TokenIsPureNumeric(*aParam[0]))
 		_f_return_p(ParamIndexToString(0, _f_retval_buf));
 
+	if (ParamIndexToObject(0))
+		_f_throw_param(0, _T("String"));
+
 	LPCTSTR fmt = ParamIndexToString(0), lit, cp, cp_end, cp_spec;
 	LPTSTR target = NULL;
 	int size = 0, spec_len;

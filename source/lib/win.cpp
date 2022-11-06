@@ -2311,7 +2311,14 @@ BIF_DECL(BIF_WinExistActive)
 	{
 		TCHAR *param[4], param_buf[4][MAX_NUMBER_SIZE];
 		for (int j = 0; j < 4; ++j) // For each formal parameter, including optional ones.
-			param[j] = ParamIndexToOptionalString(j, param_buf[j]);
+		{
+			if (ParamIndexIsOmitted(j))
+				param[j] = _T("");
+			else if (ParamIndexToObject(j))
+				_f_throw_param(j, _T("String"));
+			else
+				param[j] = ParamIndexToString(j, param_buf[j]);
+		}
 
 		hwnd = _f_callee_id == FID_WinExist
 			? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
