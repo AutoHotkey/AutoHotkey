@@ -132,6 +132,12 @@ md_func(GroupDeactivate, (In, String, GroupName), (In_Opt, String, Mode))
 md_func_v(GuiCtrlFromHwnd, (In, UInt32, Hwnd), (Ret, Object, Gui))
 md_func_v(GuiFromHwnd, (In, UInt32, Hwnd), (In_Opt, Bool32, Recurse), (Ret, Object, Gui))
 
+md_func(HotIf, (In_Opt, Variant, Criterion))
+md_func(HotIfWinActive, (In_Opt, String, WinTitle), (In_Opt, String, WinText))
+md_func(HotIfWinExist, (In_Opt, String, WinTitle), (In_Opt, String, WinText))
+md_func(HotIfWinNotActive, (In_Opt, String, WinTitle), (In_Opt, String, WinText))
+md_func(HotIfWinNotExist, (In_Opt, String, WinTitle), (In_Opt, String, WinText))
+md_func_x(Hotkey, BIF_Hotkey, FResult, (In, String, KeyName), (In_Opt, Variant, Action), (In_Opt, String, Options))
 md_func_x(Hotstring, BIF_Hotstring, FResult, (In, String, String), (In_Opt, Variant, Replacement), (In_Opt, String, OnOffToggle), (Ret, Variant, RetVal))
 
 md_func(IL_Add, (In, UIntPtr, ImageList), (In, String, Filename), (In_Opt, Int32, IconNumber), (In_Opt, Bool32, ResizeNonIcon), (Ret, Int32, Index))

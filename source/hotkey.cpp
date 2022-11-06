@@ -66,21 +66,21 @@ HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 
 
 
-ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
-// Returns FAIL if memory couldn't be allocated, or OK otherwise.
+FResult SetHotkeyCriterion(HotCriterionType aType, LPCTSTR aWinTitle, LPCTSTR aWinText)
+// Returns FR_FAIL if memory couldn't be allocated (and an error was raised), or OK otherwise.
 // This is a global function because it's used by both hotkeys and hotstrings.
 {
 	HotkeyCriterion *cp = nullptr;
 	if (  (*aWinTitle || *aWinText)
 		&& !(cp = FindHotkeyCriterion(aType, aWinTitle, aWinText))
 		&& !(cp = AddHotkeyCriterion(aType, aWinTitle, aWinText))  )
-		return FAIL;
+		return FR_FAIL;
 	g->HotCriterion = cp;
 	return OK;
 }
 
 
-HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
+HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPCTSTR aWinTitle, LPCTSTR aWinText)
 {
 	// Storing combinations of WinTitle+WinText doesn't have as good a best-case memory savings as
 	// have a separate linked list for Title vs. Text.  But it does save code size, and in the vast
@@ -94,7 +94,7 @@ HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, L
 }
 
 
-HotkeyCriterion *AddHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
+HotkeyCriterion *AddHotkeyCriterion(HotCriterionType aType, LPCTSTR aWinTitle, LPCTSTR aWinText)
 {
 	HotkeyCriterion *cp;
 	cp = SimpleHeap::Alloc<HotkeyCriterion>();
@@ -147,7 +147,7 @@ HotkeyCriterion *AddHotkeyIfExpr()
 }
 
 
-HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr)
+HotkeyCriterion *FindHotkeyIfExpr(LPCTSTR aExpr)
 {
 	for (HotkeyCriterion* cp = g_FirstHotExpr; cp; cp = cp->NextExpr)
 		if (cp->OriginalExpr && !_tcscmp(aExpr, cp->OriginalExpr)) // Case-sensitive since the expression might be.
@@ -971,9 +971,10 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	}
 }
 
-ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultToken)
+
+
+FResult Hotkey::IfExpr(IObject *aExprObj)
 // HotIf ; Set null criterion.
-// HotIf "Exact-expression-text"
 // HotIf FunctionObject
 {
 	if (aExprObj)
@@ -983,10 +984,11 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultT
 		{
 			if (!cp) // End of the list and it wasn't found.
 			{
-				if (!ValidateFunctor(aExprObj, 1, aResultToken))
-					return FAIL;
+				auto fr = ValidateFunctor(aExprObj, 1);
+				if (fr != OK)
+					return fr;
 				if (  !(cp = AddHotkeyIfExpr())  )
-					return aResultToken.MemoryError();
+					return FR_E_OUTOFMEM;
 				aExprObj->AddRef();
 				cp->Type = HOT_IF_CALLBACK;
 				cp->Callback = aExprObj;
@@ -999,21 +1001,36 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultT
 		}
 		g->HotCriterion = cp;
 	}
-	else if (!*aExpr)
+	else
 	{
-		g->HotCriterion = NULL;
+		g->HotCriterion = nullptr;
+	}
+	return OK;
+}
+
+
+
+FResult Hotkey::IfExpr(LPCTSTR aExpr)
+// HotIf ; Set null criterion.
+// HotIf "Exact-expression-text"
+{
+	if (!aExpr || !*aExpr)
+	{
+		g->HotCriterion = nullptr;
 	}
 	else
 	{
 		HotkeyCriterion *cp = FindHotkeyIfExpr(aExpr);
 		if (!cp) // Expression not found.
-			return aResultToken.ValueError(ERR_HOTKEY_IF_EXPR);
+			return FValueError(ERR_HOTKEY_IF_EXPR, aExpr);
 		g->HotCriterion = cp;
 	}
 	return OK;
 }
 
-ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallback, HookActionType aHookAction, ResultToken &aResultToken)
+
+
+FResult Hotkey::Dynamic(LPCTSTR aHotkeyName, LPCTSTR aOptions, IObject *aCallback, HookActionType aHookAction)
 // Creates, updates, enables, or disables a hotkey dynamically (while the script is running).
 // Returns OK or FAIL.
 {
@@ -1022,8 +1039,9 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallba
 	// (i.e. it's retaining its current callback).
 	if (aCallback)
 	{
-		if (!ValidateFunctor(aCallback, 1, aResultToken))
-			return FAIL;
+		auto fr = ValidateFunctor(aCallback, 1);
+		if (fr != OK)
+			return fr;
 	}
 
 	UCHAR no_suppress;
@@ -1039,12 +1057,12 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallba
 	case HOTKEY_ID_OFF:
 	case HOTKEY_ID_TOGGLE:
 		if (!hk)
-			return aResultToken.Error(ERR_NONEXISTENT_HOTKEY, aHotkeyName, ErrorPrototype::Target);
+			return FError(ERR_NONEXISTENT_HOTKEY, aHotkeyName, ErrorPrototype::Target);
 		if (!(variant || hk->mHookAction)) // mHookAction (alt-tab) hotkeys don't need a variant that matches the current criteria.
 			// To avoid ambiguity and also allow the script to use error handling to detect whether a variant
 			// already exists, it seems best to strictly require a matching variant rather than falling back
 			// onto some "default variant" such as the global variant (if any).
-			return aResultToken.Error(ERR_NONEXISTENT_VARIANT, aHotkeyName, ErrorPrototype::Target);
+			return FError(ERR_NONEXISTENT_VARIANT, aHotkeyName, ErrorPrototype::Target);
 		if (aHookAction == HOTKEY_ID_TOGGLE)
 			aHookAction = hk->mHookAction
 				? (hk->mParentEnabled ? HOTKEY_ID_OFF : HOTKEY_ID_ON) // Enable/disable parent hotkey (due to alt-tab being a global hotkey).
@@ -1067,7 +1085,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallba
 			else // Create hotkey: Hotkey Name, Callback [, Options]
 			{
 				if (!aCallback) // Caller is trying to set new aOptions for a nonexistent hotkey.
-					return aResultToken.Error(ERR_NONEXISTENT_HOTKEY, aHotkeyName, ErrorPrototype::Target);
+					return FError(ERR_NONEXISTENT_HOTKEY, aHotkeyName, ErrorPrototype::Target);
 				hk = AddHotkey(aCallback, 0, aHotkeyName, no_suppress);
 			}
 			if (!hk)
@@ -1122,7 +1140,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallba
 				else // No existing variant matching current criteria, so create a new variant.
 				{
 					if (   !(variant = hk->AddVariant(aCallback, no_suppress))   ) // Out of memory.
-						return aResultToken.MemoryError();
+						return FR_E_OUTOFMEM;
 					variant_was_just_created = true;
 					update_all_hotkeys = true;
 					// It seems undesirable for #UseHook to be applied to a hotkey just because it's options
@@ -1166,7 +1184,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallba
 	// Hotkey, Name,, Options  ; Where name exists as a hotkey, but the right variant doesn't yet exist.
 	// If it catches anything else, that could be a bug, so this error message will help spot it.
 	if (!(variant || hk->mHookAction)) // mHookAction (alt-tab) hotkeys don't need a variant that matches the current criteria.
-		return aResultToken.Error(ERR_NONEXISTENT_VARIANT, aHotkeyName, ErrorPrototype::Target);
+		return FError(ERR_NONEXISTENT_VARIANT, aHotkeyName, ErrorPrototype::Target);
 	// Below relies on the fact that either variant or hk->mHookAction (or both) is now non-zero.
 	// Specifically, when an existing hotkey was changed to become an alt-tab hotkey, above, there will sometimes
 	// be a NULL variant (depending on whether there happens to be a variant in the hotkey that matches the current criteria).
@@ -1175,7 +1193,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallba
 	// g_MaxThreadsBuffer, etc.
 	if (*aOptions)
 	{
-		for (LPTSTR cp = aOptions; *cp; ++cp)
+		for (auto cp = aOptions; *cp; ++cp)
 		{
 			switch(ctoupper(*cp))
 			{
@@ -1251,7 +1269,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallba
 
 
 
-Hotkey *Hotkey::AddHotkey(IObject *aCallback, HookActionType aHookAction, LPTSTR aName, UCHAR aNoSuppress)
+Hotkey *Hotkey::AddHotkey(IObject *aCallback, HookActionType aHookAction, LPCTSTR aName, UCHAR aNoSuppress)
 // aCallback can be NULL if the caller is creating a dynamic hotkey that has an aHookAction.
 // aName must not be NULL.
 // Returns the address of the new hotkey on success, or NULL otherwise.
@@ -1274,7 +1292,7 @@ Hotkey *Hotkey::AddHotkey(IObject *aCallback, HookActionType aHookAction, LPTSTR
 
 
 
-Hotkey::Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction, LPTSTR aName
+Hotkey::Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction, LPCTSTR aName
 	, UCHAR aNoSuppress)
 	: mID(HOTKEY_ID_INVALID)  // Default until overridden.
 	// Caller must ensure that either aName or aCallback isn't NULL.
@@ -1573,7 +1591,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aCallback, UCHAR aNoSuppress)
 
 
 
-ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aSyntaxCheckOnly)
+ResultType Hotkey::TextInterpret(LPCTSTR aName, Hotkey *aThisHotkey, bool aSyntaxCheckOnly)
 // Returns OK or FAIL.  This function is static and aThisHotkey is passed in as a parameter
 // so that aThisHotkey can be NULL. NULL signals that aName should be checked as a valid
 // hotkey only rather than populating the members of the new hotkey aThisHotkey. This function
@@ -1613,7 +1631,7 @@ ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aSyntax
 
 
 
-LPTSTR Hotkey::TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties)
+LPCTSTR Hotkey::TextToModifiers(LPCTSTR aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties)
 // This function and those it calls should avoid showing any error dialogs when caller passes NULL for aThisHotkey.
 // Takes input param <text> to support receiving only a subset of object.text.
 // Returns the location in <text> of the first non-modifier key.
@@ -1632,7 +1650,7 @@ LPTSTR Hotkey::TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperti
 
 	// Explicitly avoids initializing modifiers to 0 because the caller may have already included
 	// some set some modifiers in there.
-	LPTSTR marker;
+	LPCTSTR marker;
 	bool key_left, key_right;
 
 	// Simplifies and reduces code size below:
@@ -1763,11 +1781,10 @@ break_loop:
 	{
 		// When caller passes non-NULL aProperties, it didn't omit the prefix portion of a composite hotkey
 		// (e.g. the "a & " part of "a & b" is present).  So parse these and all other types of hotkeys when in this mode.
-		LPTSTR composite, temp;
-		if (composite = _tcsstr(marker, COMPOSITE_DELIMITER))
+		if (auto composite = _tcsstr(marker, COMPOSITE_DELIMITER))
 		{
 			tcslcpy(aProperties->prefix_text, marker, _countof(aProperties->prefix_text)); // Protect against overflow case script ultra-long (and thus invalid) key name.
-			if (temp = _tcsstr(aProperties->prefix_text, COMPOSITE_DELIMITER)) // Check again in case it tried to overflow.
+			if (auto temp = _tcsstr(aProperties->prefix_text, COMPOSITE_DELIMITER)) // Check again in case it tried to overflow.
 				omit_trailing_whitespace(aProperties->prefix_text, temp)[1] = '\0'; // Truncate prefix_text so that the suffix text is omitted.
 			composite = omit_leading_whitespace(composite + COMPOSITE_DELIMITER_LENGTH);
 			aProperties->prefix_has_tilde = aProperties->suffix_has_tilde;
@@ -1777,7 +1794,7 @@ break_loop:
 		}
 		else // A normal (non-composite) hotkey, so no_suppress was already set properly (higher above).
 			tcslcpy(aProperties->suffix_text, omit_leading_whitespace(marker), _countof(aProperties->suffix_text)); // Protect against overflow case script ultra-long (and thus invalid) key name.
-		if (temp = tcscasestr(aProperties->suffix_text, _T(" Up"))) // Should be reliable detection method because leading spaces have been omitted and it's unlikely a legitimate key name will ever contain a space followed by "Up".
+		if (auto temp = tcscasestr(aProperties->suffix_text, _T(" Up"))) // Should be reliable detection method because leading spaces have been omitted and it's unlikely a legitimate key name will ever contain a space followed by "Up".
 		{
 			omit_trailing_whitespace(aProperties->suffix_text, temp)[1] = '\0'; // Omit " Up" from suffix_text since caller wants that.
 			aProperties->is_key_up = true; // Override the default set earlier.
@@ -1788,7 +1805,7 @@ break_loop:
 
 
 
-ResultType Hotkey::TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey, bool aSyntaxCheckOnly)
+ResultType Hotkey::TextToKey(LPCTSTR aText, bool aIsModifier, Hotkey *aThisHotkey, bool aSyntaxCheckOnly)
 // This function and those it calls should avoid showing any error dialogs when caller passes NULL for
 // aThisHotkey (however, there is at least one exception explained in comments below where it occurs).
 // Caller must ensure that aText is a modifiable string.
@@ -1804,8 +1821,10 @@ ResultType Hotkey::TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey
 	bool is_mouse = false;
 	int joystick_id;
 
+	TCHAR buf[32]; // Large enough that truncation wouldn't yield a valid key name.
+
 	// Previous steps should make it unnecessary to call omit_leading_whitespace(aText).
-	LPTSTR keyname_end = find_identifier_end(aText);
+	auto keyname_end = find_identifier_end(aText);
 	if (keyname_end == aText && *aText) // Any single character except '\0' can be a key name.
 		++keyname_end;
 
@@ -1816,7 +1835,10 @@ ResultType Hotkey::TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey
 		// This is a key-up hotkey, such as "Ctrl Up::".
 		if (aThisHotkey)
 			aThisHotkey->mKeyUp = true;
-		*keyname_end = '\0'; // Terminate at the first space so that the word "up" is removed from further consideration.
+		tcslcpy(buf, aText, _countof(buf)); // Make a null-terminated copy to simplify various checks below.
+		if (keyname_end - aText < _countof(buf))
+			buf[keyname_end - aText] = '\0'; // Terminate at the first space so that the word "up" is removed from further consideration.
+		aText = buf;
 	}
 	else
 	{
@@ -2003,7 +2025,7 @@ void Hotkey::InstallMouseHook()
 
 
 
-Hotkey *Hotkey::FindHotkeyByTrueNature(LPTSTR aName, UCHAR &aNoSuppress, bool &aHookIsMandatory)
+Hotkey *Hotkey::FindHotkeyByTrueNature(LPCTSTR aName, UCHAR &aNoSuppress, bool &aHookIsMandatory)
 // Returns the address of the hotkey if found, NULL otherwise.
 // In v1.0.42, it tries harder to find a match so that the order of modifier symbols doesn't affect the true nature of a hotkey.
 // For example, ^!c should be the same as !^c, primarily because RegisterHotkey() and the hook would consider them the same.

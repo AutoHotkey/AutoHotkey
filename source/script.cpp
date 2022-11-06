@@ -64,12 +64,6 @@ FuncEntry g_BIF[] =
 	BIF1(HasBase, 2, 2),
 	BIFn(HasMethod, 1, 3, BIF_GetMethod),
 	BIF1(HasProp, 2, 2),
-	BIFn(HotIf, 0, 1, BIF_Hotkey),
-	BIFn(HotIfWinActive, 0, 2, BIF_Hotkey),
-	BIFn(HotIfWinExist, 0, 2, BIF_Hotkey),
-	BIFn(HotIfWinNotActive, 0, 2, BIF_Hotkey),
-	BIFn(HotIfWinNotExist, 0, 2, BIF_Hotkey),
-	BIFn(Hotkey, 1, 3, BIF_Hotkey),
 	BIF1(InStr, 2, 5),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
 	BIFi(IsAlpha, 1, 2, BIF_IsTypeish, VAR_TYPE_ALPHA),
@@ -1949,7 +1943,7 @@ process_completed_line:
 				// v1.0.40: Check if this is a remap rather than hotkey:
 				if (!hotkey_uses_otb   
 					&& *hotkey_flag // This hotkey's action is on the same line as its trigger definition.
-					&& (remap_dest_vk = hotkey_flag[1] ? TextToVK(cp = Hotkey::TextToModifiers(hotkey_flag, NULL)) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
+					&& (remap_dest_vk = hotkey_flag[1] ? TextToVK(cp = const_cast<LPTSTR>(Hotkey::TextToModifiers(hotkey_flag, NULL))) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
 					// For above:
 					// Fix for v1.0.44.07: Set remap_dest_vk to 0xFF if hotkey_flag's length is only 1 because:
 					// 1) It allows a destination key that doesn't exist in the keyboard layout (such as 6::ð in
@@ -1969,6 +1963,7 @@ process_completed_line:
 					bool remap_source_is_combo, remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
 
 					// These will be ignored in other stages if it turns out not to be a remap later below:
+					LPCTSTR cp1;
 					remap_source_vk = TextToVK(cp1 = Hotkey::TextToModifiers(buf, NULL)); // An earlier stage verified that it's a valid hotkey, though VK could be zero.
 					remap_source_is_combo = _tcsstr(cp1, COMPOSITE_DELIMITER);
 					remap_source_is_mouse = IsMouseVK(remap_source_vk);
@@ -3575,9 +3570,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		CreateHotFunc();
 		
-		ResultToken result_token;
-		if (!Hotkey::IfExpr(NULL, mLastHotFunc, result_token))		// Set the new criterion.
-			return FAIL;
+		auto fr = Hotkey::IfExpr(mLastHotFunc); // Set the new criterion.
+		if (fr != OK) // Only OK and FR_E_OUTOFMEM should be possible given how it's called.
+			return fr == FR_E_OUTOFMEM ? ScriptError(ERR_OUTOFMEM) : FAIL;
 
 		g->HotCriterion->OriginalExpr = SimpleHeap::Alloc(parameter);
 		

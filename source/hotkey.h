@@ -65,12 +65,12 @@ enum HotkeyTypeEnum {HK_NORMAL, HK_KEYBD_HOOK, HK_MOUSE_HOOK, HK_BOTH_HOOKS, HK_
 
 HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName); // Used by hotkeys and hotstrings.
 bool HotInputLevelAllowsFiring(SendLevelType inputLevel, ULONG_PTR aEventExtraInfo, LPTSTR aKeyHistoryChar);
-ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText);
+FResult SetHotkeyCriterion(HotCriterionType aType, LPCTSTR aWinTitle, LPCTSTR aWinText);
 HotkeyCriterion *AddHotkeyCriterion(HotkeyCriterion *aCriterion);
-HotkeyCriterion *AddHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText);
+HotkeyCriterion *AddHotkeyCriterion(HotCriterionType aType, LPCTSTR aWinTitle, LPCTSTR aWinText);
 HotkeyCriterion *AddHotkeyIfExpr();
-HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText);
-HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr);
+HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPCTSTR aWinTitle, LPCTSTR aWinText);
+HotkeyCriterion *FindHotkeyIfExpr(LPCTSTR aExpr);
 
 inline int InputLevelFromInfo(ULONG_PTR aExtraInfo)
 {
@@ -161,7 +161,7 @@ private:
 
 	// For now, constructor & destructor are private so that only static methods can create new
 	// objects.  This allow proper tracking of which OS hotkey IDs have been used.
-	Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction, LPTSTR aName, UCHAR aNoSuppress);
+	Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction, LPCTSTR aName, UCHAR aNoSuppress);
 	~Hotkey() {if (mIsRegistered) Unregister();}
 
 public:
@@ -211,11 +211,11 @@ public:
 
 	static void AllDestructAndExit(int exit_code);
 
-	static ResultType IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultToken);
-	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions
-		, IObject *aCallback, HookActionType aHookAction, ResultToken &aResultToken);
+	static FResult IfExpr(IObject *aExprObj);
+	static FResult IfExpr(LPCTSTR aExpr);
+	static FResult Dynamic(LPCTSTR aHotkeyName, LPCTSTR aOptions, IObject *aCallback, HookActionType aHookAction);
 
-	static Hotkey *AddHotkey(IObject *aCallback, HookActionType aHookAction, LPTSTR aName, UCHAR aNoSuppress);
+	static Hotkey *AddHotkey(IObject *aCallback, HookActionType aHookAction, LPCTSTR aName, UCHAR aNoSuppress);
 	HotkeyVariant *FindVariant();
 	HotkeyVariant *AddVariant(IObject *aCallback, UCHAR aNoSuppress);
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress);
@@ -228,7 +228,7 @@ public:
 	static void ManifestAllHotkeysHotstringsHooks();
 	static void RequireHook(HookType aWhichHook, bool aRequire = true) { aRequire ? sWhichHookAlways |= aWhichHook : sWhichHookAlways &= ~aWhichHook; }
 	static void MaybeUninstallHook();
-	static ResultType TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aSyntaxCheckOnly = false);
+	static ResultType TextInterpret(LPCTSTR aName, Hotkey *aThisHotkey, bool aSyntaxCheckOnly = false);
 
 	static constexpr int KEY_NAME_BUF_SIZE = 24; // Large enough to hold the largest key name in g_key_to_vk, which is probably "Browser_Favorites" (17).
 
@@ -244,8 +244,8 @@ public:
 		bool is_key_up;
 		bool hook_is_mandatory;
 	};
-	static LPTSTR TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties = NULL);
-	static ResultType TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey, bool aSyntaxCheckOnly);
+	static LPCTSTR TextToModifiers(LPCTSTR aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties = NULL);
+	static ResultType TextToKey(LPCTSTR aText, bool aIsModifier, Hotkey *aThisHotkey, bool aSyntaxCheckOnly);
 
 	static void InstallKeybdHook();
 	static void InstallMouseHook();
@@ -300,7 +300,7 @@ public:
 				vp->mRunAgainAfterFinished = false;
 	}
 
-	static HookActionType ConvertAltTab(LPTSTR aBuf, bool aAllowOnOff)
+	static HookActionType ConvertAltTab(LPCTSTR aBuf, bool aAllowOnOff)
 	{
 		if (!aBuf || !*aBuf) return 0;
 		if (!_tcsicmp(aBuf, _T("AltTab"))) return HOTKEY_ID_ALT_TAB;
@@ -317,7 +317,7 @@ public:
 		return 0;
 	}
 
-	static Hotkey *FindHotkeyByTrueNature(LPTSTR aName, UCHAR &aNoSuppress, bool &aHookIsMandatory);
+	static Hotkey *FindHotkeyByTrueNature(LPCTSTR aName, UCHAR &aNoSuppress, bool &aHookIsMandatory);
 	static Hotkey *FindHotkeyContainingModLR(modLR_type aModifiersLR);  //, HotkeyIDType hotkey_id_to_omit);
 	//static Hotkey *FindHotkeyWithThisModifier(vk_type aVK, sc_type aSC);
 	//static Hotkey *FindHotkeyBySC(sc2_type aSC2, mod_type aModifiers, modLR_type aModifiersLR);

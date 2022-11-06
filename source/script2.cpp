@@ -2434,62 +2434,77 @@ BIF_DECL(BIF_Number)
 ////////////////////
 
 
-BIF_DECL(BIF_Hotkey)
+bif_impl FResult BIF_Hotkey(StrArg aName, ExprTokenType *aAction, optl<StrArg> aOptions)
 {
-	_f_param_string_opt(aParam0, 0, nullptr, _f_callee_id == FID_HotIf);
-	_f_param_string_opt(aParam1, 1, nullptr, true);
-	_f_param_string_opt(aParam2, 2);
-	
 	ResultType result = OK;
 	IObject *functor = nullptr;
-
-	switch (_f_callee_id) 
+	HookActionType hook_action = 0;
+	if (aAction)
 	{
-	case FID_Hotkey:
-	{
-		HookActionType hook_action = 0;
-		if (!ParamIndexIsOmitted(1))
+		auto action_string = TokenToString(*aAction);
+		if (  !(functor = TokenToObject(*aAction)) && *action_string
+			&& !(hook_action = Hotkey::ConvertAltTab(action_string, true))  )
 		{
-			if (  !(functor = ParamIndexToObject(1)) && *aParam1
-				&& !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
+			// Search for a match in the hotkey variants' "original callbacks".
+			// I.e., find the function implicitly defined by "x::action".
+			for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
 			{
-				// Search for a match in the hotkey variants' "original callbacks".
-				// I.e., find the function implicitly defined by "x::action".
-				for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
-				{
-					if (_tcscmp(Hotkey::shk[i]->mName, aParam1))
-						continue;
-					
-					for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
-						if (v->mHotCriterion == g->HotCriterion)
-						{
-							functor = v->mOriginalCallback.ToFunc();
-							goto break_twice;
-						}
-				}
-			break_twice:;
-				if (!functor)
-					_f_throw_param(1);
+				if (_tcscmp(Hotkey::shk[i]->mName, aName))
+					continue;
+				
+				for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
+					if (v->mHotCriterion == g->HotCriterion)
+					{
+						functor = v->mOriginalCallback.ToFunc();
+						goto break_twice;
+					}
 			}
+		break_twice:;
 			if (!functor)
-				hook_action = Hotkey::ConvertAltTab(aParam1, true);
+				return FR_E_ARG(1);
 		}
-		result = Hotkey::Dynamic(aParam0, aParam2, functor, hook_action, aResultToken);
-		break;
+		if (!functor)
+			hook_action = Hotkey::ConvertAltTab(action_string, true);
 	}
-	case FID_HotIf:
-		functor = ParamIndexToOptionalObject(0);
-		result = Hotkey::IfExpr(aParam0, functor, aResultToken);
-		break;
-	
-	default: // HotIfWinXXX
-		result = SetHotkeyCriterion(_f_callee_id, aParam0, aParam1); // Currently, it only fails upon out-of-memory.
-	
+	return Hotkey::Dynamic(aName, aOptions.value_or_empty(), functor, hook_action);
+}
+
+
+
+bif_impl FResult HotIf(ExprTokenType *aCriterion)
+{
+	TCHAR buf[MAX_NUMBER_SIZE];
+	if (!aCriterion)
+	{
+		g->HotCriterion = nullptr;
+		return OK;
 	}
-	
-	if (!result)
-		_f_return_FAIL;
-	_f_return_empty;
+	else if (auto obj = TokenToObject(*aCriterion))
+		return Hotkey::IfExpr(obj);
+	else
+		return Hotkey::IfExpr(TokenToString(*aCriterion, buf));
+}
+
+
+
+bif_impl FResult HotIfWinActive(optl<StrArg> aWinTitle, optl<StrArg> aWinText)
+{
+	return SetHotkeyCriterion(HOT_IF_ACTIVE, aWinTitle.value_or_empty(), aWinText.value_or_empty());
+}
+
+bif_impl FResult HotIfWinNotActive(optl<StrArg> aWinTitle, optl<StrArg> aWinText)
+{
+	return SetHotkeyCriterion(HOT_IF_NOT_ACTIVE, aWinTitle.value_or_empty(), aWinText.value_or_empty());
+}
+
+bif_impl FResult HotIfWinExist(optl<StrArg> aWinTitle, optl<StrArg> aWinText)
+{
+	return SetHotkeyCriterion(HOT_IF_EXIST, aWinTitle.value_or_empty(), aWinText.value_or_empty());
+}
+
+bif_impl FResult HotIfWinNotExist(optl<StrArg> aWinTitle, optl<StrArg> aWinText)
+{
+	return SetHotkeyCriterion(HOT_IF_NOT_EXIST, aWinTitle.value_or_empty(), aWinText.value_or_empty());
 }
 
 
