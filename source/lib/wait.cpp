@@ -219,14 +219,24 @@ static FResult WinWait(ExprTokenType *aWinTitle, optl<StrArg> aWinText, optl<dou
 				p.hwnd = NULL;
 				return true;
 			}
+			bool is_match, want_match;
 			if (p.condition == FID_WinWait || p.condition == FID_WinWaitClose)
+			{
 				// Wait for the window to become visible/hidden.  Most functions ignore
 				// DetectHiddenWindows when given a pure HWND/object (because it's more
 				// useful that way), but in this case it seems more useful and intuitive
 				// to respect DetectHiddenWindows.
-				return (g->DetectWindow(p.hwnd) == (p.condition == FID_WinWait));
+				is_match = g->DetectWindow(p.hwnd);
+				want_match = (p.condition == FID_WinWait);
+			}
 			else
-				return (GetForegroundWindow() == p.hwnd) == (p.condition == FID_WinWaitActive);
+			{
+				is_match = (GetForegroundWindow() == p.hwnd);
+				want_match = (p.condition == FID_WinWaitActive);
+			}
+			if (is_match)
+				g->hWndLastUsed = p.hwnd;
+			return is_match == want_match;
 		};
 	}
 	else // hwnd_specified == false
