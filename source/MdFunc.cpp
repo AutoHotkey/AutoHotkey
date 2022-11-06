@@ -83,11 +83,13 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 	// #if _DEBUG, ensure aArg is effectively terminated for the inner loop below.
 	ASSERT(!aArgSize || !MdType_IsMod(aArg[aArgSize - 1]));
 
+#ifdef ENABLE_MD_THISCALL
 	if (aArgSize > 1 && *aArg == MdType::ThisCall)
 	{
 		mThisCall = true;
 		mArgType++;
 	}
+#endif
 
 	int ac = 0, pc = 0;
 	if (aPrototype)
@@ -254,12 +256,14 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			continue;
 		}
 
+#ifdef ENABLE_MD_BITS
 		if (MdType_IsBits(arg_type))
 		{
 			// arg_type represents a constant value to put directly into args.
 			arg_value = MdType_BitsValue(arg_type);
 			continue;
 		}
+#endif
 
 		if (ParamIndexIsOmitted(pi))
 		{

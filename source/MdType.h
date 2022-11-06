@@ -28,11 +28,15 @@ enum class MdType : UINT8
 	//NzIntWin32, // BOOL result where FALSE means failure and GetLastError() is applicable.
 	Params,
 	TypeMask	= 0xF,
+#ifdef ENABLE_MD_BITS
 	BitsBase	= 99, // For encoding a small literal value to insert into the parameter list.
+#endif
 	Optional	= 0x80,
 	RetVal,
-	ThisCall, // Only valid at the beginning of the args.
 	Out,
+#ifdef ENABLE_MD_THISCALL
+	ThisCall, // Only valid at the beginning of the args.
+#endif
 	// Only aliases from here on
 	FirstModifier = Optional,
 	BitsUpperBound = Optional,
@@ -49,9 +53,13 @@ enum class MdType : UINT8
 
 #define MdType_IsOut(t) ((t) == MdType::Out) // Macro supports the future addition of other Out modifiers.
 
+#ifdef ENABLE_MD_BITS
 #define MdType_IsBits(t) ((t) >= MdType::BitsBase && (t) < MdType::BitsUpperBound)
 #define MdType_Bits(t) ((MdType)(static_cast<int>(t) + ((int)MdType::BitsBase + 1)))
 #define MdType_BitsValue(t) (static_cast<int>(t) - ((int)MdType::BitsBase + 1)) // t100 = 0
+#else
+#define MdType_IsBits(t) false
+#endif
 
 
 template<MdType T> struct md_argtype;
