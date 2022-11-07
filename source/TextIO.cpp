@@ -714,322 +714,250 @@ class FileObject : public Object
 	FileObject() {}
 	~FileObject() {}
 
-	enum MemberID {
-		// methods
-		M_Read,
-		M_Write,
-		M_ReadLine,
-		M_WriteLine,
-		M_RawRead,
-		M_RawWrite,
-		M_Close,
-		M_Seek,
-		// properties
-		P_Pos,
-		P_Length,
-		P_AtEOF,
-		P_Handle,
-		P_Encoding
-	};
-
-	static ObjectMember sMembers[];
+	static ObjectMemberMd sMembers[];
 	static Object *sPrototype;
 
 	friend void ::DefineFileClass();
-
-	enum NumReadWriteFlags
+	
+	#define DEF_READ_WRITE(_suffix_, _type_) \
+		FResult Read##_suffix_(_type_ &aRetVal) { \
+			return mFile.Read(&aRetVal, sizeof(aRetVal)) ? OK : FR_ABORTED; \
+		} \
+		FResult Write##_suffix_(_type_ aValue, UINT &aRetVal) { \
+			aRetVal = mFile.Write(&aValue, sizeof(aValue)); \
+			return OK; \
+		}
+	
+	DEF_READ_WRITE(Int64, __int64)
+	DEF_READ_WRITE(Int, int)
+	DEF_READ_WRITE(UInt, UINT)
+	DEF_READ_WRITE(Short, INT16)
+	DEF_READ_WRITE(UShort, UINT16)
+	DEF_READ_WRITE(Char, INT8)
+	DEF_READ_WRITE(UChar, UINT8)
+	
+	DEF_READ_WRITE(Float, float)
+	DEF_READ_WRITE(Double, double)
+	
+	#undef DEF_READ_WRITE
+	
+	FResult Read(optl<UINT> aCharCount, StrRet &aRetVal)
 	{
-		F_SIZE_MASK = 0xF,
-		F_READ = 0x10,
-		F_WRITE = 0,
-		F_SIGNED = 0x20,
-		F_UNSIGNED = 0,
-		F_FLOAT = 0x40
-	};
-
-	void NumReadWrite(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-	{
-		const bool reading = aID & F_READ;
-		const BOOL is_signed = aID & F_SIGNED, is_float = aID & F_FLOAT;
-		const DWORD size = aID & F_SIZE_MASK;
-
-		union {
-			__int64 i8;
-			int i4;
-			short i2;
-			char i1;
-			double d;
-			float f;
-		} buf;
-
-		if (reading)
+		DWORD length = aCharCount.has_value() ? aCharCount.value()
+			: (DWORD)(mFile.Length() - mFile.Tell()); // We don't know the actual number of characters these bytes will translate to, but this should be sufficient.
+		if (length == -1)
 		{
-			buf.i8 = 0;
-			if ( !mFile.Read(&buf, size) )
-				_o_return_empty; // Fail.
+			aRetVal.SetEmpty();
+			return OK;
+		}
+		auto buf = aRetVal.Alloc(length);
+		if (!buf)
+			return FR_E_OUTOFMEM;
+		length = mFile.Read(buf, length);
+		buf[length] = '\0';
+		aRetVal.SetLength(length);
+		return OK;
+	}
+	
+	FResult ReadLine(StrRet &aRetVal)
+	{
+		auto buf = aRetVal.Alloc(READ_FILE_LINE_SIZE);
+		if (!buf)
+			return FR_E_OUTOFMEM;
+		DWORD length = mFile.ReadLine(buf, READ_FILE_LINE_SIZE - 1);
+		if (length && buf[length - 1] == '\n')
+			--length;
+		buf[length] = '\0';
+		aRetVal.SetLength(length);
+		return OK;
+	}
+	
+	FResult WriteX(ExprTokenType *aValue, UINT &aRetVal, bool aWriteLine)
+	{
+		DWORD bytes_written = 0;
+		size_t chars_to_write = 0;
+		if (aValue)
+		{
+			// aValue is passed as ExprTokenType rather than StrArg to retain
+			// support for binary null chars.
+			if (TokenToObject(*aValue))
+				return FParamError(0, aValue, _T("String"));
+			TCHAR buf[MAX_NUMBER_SIZE];
+			LPTSTR param1 = TokenToString(*aValue, buf, &chars_to_write);
+			bytes_written = mFile.Write(param1, (DWORD)chars_to_write);
+		}
+		if (aWriteLine && (bytes_written || !chars_to_write)) // i.e. don't attempt it if above failed.
+		{
+			bytes_written += mFile.Write(_T("\n"), 1);
+		}
+		aRetVal = bytes_written;
+		return OK;
+	}
+	
+	FResult Write(ExprTokenType &aValue, UINT &aRetVal)
+	{
+		return WriteX(&aValue, aRetVal, false);
+	}
+	
+	FResult WriteLine(ExprTokenType *aValue, UINT &aRetVal)
+	{
+		return WriteX(aValue, aRetVal, true);
+	}
+	
+	FResult RawX(ExprTokenType &aBuf, optl<UINT> aBytes, UINT &aRetVal, bool reading)
+	{
+		LPVOID target;
+		DWORD max_size;
+		ExprTokenType &target_token = aBuf;
+		switch (TypeOfToken(target_token))
+		{
+		case SYM_OBJECT: { // The most common case: a Buffer.
+			size_t ptr, size;
+			FuncResult rt;
+			GetBufferObjectPtr(rt, TokenToObject(target_token), ptr, size);
+			if (rt.Exited())
+				return FR_FAIL;
+			target = (LPVOID)ptr;
+			max_size = (DWORD)size;
+			break; }
+		case SYM_STRING:
+			if (reading)
+				return FParamError(0, &aBuf, _T("Buffer"));
+			target = target_token.marker;
+			max_size = (DWORD)(target_token.marker_length + 1) * sizeof(TCHAR); // Allow +1 to write the null-terminator (but it won't be written by default if size is omitted).
+			break;
+		case SYM_INTEGER:
+			target = (LPVOID)TokenToInt64(target_token);
+			max_size = ~0; // Unknown; perform no validation.
+			break;
+		default:
+			return FR_E_ARG(0);
+		}
+		if ((size_t)target < 65536) // Basic sanity check relying on the fact that Win32 platforms reserve the first 64KB of address space.
+			return FR_E_ARG(0);
 
-			if (is_float)
-			{
-				_o_return((size == 4) ? buf.f : buf.d);
-			}
-			else
-			{
-				if (is_signed)
-				{
-					// sign-extend to 64-bit
-					switch (size)
-					{
-					case 4: buf.i8 = buf.i4; break;
-					case 2: buf.i8 = buf.i2; break;
-					case 1: buf.i8 = buf.i1; break;
-					//case 8: not needed.
-					}
-				}
-				//else it's unsigned. No need to zero-extend thanks to init done earlier.
-				_o_return(buf.i8);
-			}
+		DWORD size;
+		if (!aBytes.has_value())
+		{
+			if (max_size == ~0) // Param #1 was an address.
+				return FR_E_ARG(1);
+			size = max_size;
+			if (!reading && target_token.symbol == SYM_STRING)
+				// Default to the byte count of the binary string, excluding the null-terminator.
+				size -= sizeof(TCHAR);
 		}
 		else
 		{
-			ExprTokenType &token_to_write = *aParam[0];
-
-			if (is_float)
-			{
-				buf.d = TokenToDouble(token_to_write);
-				if (size == 4)
-					buf.f = (float)buf.d;
-			}
-			else
-				buf.i8 = TokenToInt64(token_to_write);
-
-			DWORD bytes_written = mFile.Write(&buf, size);
-			// Return bytes_written even if it is 0:
-			_o_return(bytes_written);
+			size = aBytes.value();
+			if (size > max_size) // Implies max_size != ~0.
+				return FR_E_ARG(1); // Invalid size (param #2).
 		}
+
+		if (reading)
+			aRetVal = mFile.Read(target, size);
+		else
+			aRetVal = mFile.Write(target, size);
+		return OK;
 	}
 
-	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	FResult RawRead(ExprTokenType &aBuf, optl<UINT> aBytes, UINT &aRetVal)
 	{
-		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
-
-		auto member = MemberID(aID);
-		switch (member)
-		{
-		case M_Read:
-			{
-				DWORD length;
-				if (aParamCount)
-					length = (DWORD)ParamIndexToInt64(0);
-				else
-					length = (DWORD)(mFile.Length() - mFile.Tell()); // We don't know the actual number of characters these bytes will translate to, but this should be sufficient.
-				if (length == -1)
-					break; // Fail.
-				if (!TokenSetResult(aResultToken, NULL, length)) // Only after checking length above: TokenSetResult requires non-NULL aResult if aResultLength == -1.
-					return;
-				length = mFile.Read(aResultToken.marker, length);
-				aResultToken.symbol = SYM_STRING;
-				aResultToken.marker[length] = '\0';
-				aResultToken.marker_length = length; // Update marker_length to the actual number of characters read.
-				_o_return_retval;
-			}
-			break;
-		
-		case M_ReadLine:
-			{	// See above for comments.
-				if (!TokenSetResult(aResultToken, NULL, READ_FILE_LINE_SIZE))
-					return;
-				DWORD length = mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1);
-				aResultToken.symbol = SYM_STRING;
-				if (length && aResultToken.marker[length - 1] == '\n')
-					--length;
-				aResultToken.marker[length] = '\0';
-				aResultToken.marker_length = length;
-				_o_return_retval;
-			}
-			break;
-
-		case M_Write:
-		case M_WriteLine:
-			{
-				DWORD bytes_written = 0;
-				size_t chars_to_write = 0;
-				if (aParamCount)
-				{
-					if (ParamIndexToObject(0))
-						_f_throw_param(0, _T("String"));
-					LPTSTR param1 = ParamIndexToString(0, _f_number_buf, &chars_to_write);
-					bytes_written = mFile.Write(param1, (DWORD)chars_to_write);
-				}
-				if (member == M_WriteLine && (bytes_written || !chars_to_write)) // i.e. don't attempt it if above failed.
-				{
-					bytes_written += mFile.Write(_T("\n"), 1);
-				}
-				aResultToken.value_int64 = bytes_written;
-				_o_return_retval;
-			}
-			break;
-
-		case M_RawRead:
-		case M_RawWrite:
-			{
-				bool reading = member == M_RawRead;
-
-				LPVOID target;
-				DWORD max_size;
-				ExprTokenType &target_token = *aParam[0];
-				switch (target_token.symbol)
-				{
-				case SYM_STRING:
-					if (reading)
-						_o_throw(ERR_PARAM1_INVALID, ErrorPrototype::Type); // Can't read into a read-only string.
-					target = target_token.marker;
-					max_size = (DWORD)(target_token.marker_length + 1) * sizeof(TCHAR); // Allow +1 to write the null-terminator (but it won't be written by default if size is omitted).
-					break;
-				default:
-					if (IObject *obj = TokenToObject(target_token))
-					{
-						size_t ptr, size;
-						GetBufferObjectPtr(aResultToken, obj, ptr, size);
-						if (aResultToken.Exited())
-							return;
-						target = (LPVOID)ptr;
-						max_size = (DWORD)size;
-					}
-					else if (TokenIsPureNumeric(target_token) == PURE_INTEGER)
-					{
-						target = (LPVOID)TokenToInt64(target_token);
-						max_size = ~0; // Unknown; perform no validation.
-					}
-					else
-						target = 0;
-					if ((size_t)target >= 65536) // Basic sanity check relying on the fact that Win32 platforms reserve the first 64KB of address space.
-						break;
-					// Otherwise, it's invalid:
-					_o_throw_param(0);
-				}
-
-				DWORD size;
-				if (ParamIndexIsOmitted(1))
-				{
-					if (max_size == ~0) // Param #1 was an address.
-						_o_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
-					size = max_size;
-					if (!reading && target_token.symbol == SYM_STRING)
-						// Default to the byte count of the binary string, excluding the null-terminator.
-						size -= sizeof(TCHAR);
-				}
-				else
-				{
-					size = (DWORD)ParamIndexToInt64(1);
-					if (size > max_size) // Implies max_size != ~0.
-						_o_throw_param(1); // Invalid size (param #2).
-				}
-
-				DWORD result;
-				if (reading)
-					result = mFile.Read(target, size);
-				else
-					result = mFile.Write(target, size);
-				aResultToken.value_int64 = result;
-				_o_return_retval;
-			}
-			break;
-
-		case P_Pos:
-			if (IS_INVOKE_GET)
-			{
-				aResultToken.value_int64 = mFile.Tell();
-				_o_return_retval;
-			}
-			else
-			{
-		case M_Seek:
-				__int64 distance = ParamIndexToInt64(0);
-				int origin;
-				if (aParamCount > 1)
-					origin = ParamIndexToInt(1);
-				else // Defaulting to SEEK_END when distance is negative seems more useful than allowing it to be interpreted as an unsigned value (> 9.e18 bytes).
-					origin = (distance < 0) ? SEEK_END : SEEK_SET;
-
-				aResultToken.value_int64 = mFile.Seek(distance, origin);
-				_o_return_retval;
-			}
-			break;
-
-
-		case P_Length:
-			if (IS_INVOKE_GET) 
-			{
-				aResultToken.value_int64 = mFile.Length();
-				_o_return_retval;
-			}
-			else // SET
-			{
-				mFile.Length(ParamIndexToInt64(0));
-				return;
-			}
-			break;
-
-		case P_AtEOF:
-			aResultToken.value_int64 = mFile.AtEOF();
-			_o_return_retval;
-
-		case P_Handle:
-			aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
-			_o_return_retval;
-
-		case P_Encoding:
-		{
-			// Encoding: UTF-8, UTF-16 or CPnnn.  The -RAW suffix (CP_AHKNOBOM) is not supported; it is normally
-			// stripped out when the file is opened, so passing it to SetCodePage() would break encoding/decoding
-			// of non-ASCII characters (and did in v1.1.15.03 and earlier).  Although it could be detected/added
-			// via TextStream::mFlags, this isn't done because:
-			//  - It would only tell us whether the script passed "-RAW", not whether the file really has a BOM.
-			//  - It's questionable which behaviour is more more useful, but excluding "-RAW" is definitely simpler.
-			//  - Existing scripts may rely on File.Encoding not returning "-RAW".
-			UINT codepage;
-			if (IS_INVOKE_SET)
-			{
-				codepage = Line::ConvertFileEncoding(*aParam[0]);
-				if (codepage == -1)
-					_o_throw_value(ERR_INVALID_VALUE);
-				mFile.SetCodePage(codepage & ~CP_AHKNOBOM); // Ignore "-RAW" by removing the CP_AHKNOBOM flag; see comments above.
-				return;
-			}
-			LPTSTR name;
-			codepage = mFile.GetCodePage();
-			// There's no need to check for the CP_AHKNOBOM flag here because it's stripped out when the file is opened.
-			switch (codepage)
-			{
-			// GetCodePage() returns the value of GetACP() in place of CP_ACP, so this case is not needed:
-			//case CP_ACP:  name = _T("");  break;
-			case CP_UTF8:	name = _T("UTF-8");  break;
-			case CP_UTF16:	name = _T("UTF-16"); break;
-			default:
-				// Although we could check codepage == GetACP() and return blank in that case, there's no way
-				// to know whether something like "CP0" or the actual codepage was passed to FileOpen, so just
-				// return "CPn" when none of the cases above apply:
-				name = aResultToken.buf;
-				name[0] = _T('C');
-				name[1] = _T('P');
-				_itot(codepage, name + 2, 10);
-			}
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = name;
-			_o_return_retval;
-		}
-
-		case M_Close:
-			mFile.Close();
-			break;
-		}
-		
-		// Since above didn't return, something went wrong or an empty return value is desired.
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T(""); // Already set in most cases, but done here for maintainability.
-		_o_return_retval;
+		return RawX(aBuf, aBytes, aRetVal, true);
+	}
+	
+	FResult RawWrite(ExprTokenType &aBuf, optl<UINT> aBytes, UINT &aRetVal)
+	{
+		return RawX(aBuf, aBytes, aRetVal, false);
+	}
+	
+	FResult Seek(__int64 aDistance, optl<int> aOrigin, BOOL &aRetVal)
+	{
+		aRetVal = mFile.Seek(aDistance, aOrigin.value_or((aDistance < 0) ? SEEK_END : SEEK_SET));
+		return OK;
 	}
 
+	FResult get_Pos(__int64 &aRetVal)
+	{
+		aRetVal = mFile.Tell();
+		return OK;
+	}
+	
+	FResult set_Pos(__int64 aValue)
+	{
+		BOOL unused;
+		return Seek(aValue, nullptr, unused);
+	}
+	
+	FResult get_Length(__int64 &aRetVal)
+	{
+		aRetVal = mFile.Length();
+		return OK;
+	}
+	
+	FResult set_Length(__int64 aValue)
+	{
+		mFile.Length(aValue);
+		return OK;
+	}
+	
+	FResult get_AtEOF(BOOL &aRetVal)
+	{
+		aRetVal = mFile.AtEOF();
+		return OK;
+	}
+	
+	FResult get_Handle(UINT_PTR &aRetVal)
+	{
+		aRetVal = (UINT_PTR)mFile.Handle();
+		return OK;
+	}
+	
+	// Encoding: UTF-8, UTF-16 or CPnnn.  The -RAW suffix (CP_AHKNOBOM) is not supported; it is normally
+	// stripped out when the file is opened, so passing it to SetCodePage() would break encoding/decoding
+	// of non-ASCII characters (and did in v1.1.15.03 and earlier).  Although it could be detected/added
+	// via TextStream::mFlags, this isn't done because:
+	//  - It would only tell us whether the script passed "-RAW", not whether the file really has a BOM.
+	//  - It's questionable which behaviour is more more useful, but excluding "-RAW" is definitely simpler.
+	//  - Existing scripts may rely on File.Encoding not returning "-RAW".
+	
+	FResult get_Encoding(ResultToken &aResultToken)
+	{
+		UINT codepage = mFile.GetCodePage();
+		// There's no need to check for the CP_AHKNOBOM flag here because it's stripped out when the file is opened.
+		switch (codepage)
+		{
+		// GetCodePage() returns the value of GetACP() in place of CP_ACP, so this case is not needed:
+		//case CP_ACP: aRetVal.SetEmpty(); return OK;
+		case CP_UTF8: aResultToken.SetValue(_T("UTF-8"), 5); return OK;
+		case CP_UTF16: aResultToken.SetValue(_T("UTF-16"), 6); return OK;
+		default:
+			// Although we could check codepage == GetACP() and return blank in that case, there's no way
+			// to know whether something like "CP0" or the actual codepage was passed to FileOpen, so just
+			// return "CPn" when none of the cases above apply:
+			auto name = aResultToken.buf;
+			name[0] = _T('C');
+			name[1] = _T('P');
+			_itot(codepage, name + 2, 10);
+			aResultToken.SetValue(name);
+			return OK;
+		}
+	}
+	
+	FResult set_Encoding(ExprTokenType &aValue)
+	{
+		UINT codepage = Line::ConvertFileEncoding(aValue);
+		if (codepage == -1)
+			return FR_E_ARG(0);
+		mFile.SetCodePage(codepage & ~CP_AHKNOBOM); // Ignore "-RAW" by removing the CP_AHKNOBOM flag; see comments above.
+		return OK;
+	}
+	
+	FResult Close()
+	{
+		mFile.Close();
+		return OK;
+	}
+	
 	TextFile mFile;
 	
 public:
@@ -1037,39 +965,39 @@ public:
 };
 
 
-ObjectMember FileObject::sMembers[] =
+ObjectMemberMd FileObject::sMembers[] =
 {
-	Object_Method (Close, 0, 0),
-	Object_Method (RawRead, 1, 2),
-	Object_Method (RawWrite, 1, 2),
-	Object_Method (Read, 0, 1),
-	Object_Method_(ReadChar, 0, 0, NumReadWrite, F_READ | F_SIGNED | 1),
-	Object_Method_(ReadDouble, 0, 0, NumReadWrite, F_READ | F_FLOAT | 8),
-	Object_Method_(ReadFloat, 0, 0, NumReadWrite, F_READ | F_FLOAT | 4),
-	Object_Method_(ReadInt, 0, 0, NumReadWrite, F_READ | F_SIGNED | 4),
-	Object_Method_(ReadInt64, 0, 0, NumReadWrite, F_READ | F_SIGNED | 8),
-	Object_Method (ReadLine, 0, 0),
-	Object_Method_(ReadShort, 0, 0, NumReadWrite, F_READ | F_SIGNED | 2),
-	Object_Method_(ReadUChar, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 1),
-	Object_Method_(ReadUInt, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 4),
-	Object_Method_(ReadUShort, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 2),
-	Object_Method (Seek, 1, 2),
-	Object_Method (Write, 1, 1),
-	Object_Method_(WriteChar, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 1),
-	Object_Method_(WriteDouble, 1, 1, NumReadWrite, F_WRITE | F_FLOAT | 8),
-	Object_Method_(WriteFloat, 1, 1, NumReadWrite, F_WRITE | F_FLOAT | 4),
-	Object_Method_(WriteInt, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 4),
-	Object_Method_(WriteInt64, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 8),
-	Object_Method (WriteLine, 0, 1),
-	Object_Method_(WriteShort, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 2),
-	Object_Method_(WriteUChar, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 1),
-	Object_Method_(WriteUInt, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 4),
-	Object_Method_(WriteUShort, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 2),
-	Object_Property_get    (AtEOF),
-	Object_Property_get_set(Encoding),
-	Object_Property_get    (Handle),
-	Object_Property_get_set(Length),
-	Object_Property_get_set(Pos)
+	md_property_get	(FileObject, AtEOF, Bool32),
+	md_member		(FileObject, Close, CALL, md_arg_none),
+	md_property		(FileObject, Encoding, Variant),
+	md_property_get	(FileObject, Handle, UIntPtr),
+	md_property		(FileObject, Length, Int64),
+	md_property		(FileObject, Pos, Int64),
+	md_member		(FileObject, RawRead, CALL, (In, Variant, Buffer), (In_Opt, UInt32, Bytes), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, RawWrite, CALL, (In, Variant, Data), (In_Opt, UInt32, Bytes), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, Read, CALL, (In_Opt, UInt32, Chars), (Ret, String, RetVal)),
+	md_member		(FileObject, ReadChar, CALL, (Ret, Int8, RetVal)),
+	md_member		(FileObject, ReadDouble, CALL, (Ret, Float64, RetVal)),
+	md_member		(FileObject, ReadFloat, CALL, (Ret, Float32, RetVal)),
+	md_member		(FileObject, ReadInt, CALL, (Ret, Int32, RetVal)),
+	md_member		(FileObject, ReadInt64, CALL, (Ret, Int64, RetVal)),
+	md_member		(FileObject, ReadLine, CALL, (Ret, String, RetVal)),
+	md_member		(FileObject, ReadShort, CALL, (Ret, Int16, RetVal)),
+	md_member		(FileObject, ReadUChar, CALL, (Ret, UInt8, RetVal)),
+	md_member		(FileObject, ReadUInt, CALL, (Ret, UInt32, RetVal)),
+	md_member		(FileObject, ReadUShort, CALL, (Ret, UInt16, RetVal)),
+	md_member		(FileObject, Seek, CALL, (In, Int64, Distance), (In_Opt, Int32, Origin), (Ret, Bool32, RetVal)),
+	md_member		(FileObject, Write, CALL, (In, Variant, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteChar, CALL, (In, Int8, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteDouble, CALL, (In, Float64, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteFloat, CALL, (In, Float32, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteInt, CALL, (In, Int32, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteInt64, CALL, (In, Int64, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteLine, CALL, (In_Opt, Variant, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteShort, CALL, (In, Int16, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteUChar, CALL, (In, UInt8, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteUInt, CALL, (In, UInt32, Value), (Ret, UInt32, RetVal)),
+	md_member		(FileObject, WriteUShort, CALL, (In, UInt16, Value), (Ret, UInt32, RetVal)),
 };
 
 Object *FileObject::sPrototype;
