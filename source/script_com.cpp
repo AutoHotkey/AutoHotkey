@@ -1642,13 +1642,9 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	if (dispIdMember > 0 && dispIdMember <= sDispNameCount)
 	{
 		param_token[0].marker = sDispNameByIdMinus1[dispIdMember - 1];
-		if (IsPureNumeric(param_token[0].marker, FALSE, FALSE)) // o[1] in JScript produces a numeric name.
-		{
-			param_token[0].symbol = SYM_INTEGER;
-			param_token[0].value_int64 = ATOI(param_token[0].marker);
-		}
-		else
-			param_token[0].symbol = SYM_STRING;
+		// Use SYM_OPERAND to allow the object to treat this name as a numeric key if appropriate.
+		param_token[0].symbol = SYM_OPERAND;
+		param_token[0].buf = NULL;
 		param[0] = &param_token[0];
 		++param_count;
 		if (flags == IT_CALL && (wFlags & DISPATCH_PROPERTYGET))
