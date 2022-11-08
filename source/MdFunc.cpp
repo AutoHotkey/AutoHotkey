@@ -156,7 +156,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	int rt_count = 0;
 	
 	UINT_PTR *args = (UINT_PTR *)_alloca(mArgSlots * sizeof(UINT_PTR));
-	int ai = 0, pi = 0;
+	int first_param_index = 0;
 
 	ResultType result = OK;
 
@@ -178,14 +178,14 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		// This is reliant on (IObject*)obj being the same address as (WhateverObject*)obj
 		// (which might not be the case for classes with multiple virtual base classes):
 		args[0] = (UINT_PTR)obj;
-		ai = pi = 1;
+		first_param_index = 1;
 	}
 
 	MdType retval_arg_type = MdType::Void;
 	int retval_index = -1;
 	int output_var_count = 0;
 	auto atp = mArgType;
-	for (; ai < mArgSlots; ++ai, ++atp)
+	for (int ai = first_param_index, pi = ai; ai < mArgSlots; ++ai, ++atp)
 	{
 		bool opt = false;
 		MdType out = MdType::Void;
@@ -458,7 +458,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 
 	// Copy output parameters
 	atp = mArgType;
-	for (int ai = 0, pi = 0; output_var_count; ++atp, ++ai, ++pi)
+	for (int ai = first_param_index, pi = ai; output_var_count; ++atp, ++ai, ++pi)
 	{
 		if (ai == retval_index)
 			++ai; // This args slot doesn't correspond to an aParam slot.
