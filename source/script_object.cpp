@@ -3002,7 +3002,7 @@ void DefineClasses(Object *aBaseClass, Object *aBaseProto, std::initializer_list
 }
 
 
-Object *Object::CreateRootPrototypes()
+void Object::CreateRootPrototypes()
 {
 	// Create the root prototypes before defining any members, since
 	// each member relies on Func::sPrototype having been initialized.
@@ -3112,11 +3112,9 @@ Object *Object::CreateRootPrototypes()
 	// Permit Object.Call to construct Error objects.
 	ErrorPrototype::Error->mFlags &= ~NativeClassPrototype;
 	ErrorPrototype::OS->mFlags &= ~NativeClassPrototype;
-
-	return sAnyPrototype;
 }
 
-Object *Object::sAnyPrototype = CreateRootPrototypes();
+Object *Object::sAnyPrototype;
 Object *Func::sPrototype;
 Object *Object::sPrototype;
 

@@ -151,6 +151,13 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			break; // No more switches allowed after this point.
 		}
 	}
+	
+	// Initialize the object model here, prior to any use of Objects (or Array below).
+	// Doing this here rather than in a static initializer in script_object.cpp avoids
+	// issues of static initialization order.  At this point all static members such as
+	// sMembers arrays have been initialized (normally they are constant initialized
+	// anyway, but in debug mode the arrays using cast_into_voidp() are not).
+	Object::CreateRootPrototypes();
 
 	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_GLOBAL))
 	{

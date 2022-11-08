@@ -484,7 +484,7 @@ public:
 	static ObjectMember sErrorMembers[], sOSErrorMembers[];
 	static Object *sPrototype, *sClass, *sClassPrototype;
 
-	static Object *CreateRootPrototypes();
+	static void CreateRootPrototypes();
 	static Object *CreateClass(Object *aPrototype);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
