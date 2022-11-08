@@ -966,7 +966,39 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				ExprTokenType &target_token = *aParam[1];
 				DWORD size = (DWORD)TokenToInt64(*aParam[2]);
 
-				if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+				if (BufferObject *obj = dynamic_cast<BufferObject *>(TokenToObject(target_token)))
+				{
+					size_t address;
+					size_t buf_size;
+					GetBufferObjectPtr(aResultToken, obj, address, buf_size);
+					target = (LPVOID)address;
+
+					if (size > buf_size)
+					{
+						if (g->InTryBlock())
+							break; // Throw an exception.
+						aResultToken.value_int64 = 0;
+						return OK;
+					}
+				}
+				else if (Object *obj = dynamic_cast<Object *>(TokenToObject(target_token)))
+				{
+					size_t address;
+					size_t buf_size;
+					if (GetBufferObjectPtr(aResultToken, obj, address, buf_size))
+						target = (LPVOID)address;
+					else
+						target = 0;
+
+					if (!target || size > buf_size)
+					{
+						if (g->InTryBlock())
+							break; // Throw an exception.
+						aResultToken.value_int64 = 0;
+						return OK;
+					}
+				}
+				else if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 				{
 					// Check if the user requested a size larger than the variable.
 					if ( size > target_token.var->ByteCapacity()

@@ -13327,6 +13327,25 @@ has_valid_return_type:
 
 		// Store the each arg into a dyna_param struct, using its arg type to determine how.
 		ConvertDllArgType(arg_type_string, this_dyna_param);
+
+		if ((this_param.symbol >= SYM_VAR)
+			&& (ctoupper(**arg_type_string) == 'P')) // Ptr.
+		{
+			if (BufferObject *obj = dynamic_cast<BufferObject *>(TokenToObject(this_param)))
+			{
+				GetBufferObjectPtr(aResultToken, obj, this_dyna_param.value_uintptr);
+				continue;
+			}
+			else if (Object *obj = dynamic_cast<Object *>(TokenToObject(this_param)))
+			{
+				this_dyna_param.value_uintptr = 0;
+				GetBufferObjectPtr(aResultToken, obj, this_dyna_param.value_uintptr);
+				if (!this_dyna_param.value_uintptr)
+					_f_throw(_T("Invalid parameter(s)."));
+				continue;
+			}
+		}
+		
 		switch (this_dyna_param.type)
 		{
 		case DLL_ARG_STR:
@@ -15405,7 +15424,22 @@ BIF_DECL(BIF_NumGet)
 {
 	size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
 	ExprTokenType &target_token = *aParam[0];
-	if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+
+	if (BufferObject *obj = dynamic_cast<BufferObject *>(TokenToObject(target_token)))
+	{
+		size_t buf_size;
+		GetBufferObjectPtr(aResultToken, obj, target, buf_size);
+		right_side_bound = target + buf_size;
+	}
+	else if (Object *obj = dynamic_cast<Object *>(TokenToObject(target_token)))
+	{
+		size_t buf_size;
+		if (GetBufferObjectPtr(aResultToken, obj, target, buf_size))
+			right_side_bound = target + buf_size;
+		else
+			_f_throw(ERR_PARAM1_INVALID);
+	}
+	else if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	{
 		target = (size_t)target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
 		right_side_bound = target + target_token.var->ByteCapacity(); // This is first illegal address to the right of target.
@@ -15472,7 +15506,8 @@ BIF_DECL(BIF_NumGet)
 	// - Due to rarity of negative offsets, only the right-side boundary is checked, not the left.
 	// - Due to rarity and to simplify things, Float/Double (which "return" higher above) aren't checked.
 	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.
-		|| target_token.symbol == SYM_VAR && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+		|| (target_token.symbol == SYM_VAR || target_token.symbol == SYM_OBJECT)
+		&& target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
@@ -15678,7 +15713,21 @@ BIF_DECL(BIF_NumPut)
 
 	size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
 	ExprTokenType &target_token = *aParam[1];
-	if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+	if (BufferObject *obj = dynamic_cast<BufferObject *>(TokenToObject(target_token)))
+	{
+		size_t buf_size;
+		GetBufferObjectPtr(aResultToken, obj, target, buf_size);
+		right_side_bound = target + buf_size;
+	}
+	else if (Object *obj = dynamic_cast<Object *>(TokenToObject(target_token)))
+	{
+		size_t buf_size;
+		if (GetBufferObjectPtr(aResultToken, obj, target, buf_size))
+			right_side_bound = target + buf_size;
+		else
+			_f_throw(ERR_PARAM1_INVALID);
+	}
+	else if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	{
 		target = (size_t)target_token.var->Contents(FALSE); // Pass FALSE for performance because contents is about to be overwritten, followed by a call to Close(). If something goes wrong and we return early, Contents() won't have been changed, so nothing about it needs updating.
 		right_side_bound = target + target_token.var->ByteCapacity(); // This is the first illegal address to the right of target.
@@ -15733,7 +15782,8 @@ BIF_DECL(BIF_NumPut)
 
 	// See comments in NumGet about the following section:
 	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.
-		|| target_token.symbol == SYM_VAR && aResultToken.value_int64 > (INT_PTR)right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+		|| (target_token.symbol == SYM_VAR || target_token.symbol == SYM_OBJECT)
+		&& aResultToken.value_int64 > (INT_PTR)right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		if (target_token.symbol == SYM_VAR)
 		{
@@ -15809,6 +15859,7 @@ BIF_DECL(BIF_StrGetPut)
 
 	LPVOID 	address;
 	int 	length = -1; // actual length
+	size_t 	buf_length = -1; // buffer capacity in TChars (for chars and null)
 	UINT 	encoding = UorA(CP_UTF16, CP_ACP); // native encoding
 
 	// Parameters are interpreted according to the following rules (highest to lowest precedence):
@@ -15821,12 +15872,31 @@ BIF_DECL(BIF_StrGetPut)
 
 	const LPVOID FIRST_VALID_ADDRESS = (LPVOID)65536;
 
-	if (aParam < aParam_end && TokenIsPureNumeric(**aParam))
+	bool has_address = true;
+	if (aParam < aParam_end)
 	{
-		address = (LPVOID)TokenToInt64(**aParam);
+		if (TokenIsPureNumeric(**aParam))
+			address = (LPVOID)TokenToInt64(**aParam);
+		else if (BufferObject *obj = dynamic_cast<BufferObject *>(TokenToObject(**aParam)))
+		{
+			size_t target;
+			GetBufferObjectPtr(aResultToken, obj, target, buf_length);
+			address = (LPVOID)target;
+		}
+		else if (Object *obj = dynamic_cast<Object *>(TokenToObject(**aParam)))
+		{
+			size_t target;
+			if (!GetBufferObjectPtr(aResultToken, obj, target, buf_length)
+				|| (INT_PTR)buf_length < 0)
+				goto error;
+			address = (LPVOID)target;
+		}
+		else
+			has_address = false;
+		// Note: buf_length starts as a byte count, it becomes a short count if the encoding is UTF-16.
 		++aParam;
 	}
-	else
+	if (!has_address)
 	{
 		if (!source_string || aParamCount > 2)
 			// This is StrGet or there are too many parameters; see below.
@@ -15869,6 +15939,8 @@ BIF_DECL(BIF_StrGetPut)
 		}
 	}
 	// Note: CP_AHKNOBOM is not supported; "-RAW" must be omitted.
+	if ((buf_length != -1) && (encoding == CP_UTF16))
+		buf_length >>= 1;
 
 	// Check for obvious errors to prevent an Access Violation.
 	// Address can be zero for StrPut if length is also zero (see below).
@@ -15886,8 +15958,11 @@ BIF_DECL(BIF_StrGetPut)
 
 		if (!source_length)
 		{	// Take a shortcut when source_string is empty, since some paths below might not handle it correctly.
-			if (length) {
-				if (encoding == CP_UTF16)
+			if (length)
+			{
+			 	if (!buf_length)
+			 		goto error;
+				else if (encoding == CP_UTF16)
 					*(LPWSTR)address = '\0';
 				else
 					*(LPSTR)address = '\0';
@@ -15909,6 +15984,8 @@ BIF_DECL(BIF_StrGetPut)
 					if (source_length == length)
 						// Exceptional case: caller doesn't want a null-terminator (or passed this length in error).
 						--char_count;
+					if ((UINT)char_count > (UINT)buf_length) // char_count includes null
+						goto error;
 					// Copy the string, including null-terminator if requested.
 					tmemcpy((LPTSTR)address, (LPCTSTR)source_string, char_count);
 				}
@@ -15938,6 +16015,8 @@ BIF_DECL(BIF_StrGetPut)
 					}
 					length = char_count;
 				}
+				if ((UINT)length > (UINT)buf_length) // length includes null
+					goto error;
 				char_count = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)source_string, source_length, (LPWSTR)address, length);
 				if (char_count && char_count < length)
 					((LPWSTR)address)[char_count++] = '\0';
@@ -15980,6 +16059,8 @@ BIF_DECL(BIF_StrGetPut)
 					// Assume there is sufficient buffer space and hope for the best:
 					length = char_count;
 				}
+				if ((UINT)length > (UINT)buf_length) // length includes null
+					goto error;
 				// Convert to target encoding.
 				char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, (LPSTR)address, length, NULL, NULL);
 				// Since above did not null-terminate, check for buffer space and null-terminate if there's room.
@@ -16004,6 +16085,8 @@ BIF_DECL(BIF_StrGetPut)
 #ifdef UNICODE
 			// Convert multi-byte encoded string to UTF-16.
 			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, NULL, 0);
+			if ((UINT)conv_length > (UINT)buf_length) // conv_length includes null
+				goto error;
 			if (!TokenSetResult(aResultToken, NULL, conv_length)) // DO NOT SUBTRACT 1, conv_length might not include a null-terminator.
 				return; // Out of memory.
 			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, aResultToken.marker, conv_length);
@@ -16019,6 +16102,8 @@ BIF_DECL(BIF_StrGetPut)
 
 			// Now convert UTF-16 to ACP.
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, NULL, 0, NULL, NULL);
+			if ((UINT)conv_length > (UINT)buf_length) // conv_length includes null
+				goto error;
 			if (!TokenSetResult(aResultToken, NULL, conv_length)) // DO NOT SUBTRACT 1, conv_length might not include a null-terminator.
 				return; // Out of memory.
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, aResultToken.marker, conv_length, NULL, NULL);
@@ -16033,6 +16118,8 @@ BIF_DECL(BIF_StrGetPut)
 		else if (length > -1)
 		{
 			// No conversion necessary, but we might not want the whole string.
+			if ((UINT)length + 1 > (UINT)buf_length)
+				goto error;
 			if (length == 0)
 				return;	// Already set marker = "" above.
 			// Copy and null-terminate at the specified length.
@@ -16041,8 +16128,16 @@ BIF_DECL(BIF_StrGetPut)
 		}
 
 		// Return this null-terminated string, no conversion necessary.
-		aResultToken.marker = (LPTSTR) address;
+		if ((buf_length != -1)
+			&& ((UINT)_tcslen((TCHAR *)address) + 1 > (UINT)buf_length))
+			goto error;
+		aResultToken.marker = (LPTSTR)address;
 	}
+	return;
+error:
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+	_f_throw(_T("Invalid param(s)."));
 }
 
 
@@ -18888,6 +18983,91 @@ BIF_DECL(BIF_Exception)
 
 
 
+BufferObject *BufferObject::Create(size_t aSize)
+{
+	BufferObject *m = new BufferObject();
+	m->mSize = aSize;
+	m->mData = malloc(aSize);
+	return m;
+}
+
+
+
+ResultType STDMETHODCALLTYPE BufferObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_CALL)
+		return INVOKE_NOT_HANDLED;
+
+	LPTSTR name = ParamIndexToString(0);
+
+	if (IS_INVOKE_SET)
+	{
+		if (!_tcsicmp(name, _T("Size"))
+		&& (!ParamIndexIsOmitted(1)))
+		{
+			size_t aSize = (size_t)ParamIndexToInt64(1);
+			if ((__int64)aSize < 0 || aSize > SIZE_MAX)
+				return INVOKE_NOT_HANDLED;
+			void *new_data = malloc(aSize);
+			memcpy(new_data, mData, aSize < mSize ? aSize : mSize);
+			free(mData);
+			mSize = aSize;
+			mData = new_data;
+			return OK;
+		}
+		return INVOKE_NOT_HANDLED;
+	}
+
+	aResultToken.symbol = SYM_INTEGER;
+	if (!_tcsicmp(name, _T("Ptr")))
+	{
+		aResultToken.value_int64 = (__int64)mData;
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("Size")))
+	{
+		aResultToken.value_int64 = mSize;
+		return OK;
+	}
+
+	aResultToken.symbol = SYM_STRING;
+	return INVOKE_NOT_HANDLED;
+}
+
+
+
+BIF_DECL(BIF_Buffer)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	size_t aSize = (size_t)ParamIndexToOptionalInt64(0, 0);
+
+	IObject *obj = BufferObject::Create(aSize);
+	if (obj)
+	{
+		if (!ParamIndexIsOmitted(1))
+		{
+			if (!TokenIsPureNumeric(*aParam[1]))
+				_f_throw(ERR_PARAM2_INVALID);
+			char aFillByte = (char)ParamIndexToInt64(1);
+			ExprTokenType aParams[1];
+			ExprTokenType* (aParam[1])[1] = { aParams };
+			aParams[0].symbol = SYM_STRING; aParams[0].marker = _T("Ptr");
+			ExprTokenType r, t;
+			obj->Invoke(r, t, IT_GET, aParam[0], 1);
+			memset((LPVOID)TokenToInt64(r), aFillByte, aSize);
+		}
+
+		aResultToken.object = obj;
+		aResultToken.symbol = SYM_OBJECT;
+		return;
+	}
+	_f_throw(ERR_EXCEPTION);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
@@ -19580,4 +19760,94 @@ DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNam
 
 	CloseHandle(hproc);
 	return buf_length;
+}
+
+
+
+bool GetBufferObjectPtr(ExprTokenType &aResultToken, BufferObject *obj, size_t &aPtr, size_t &aSize)
+{
+	// note: aResultToken is unused in this function overload:
+	ExprTokenType aParams[2];
+	ExprTokenType* (aParam[2])[1] = { aParams + 0, aParams + 1 };
+	aParams[0].symbol = SYM_STRING; aParams[0].marker = _T("Ptr");
+	aParams[1].symbol = SYM_STRING; aParams[1].marker = _T("Size");
+	ExprTokenType r1, r2, t1, t2;
+	obj->Invoke(r1, t1, IT_GET, aParam[0], 1);
+	obj->Invoke(r2, t2, IT_GET, aParam[1], 1);
+	aPtr = (size_t)TokenToInt64(r1);
+	aSize = (size_t)TokenToInt64(r2);
+	return true;
+}
+
+
+
+bool GetBufferObjectPtr(ExprTokenType &aResultToken, BufferObject *obj, size_t &aPtr)
+{
+	// note: aResultToken is unused in this function overload:
+	ExprTokenType aParams[1];
+	ExprTokenType* (aParam[1])[1] = { aParams + 0 };
+	aParams[0].symbol = SYM_STRING; aParams[0].marker = _T("Ptr");
+	ExprTokenType r1, t1;
+	obj->Invoke(r1, t1, IT_GET, aParam[0], 1);
+	aPtr = (size_t)TokenToInt64(r1);
+	return true;
+}
+
+
+
+bool GetBufferObjectPtr(ExprTokenType &aResultToken, Object *obj, size_t &aPtr, size_t &aSize)
+{
+	// note: aResultToken is set to blank on error in this function overload:
+	ExprTokenType aParams[2];
+	ExprTokenType* (aParam[2])[1] = { aParams + 0, aParams + 1 };
+	aParams[0].symbol = SYM_STRING; aParams[0].marker = _T("Ptr");
+	aParams[1].symbol = SYM_STRING; aParams[1].marker = _T("Size");
+	ExprTokenType r1, r2, t1, t2;
+	t1.symbol = SYM_OBJECT; t1.object = obj;
+	t2.symbol = SYM_OBJECT; t2.object = obj;
+
+	// check for Ptr/Size keys, else properties:
+	if ((obj->GetItem(r1, _T("Ptr")))
+	|| (obj->Invoke(r1, t1, IT_GET, aParam[0], 1) == OK))
+		aPtr = (size_t)TokenToInt64(r1);
+	else
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		return false;
+	}
+	if ((obj->GetItem(r2, _T("Size")))
+	|| (obj->Invoke(r2, t2, IT_GET, aParam[1], 1) == OK))
+		aSize = (size_t)TokenToInt64(r2);
+	else
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		return false;
+	}
+	return true;
+}
+
+
+
+bool GetBufferObjectPtr(ExprTokenType &aResultToken, Object *obj, size_t &aPtr)
+{
+	// note: aResultToken is set to blank on error in this function overload:
+	ExprTokenType aParams[1];
+	ExprTokenType* (aParam[1])[1] = { aParams + 0 };
+	aParams[0].symbol = SYM_STRING; aParams[0].marker = _T("Ptr");
+	ExprTokenType r1, t1;
+	t1.symbol = SYM_OBJECT; t1.object = obj;
+
+	// check for Ptr/Size keys, else properties:
+	if ((obj->GetItem(r1, _T("Ptr")))
+	|| (obj->Invoke(r1, t1, IT_GET, aParam[0], 1) == OK))
+		aPtr = (size_t)TokenToInt64(r1);
+	else
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		return false;
+	}
+	return true;
 }

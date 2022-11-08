@@ -743,6 +743,20 @@ ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
 
 	if (var.mType != VAR_NORMAL)
 	{
+		if (var.mType == VAR_CLIPBOARD)
+		{
+			if (MetaObject::Object *obj = dynamic_cast<MetaObject::Object *>(aValueToAssign))
+			{
+				ExprTokenType t1;
+				ExprTokenType t2;
+				if ((obj->GetItem(t1, _T("Ptr")))
+				&& (obj->GetItem(t2, _T("Size"))))
+				{
+					SetClipboardAll((CHAR *)TokenToInt64(t1), (size_t)TokenToInt64(t2));
+					return OK;
+				}
+			}
+		}
 		aValueToAssign->Release();
 		return g_script.ScriptError(ERR_INVALID_VALUE, _T("An object."));
 	}

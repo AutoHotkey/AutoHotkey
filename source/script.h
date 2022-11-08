@@ -239,6 +239,11 @@ void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
 DWORD ProcessExist(LPTSTR aProcess);
 DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly);
 
+bool GetBufferObjectPtr(ExprTokenType &aResultToken, BufferObject *obj, size_t &aPtr, size_t &aSize);
+bool GetBufferObjectPtr(ExprTokenType &aResultToken, BufferObject *obj, size_t &aPtr);
+bool GetBufferObjectPtr(ExprTokenType &aResultToken, Object *obj, size_t &aPtr, size_t &aSize);
+bool GetBufferObjectPtr(ExprTokenType &aResultToken, Object *obj, size_t &aPtr);
+
 bool Util_Shutdown(int nFlag);
 BOOL Util_ShutdownHandler(HWND hwnd, DWORD lParam);
 void Util_WinKill(HWND hWnd);
@@ -3373,6 +3378,7 @@ BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 
 BIF_DECL(BIF_Hotstring);
 BIF_DECL(BIF_InputHook);
+BIF_DECL(BIF_Buffer);
 
 
 BIF_DECL(BIF_IsObject);

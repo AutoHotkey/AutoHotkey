@@ -8721,6 +8721,12 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	}
 	else if (!_tcsicmp(func_name, _T("IsSet")))
 		bif = BIF_IsSet;
+	else if (!_tcsicmp(func_name, _T("Buffer")))
+	{
+		bif = BIF_Buffer;
+		min_params = 0;
+		max_params = 2;
+	}
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.
 
