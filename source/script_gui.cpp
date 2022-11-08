@@ -25,13 +25,22 @@ GNU General Public License for more details.
 #include "script_func_impl.h"
 
 
+// Gui methods use this macro either if they require the Gui to have a window,
+// or if they aren't safe to use after Dispose() is called.
+#define GUI_MUST_HAVE_HWND if (!mHwnd) return GuiNoWindowError()
+// Using a noinline function reduces code by a few hundred bytes across all methods.
+// Returning something like FR_E_WIN32(ERROR_INVALID_WINDOW_HANDLE) instead is about
+// the same, so it seems better to use the clearer error message.
+__declspec(noinline) FResult GuiNoWindowError() { return FError(ERR_GUI_NO_WINDOW); }
+
+
 // Window class atom used by Guis.
 static ATOM sGuiWinClass;
 
 
 LPTSTR GuiControlType::sTypeNames[GUI_CONTROL_TYPE_COUNT] = { GUI_CONTROL_TYPE_NAMES };
 
-GuiControls GuiControlType::ConvertTypeName(LPTSTR aTypeName)
+GuiControls GuiControlType::ConvertTypeName(LPCTSTR aTypeName)
 {
 	for (int i = 1; i < _countof(sTypeNames); ++i) // Start at 1 because 0 is GUI_CONTROL_INVALID.
 		if (!_tcsicmp(aTypeName, sTypeNames[i]))
@@ -178,379 +187,149 @@ ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2
 }
 
 
-ObjectMember GuiType::sMembers[] =
+FResult GuiType::__Enum(optl<int> aVarCount, IObject *&aRetVal)
 {
-	Object_Method (__Enum, 0, 1),
-	Object_Method_(__New, 0, 3, __New, 0),
+	GUI_MUST_HAVE_HWND;
+	aRetVal = new IndexEnumerator(this, aVarCount.value_or(1)
+		, static_cast<IndexEnumerator::Callback>(&GuiType::GetEnumItem));
+	return OK;
+}
 
-	Object_Method_(Add, 1, 3, AddControl, GUI_CONTROL_INVALID),
-	Object_Method_(AddActiveX, 0, 2, AddControl, GUI_CONTROL_ACTIVEX),
-	Object_Method_(AddButton, 0, 2, AddControl, GUI_CONTROL_BUTTON),
-	Object_Method_(AddCheckBox, 0, 2, AddControl, GUI_CONTROL_CHECKBOX),
-	Object_Method_(AddComboBox, 0, 2, AddControl, GUI_CONTROL_COMBOBOX),
-	Object_Method_(AddCustom, 0, 2, AddControl, GUI_CONTROL_CUSTOM),
-	Object_Method_(AddDateTime, 0, 2, AddControl, GUI_CONTROL_DATETIME),
-	Object_Method_(AddDDL, 0, 2, AddControl, GUI_CONTROL_DROPDOWNLIST),
-	Object_Method_(AddDropDownList, 0, 2, AddControl, GUI_CONTROL_DROPDOWNLIST),
-	Object_Method_(AddEdit, 0, 2, AddControl, GUI_CONTROL_EDIT),
-	Object_Method_(AddGroupBox, 0, 2, AddControl, GUI_CONTROL_GROUPBOX),
-	Object_Method_(AddHotkey, 0, 2, AddControl, GUI_CONTROL_HOTKEY),
-	Object_Method_(AddLink, 0, 2, AddControl, GUI_CONTROL_LINK),
-	Object_Method_(AddListBox, 0, 2, AddControl, GUI_CONTROL_LISTBOX),
-	Object_Method_(AddListView, 0, 2, AddControl, GUI_CONTROL_LISTVIEW),
-	Object_Method_(AddMonthCal, 0, 2, AddControl, GUI_CONTROL_MONTHCAL),
-	Object_Method_(AddPic, 0, 2, AddControl, GUI_CONTROL_PIC),
-	Object_Method_(AddPicture, 0, 2, AddControl, GUI_CONTROL_PIC),
-	Object_Method_(AddProgress, 0, 2, AddControl, GUI_CONTROL_PROGRESS),
-	Object_Method_(AddRadio, 0, 2, AddControl, GUI_CONTROL_RADIO),
-	Object_Method_(AddSlider, 0, 2, AddControl, GUI_CONTROL_SLIDER),
-	Object_Method_(AddStatusBar, 0, 2, AddControl, GUI_CONTROL_STATUSBAR),
-	Object_Method_(AddTab, 0, 2, AddControl, GUI_CONTROL_TAB),
-	Object_Method_(AddTab2, 0, 2, AddControl, GUI_CONTROL_TAB2),
-	Object_Method_(AddTab3, 0, 2, AddControl, GUI_CONTROL_TAB3),
-	Object_Method_(AddText, 0, 2, AddControl, GUI_CONTROL_TEXT),
-	Object_Method_(AddTreeView, 0, 2, AddControl, GUI_CONTROL_TREEVIEW),
-	Object_Method_(AddUpDown, 0, 2, AddControl, GUI_CONTROL_UPDOWN),
 
-	Object_Method (Destroy, 0, 0),
-	Object_Method (Flash, 0, 1),
-	Object_Method (GetClientPos, 0, 4),
-	Object_Method (GetPos, 0, 4),
-	Object_Method (Hide, 0, 0),
-	Object_Method (Maximize, 0, 0),
-	Object_Method (Minimize, 0, 0),
-	Object_Method (Move, 0, 4),
-	Object_Method (OnEvent, 2, 3),
-	Object_Method (Opt, 1, 1),
-	Object_Method (Restore, 0, 0),
-	Object_Method (SetFont, 0, 2),
-	Object_Method (Show, 0, 1),
-	Object_Method (Submit, 0, 1),
-
-	Object_Property_get    (__Item, 1, 1),
-	Object_Property_get    (Hwnd),
-	Object_Property_get_set(Title),
-	Object_Property_get_set(Name),
-	Object_Property_get    (FocusedCtrl),
-	Object_Property_get_set(BackColor),
-	Object_Property_get_set(MarginX),
-	Object_Property_get_set(MarginY),
-	Object_Property_get_set(MenuBar),
+ObjectMemberMd GuiType::sMembers[] =
+{
+	md_member(GuiType, __Enum, CALL, (In_Opt, Int32, VarCount), (Ret, Object, RetVal)),
+	md_member(GuiType, __New, CALL, (In_Opt, String, Options), (In_Opt, String, Title), (In_Opt, Object, EventObj)),
+	
+	md_member(GuiType, Add, CALL, (In, String, ControlType), (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddActiveX, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddButton, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddCheckBox, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddComboBox, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddCustom, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddDateTime, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddDDL, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddDropDownList, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddEdit, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddGroupBox, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddHotkey, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddLink, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddListBox, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddListView, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddMonthCal, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddPic, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddPicture, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddProgress, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddRadio, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddSlider, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddStatusBar, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddTab, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddTab2, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddTab3, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddText, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddTreeView, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	md_member(GuiType, AddUpDown, CALL, (In_Opt, String, Options), (In_Opt, Variant, Content), (Ret, Object, RetVal)),
+	
+	md_member(GuiType, Destroy, CALL, md_arg_none),
+	md_member(GuiType, Flash, CALL, (In_Opt, Bool32, Blink)),
+	md_member(GuiType, GetClientPos, CALL, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height)),
+	md_member(GuiType, GetPos, CALL, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height)),
+	md_member(GuiType, Hide, CALL, md_arg_none),
+	md_member(GuiType, Maximize, CALL, md_arg_none),
+	md_member(GuiType, Minimize, CALL, md_arg_none),
+	md_member(GuiType, Move, CALL, (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Width), (In_Opt, Int32, Height)),
+	md_member(GuiType, OnEvent, CALL, (In, String, EventName), (In, Variant, Callback), (In_Opt, Int32, AddRemove)),
+	md_member(GuiType, Opt, CALL, (In, String, Options)),
+	md_member(GuiType, Restore, CALL, md_arg_none),
+	md_member(GuiType, SetFont, CALL, (In_Opt, String, Options), (In_Opt, String, FontName)),
+	md_member(GuiType, Show, CALL, (In_Opt, String, Options)),
+	md_member(GuiType, Submit, CALL, (In_Opt, Bool32, Hide), (Ret, Object, RetVal)),
+	
+	md_member		(GuiType, __Item, GET, (In, Variant, Index), (Ret, Object, RetVal)),
+	md_property_get	(GuiType, Hwnd, UInt32),
+	md_property		(GuiType, Title, String),
+	md_property		(GuiType, Name, String),
+	md_property_get	(GuiType, FocusedCtrl, Object),
+	md_property		(GuiType, BackColor, Variant),
+	md_property		(GuiType, MarginX, Int32),
+	md_property		(GuiType, MarginY, Int32),
+	md_property		(GuiType, MenuBar, Variant)
 };
 
 int GuiType::sMemberCount = _countof(sMembers);
 
-void GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+
+FResult GuiType::Add(StrArg aCtrlType, optl<StrArg> aOptions, ExprTokenType *aContent, IObject *&aRetVal)
 {
-	auto ctrl_type = GuiControls(aID);
-	if (ctrl_type == GUI_CONTROL_INVALID) // Gui.Add(CtrlType)
-	{
-		LPTSTR ctrl_type_name = ParamIndexToString(0, _f_number_buf); // Pass buf for error-reporting purposes.
-		--aParamCount; // Exclude control type from param count.
-		++aParam; // As above, but for the param array.
-		ctrl_type = GuiControlType::ConvertTypeName(ctrl_type_name);
-		if (ctrl_type == GUI_CONTROL_INVALID)
-			_o_throw(_T("Invalid control type."), ctrl_type_name);
-	}
-	_f_param_string_opt(options, 0);
+	auto ctrl_type = GuiControlType::ConvertTypeName(aCtrlType);
+	if (ctrl_type == GUI_CONTROL_INVALID)
+		return FValueError(_T("Invalid control type."), aCtrlType);
+	auto fr = AddControl(aOptions, aContent, aRetVal, ctrl_type);
+	return fr;
+}
+
+
+FResult GuiType::AddControl(optl<StrArg> aOptions, ExprTokenType *aContent, IObject *&aRetVal, GuiControls ctrl_type)
+{
+	auto options = aOptions.value_or_empty();
 	TCHAR text_buf[MAX_NUMBER_SIZE], *text = _T("");
 	Array *text_obj = nullptr;
-	if (!ParamIndexIsOmitted(1))
+	if (aContent)
 	{
-		auto temp_obj = ParamIndexToObject(1);
+		auto temp_obj = TokenToObject(*aContent);
 		if (GuiControlType::TypeHasAttrib(ctrl_type, GuiControlType::TYPE_HAS_ITEMS)) // Need an Array.
 		{
 			if (  !(text_obj = dynamic_cast<Array*>(temp_obj))  )
-				return (void)aResultToken.ParamError(aID ? 1 : 2, aParam[1], _T("Array"));
+				return FTypeError(_T("Array"), *aContent);
 		}
 		else // Need a String.
 		{
 			if (temp_obj)
-				return (void)aResultToken.ParamError(aID ? 1 : 2, aParam[1], _T("String"));
-			text = ParamIndexToString(1, text_buf);
+				return FTypeError(_T("String"), *aContent);
+			text = TokenToString(*aContent, text_buf);
 		}
 	}
-	if (!mHwnd)
-		_o_throw(ERR_GUI_NO_WINDOW);
+	GUI_MUST_HAVE_HWND;
 	GuiControlType* pcontrol;
 	ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
 	if (pcontrol)
 	{
 		pcontrol->AddRef();
-		_o_return(pcontrol);
-	} // else: above already displayed an error message.
-	if (!result)
-		aResultToken.SetExitResult(result);
-}
-
-void GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	if (!mHwnd)
-		_o_throw(ERR_GUI_NO_WINDOW);
-
-	TCHAR nbuf1[MAX_NUMBER_SIZE], nbuf2[MAX_NUMBER_SIZE];
-
-	auto member = MemberID(aID);
-	switch (member)
-	{
-		case M_Destroy:
-			Destroy();
-			_o_return_empty;
-		case M_Show:
-			if (!Show(ParamIndexToOptionalString(0, nbuf1)))
-				_o_return_FAIL;
-			_o_return_empty;
-		case M_Hide:
-			Cancel();
-			_o_return_empty;
-		case M_Minimize:
-			// If the window is hidden, it is unhidden as a side-effect (this happens even for SW_SHOWMINNOACTIVE).
-			ShowWindow(mHwnd, SW_MINIMIZE);
-			_o_return_empty;
-		case M_Maximize:
-			ShowWindow(mHwnd, SW_MAXIMIZE);
-			_o_return_empty;
-		case M_Restore:
-			ShowWindow(mHwnd, SW_RESTORE);
-			_o_return_empty;
-		case M_Flash:
-			FlashWindow(mHwnd, ParamIndexToOptionalBOOL(0, TRUE));
-			_o_return_empty;
-		case M_SetFont:
-		{
-			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);   // A number currently isn't valid here, so nbuf is passed just for maintainability.
-			LPTSTR font_name = ParamIndexToOptionalString(1, nbuf2); //
-			if (!SetCurrentFont(options, font_name))
-				_o_return_FAIL;
-			_o_return_empty;
-		}
-		case M_Opt:
-		{
-			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);
-			bool set_last_found_window = false;
-			ToggleValueType own_dialogs = TOGGLE_INVALID;
-			if (!ParseOptions(options, set_last_found_window, own_dialogs))
-				break; // Above already displayed an error message.
-			if (set_last_found_window)
-				g->hWndLastUsed = mHwnd;
-			SetOwnDialogs(own_dialogs);
-			_o_return_empty;
-		}
-		case M_Submit:
-		{
-			return Submit(aResultToken, ParamIndexToOptionalBOOL(0, TRUE));
-		}
-		case M___Enum:
-		{
-			_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
-				, static_cast<IndexEnumerator::Callback>(&GuiType::GetEnumItem)));
-		}
-		case M_OnEvent:
-		{
-			LPTSTR event_name = ParamIndexToString(0, nbuf1);
-			GuiEventType evt = ConvertEvent(event_name);
-			if (evt < GUI_EVENT_WINDOW_FIRST || evt > GUI_EVENT_WINDOW_LAST)
-				_o_throw_param(0);
-			return OnEvent(NULL, evt, GUI_EVENTKIND_EVENT, aParam, aParamCount, aResultToken);
-		}
-		case P_Hwnd:
-		{
-			_o_return((__int64)(UINT_PTR)mHwnd);
-		}
-		case P_Title:
-		{
-			if (IS_INVOKE_SET)
-			{
-				SetWindowText(mHwnd, ParamIndexToString(0, _f_number_buf));
-				return;
-			}
-			else
-			{
-				int length = GetWindowTextLength(mHwnd);
-				if (!TokenSetResult(aResultToken, NULL, length))
-					return; // Already displayed error.
-				GetWindowText(mHwnd, aResultToken.marker, length+1);
-				_o_return_retval;
-			}
-		}
-		case P_MenuBar:
-		{
-			if (IS_INVOKE_SET)
-			{
-				return SetMenu(aResultToken, *aParam[0]);
-			}
-			if (mMenu)
-			{
-				mMenu->AddRef();
-				_o_return(mMenu);
-			}
-			_o_return_empty;
-		}
-		case P___Item:
-		{
-			ExprTokenType& tok = *aParam[0];
-			GuiControlType* ctrl = NULL;
-			if (TokenIsPureNumeric(tok) == SYM_INTEGER)
-			{
-				HWND hWnd = (HWND)(UINT_PTR)TokenToInt64(tok);
-				ctrl = FindControl(hWnd);
-			}
-			else
-			{
-				GuiIndexType u = FindControl(TokenToString(tok, aResultToken.buf));
-				if (u < mControlCount)
-					ctrl = mControl[u];
-			}
-			if (!ctrl)
-				_o_throw(_T("The specified control does not exist."));
-
-			ctrl->AddRef();
-			_o_return(ctrl);
-		}
-		case P_FocusedCtrl:
-		{
-			HWND hwnd = GetFocus();
-			GuiControlType* pcontrol = hwnd ? FindControl(hwnd) : NULL;
-			if (pcontrol)
-			{
-				pcontrol->AddRef();
-				_o_return(pcontrol);
-			}
-			_o_return_empty;
-		}
-		case P_MarginX:
-		case P_MarginY:
-		{
-			int& margin = member == P_MarginX ? mMarginX : mMarginY;
-			if (IS_INVOKE_SET)
-			{
-				if (!ParamIndexIsNumeric(0))
-					_f_throw_type(_T("Number"), *aParam[0]);
-				margin = Scale(ParamIndexToInt(0)); // Seems okay to allow negative margins.
-				return;
-			}
-			if (margin == COORD_UNSPECIFIED)
-			{
-				// Avoid returning an arbitrary value such as COORD_UNSPECIFIED or -1 (Unscale(COORD_UNSPECIFIED)).
-				// Instead, set the default margins if MarginX or MarginY is queried without having first been set,
-				// prior to adding any controls.
-				SetDefaultMargins();
-			}
-			_o_return(Unscale(margin));
-		}
-		case P_BackColor:
-		{
-			COLORREF &color = mBackgroundColorWin; // Future use: code reuse for TextColor property?
-			HBRUSH   &brush = mBackgroundBrushWin;
-
-			if (IS_INVOKE_SET)
-			{
-				COLORREF new_color;
-				if (!ColorToBGR(*aParam[0], new_color))
-					_f_throw_value(ERR_INVALID_VALUE);
-				
-				// AssignColor() takes care of deleting old brush, etc.
-				AssignColor(new_color, color, brush);
-
-				if (IsWindowVisible(mHwnd))
-					// Force the window to repaint so that colors take effect immediately.
-					// UpdateWindow() isn't enough sometimes/always, so do something more aggressive:
-					InvalidateRect(mHwnd, NULL, TRUE);
-				
-				return;
-			}
-			
-			// Return the property's proper value, which may differ from the value assigned by the script.
-			if (color == CLR_DEFAULT)
-				_o_return_empty;
-			_sntprintf(_f_retval_buf, _f_retval_buf_size, _T("%06X"), bgr_to_rgb(color));
-			_o_return_p(_f_retval_buf);
-		}
-		case M_GetPos:
-		case M_GetClientPos:
-		{
-			RECT rect;
-			if (member == M_GetPos)
-				GetWindowRect(mHwnd, &rect);
-			else
-				GetClientRect(mHwnd, &rect);
-			MapWindowPoints(member == M_GetPos ? NULL : mHwnd, mOwner, (LPPOINT)&rect, 2);
-			return MethodGetPos(aResultToken, aParam, aParamCount, rect);
-		}
-		case M_Move:
-		{
-			int coord[4];
-			if (!ParseMoveParams(coord, aResultToken, aParam, aParamCount))
-				return;
-			// Like WinMove, this doesn't check if the window is minimized or do any autosizing.
-			// Unlike WinMove, this does DPI scaling.
-			RECT rect;
-			GetWindowRect(mHwnd, &rect);
-			rect.right -= rect.left; // Convert to width.
-			rect.bottom -= rect.top; // Convert to height.
-			if (HWND parent = GetParent(mHwnd)) // Allow for +Parent.
-				ScreenToClient(parent, (LPPOINT)&rect); // Must do this before the loop, as coord[] already contains client coords.
-			for (int i = 0; i < aParamCount; ++i)
-				if (coord[i] != COORD_UNSPECIFIED)
-					((int *)&rect)[i] = Scale(coord[i]);
-			MoveWindow(mHwnd, rect.left, rect.top, rect.right, rect.bottom, TRUE);
-			_o_return_empty;
-		}
-		case P_Name:
-		{
-			// Name is used to help identify the Gui in event handlers, and has no use outside
-			// of the script being able to assign or retrieve it using this property.
-			if (IS_INVOKE_SET)
-			{
-				if (!SetName(ParamIndexToString(0, _f_number_buf)))
-					_o_return_FAIL;
-				return;
-			}
-			_o_return_p(mName ? mName : _T(""));
-		}
+		aRetVal = pcontrol;
 	}
+	return result ? OK : FR_FAIL;
 }
 
 
-void GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+FResult GuiType::__New(optl<StrArg> aOptions, optl<StrArg> aTitle, optl<IObject*> aEventObj)
 {
 	if (mHwnd || mDisposed)
-		_o_throw(ERR_INVALID_USAGE);
-
-	LPTSTR options = ParamIndexToOptionalString(0, _f_number_buf);
+		return FError(ERR_INVALID_USAGE);
 
 	bool set_last_found_window = false;
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
-	if (*options && !ParseOptions(options, set_last_found_window, own_dialogs))
-		_o_return_FAIL; // ParseOptions() already displayed the error.
+	if (!ParseOptions(aOptions.value_or_empty(), set_last_found_window, own_dialogs))
+		return FR_FAIL;
 
 	mControl = (GuiControlType **)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType*));
 	if (!mControl)
-		_o_throw_oom;
+		return FR_E_OUTOFMEM;
 	mControlCapacity = GUI_CONTROL_BLOCK_SIZE;
 
-	if (!ParamIndexIsOmittedOrEmpty(2))
+	if (aEventObj.has_value())
 	{
-		if (IObject* obj = TokenToObject(*aParam[2]))
-		{
-			// The caller specified an object to use as event sink.
-			if (obj != this) // Primarily for custom GUI classes: prevent a circular reference.
-				obj->AddRef();
-			mEventSink = obj;
-		}
-		else
-			_o_throw_param(2, _T("object"));
+		// The caller specified an object to use as event sink.
+		mEventSink = aEventObj.value();
+		if (mEventSink != this) // Primarily for custom GUI classes: prevent a circular reference.
+			mEventSink->AddRef();
 	}
 	
-	LPTSTR title;
-	if (ParamIndexIsOmitted(1)) // Completely omitted, not an empty string.
-		title = g_script.DefaultDialogTitle();
-	else
-		title = ParamIndexToString(1, _f_number_buf);
+	LPCTSTR title = aTitle.has_value() ? aTitle.value() : g_script.DefaultDialogTitle();
 
 	// Create the Gui, now that we're past all other failure points.
-	if (!Create(title))
-		_o_return_FAIL; // Error already displayed.
+	auto fr = Create(title);
+	if (fr != OK)
+		return fr;
 
 	if (set_last_found_window)
 		g->hWndLastUsed = mHwnd;
@@ -558,7 +337,192 @@ void GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 
 	// Successful creation - add the Gui to the global list of Guis and return it
 	AddGuiToList(this);
-	_o_return_empty;
+	return OK;
+}
+
+
+FResult GuiType::get_Hwnd(UINT &aRetVal)
+{
+	// Throwing if Destroy() has been called provides a clearer error message than
+	// returning 0 when the Gui is being passed to a WinTitle parameter, and ensures
+	// that it won't cause silent failures, such as with DllCall.
+	GUI_MUST_HAVE_HWND;
+	aRetVal = (UINT)(UINT_PTR)mHwnd;
+	return OK;
+}
+
+
+FResult GuiType::get_Title(StrRet &aRetVal)
+{
+	GUI_MUST_HAVE_HWND;
+	int length = GetWindowTextLength(mHwnd);
+	auto buf = aRetVal.Alloc(length);
+	if (!buf)
+		return FR_E_OUTOFMEM;
+	GetWindowText(mHwnd, buf, length+1);
+	return OK;
+}
+
+
+FResult GuiType::set_Title(StrArg aValue)
+{
+	GUI_MUST_HAVE_HWND;
+	SetWindowText(mHwnd, aValue);
+	return OK;
+}
+
+
+FResult GuiType::get___Item(ExprTokenType &aIndex, IObject *&aRetVal)
+{
+	GUI_MUST_HAVE_HWND; // Seems clearer than relying on the error below.
+	GuiControlType* ctrl = NULL;
+	if (TokenIsPureNumeric(aIndex) == SYM_INTEGER)
+	{
+		HWND hWnd = (HWND)(UINT_PTR)TokenToInt64(aIndex);
+		ctrl = FindControl(hWnd);
+	}
+	else
+	{
+		TCHAR buf[MAX_NUMBER_SIZE];
+		GuiIndexType u = FindControl(TokenToString(aIndex, buf));
+		if (u < mControlCount)
+			ctrl = mControl[u];
+	}
+	if (!ctrl)
+		return FError(_T("The specified control does not exist."), nullptr, ErrorPrototype::UnsetItem);
+
+	ctrl->AddRef();
+	aRetVal = ctrl;
+	return OK;
+}
+
+
+FResult GuiType::get_FocusedCtrl(IObject *&aRetVal)
+{
+	GUI_MUST_HAVE_HWND;
+	HWND hwnd = GetFocus();
+	aRetVal = hwnd ? FindControl(hwnd) : nullptr;
+	if (aRetVal)
+		aRetVal->AddRef();
+	return OK;
+}
+
+
+FResult GuiType::get_Margin(int &aRetVal, int &aMargin)
+{
+	if (aMargin == COORD_UNSPECIFIED)
+	{
+		// Avoid returning an arbitrary value such as COORD_UNSPECIFIED or -1 (Unscale(COORD_UNSPECIFIED)).
+		// Instead, set the default margins if MarginX or MarginY is queried without having first been set,
+		// prior to adding any controls.
+		SetDefaultMargins();
+	}
+	aRetVal = Unscale(aMargin);
+	return OK;
+}
+
+
+FResult GuiType::get_BackColor(ResultToken &aResultToken)
+{
+	GUI_MUST_HAVE_HWND;
+	if (mBackgroundColorWin == CLR_DEFAULT)
+		return OK; // "" is the default return value.
+	_sntprintf(_f_retval_buf, _f_retval_buf_size, _T("%06X"), bgr_to_rgb(mBackgroundColorWin));
+	aResultToken.SetValue(_f_retval_buf);
+	return OK;
+}
+
+
+FResult GuiType::set_BackColor(ExprTokenType &aValue)
+{
+	GUI_MUST_HAVE_HWND;
+	
+	COLORREF new_color;
+	if (!ColorToBGR(aValue, new_color))
+		return FValueError(ERR_INVALID_VALUE);
+	
+	// AssignColor() takes care of deleting old brush, etc.
+	AssignColor(new_color, mBackgroundColorWin, mBackgroundBrushWin);
+	
+	if (IsWindowVisible(mHwnd))
+		// Force the window to repaint so that colors take effect immediately.
+		// UpdateWindow() isn't enough sometimes/always, so do something more aggressive:
+		InvalidateRect(mHwnd, NULL, TRUE);
+	
+	return OK;
+}
+
+
+FResult GuiType::get_Name(StrRet &aRetVal)
+{
+	aRetVal.SetTemp(mName); // Can safely be nullptr.
+	return OK;
+}
+
+
+FResult GuiType::set_Name(StrArg aName)
+{
+	LPTSTR new_name = nullptr;
+	if (*aName)
+	{
+		new_name = _tcsdup(aName);
+		if (!new_name)
+			return FR_E_OUTOFMEM;
+	}
+	free(mName);
+	mName = new_name;
+	return OK;
+}
+
+
+void GuiType::MethodGetPos(int *aX, int *aY, int *aWidth, int *aHeight, RECT &aPos, HWND aOrigin)
+{
+	MapWindowPoints(aOrigin, mOwner, (LPPOINT)&aPos, 2);
+	
+	if (aX)			*aX = Unscale(aPos.left);
+	if (aY)			*aY = Unscale(aPos.top);
+	if (aWidth)		*aWidth = Unscale(aPos.right - aPos.left);
+	if (aHeight)	*aHeight = Unscale(aPos.bottom - aPos.top);
+}
+
+
+FResult GuiType::GetPos(int *aX, int *aY, int *aWidth, int *aHeight)
+{
+	GUI_MUST_HAVE_HWND;
+	RECT rect;
+	if (GetWindowRect(mHwnd, &rect))
+		MethodGetPos(aX, aY, aWidth, aHeight, rect, NULL);
+	return OK;
+}
+
+
+FResult GuiType::GetClientPos(int *aX, int *aY, int *aWidth, int *aHeight)
+{
+	GUI_MUST_HAVE_HWND;
+	RECT rect;
+	if (GetClientRect(mHwnd, &rect))
+		MethodGetPos(aX, aY, aWidth, aHeight, rect, mHwnd);
+	return OK;
+}
+
+
+FResult GuiType::Move(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int> aHeight)
+{
+	GUI_MUST_HAVE_HWND;
+	// Like WinMove, this doesn't check if the window is minimized or do any autosizing.
+	// Unlike WinMove, this does DPI scaling.
+	RECT rect;
+	GetWindowRect(mHwnd, &rect);
+	rect.right -= rect.left; // Convert to width.
+	rect.bottom -= rect.top; // Convert to height.
+	if (HWND parent = GetParent(mHwnd)) // Allow for +Parent.
+		ScreenToClient(parent, (LPPOINT)&rect); // Must do this before the loop, as coord[] already contains client coords.
+	if (aX.has_value())			rect.left = Scale(aX.value());
+	if (aY.has_value())			rect.top = Scale(aY.value());
+	if (aWidth.has_value())		rect.right = Scale(aWidth.value());
+	if (aHeight.has_value())	rect.bottom = Scale(aHeight.value());
+	MoveWindow(mHwnd, rect.left, rect.top, rect.right, rect.bottom, TRUE);
+	return OK;
 }
 
 
@@ -1006,14 +970,28 @@ GuiType *GuiType::FindGuiParent(HWND aHwnd)
 	return NULL;
 }
 
-void GuiType::SetMenu(ResultToken &aResultToken, ExprTokenType &aParam)
+
+FResult GuiType::get_MenuBar(ResultToken &aResultToken)
 {
+	GUI_MUST_HAVE_HWND;
+	if (mMenu)
+	{
+		mMenu->AddRef();
+		aResultToken.Return(mMenu);
+	}
+	return OK;
+}
+
+
+FResult GuiType::set_MenuBar(ExprTokenType &aParam)
+{
+	GUI_MUST_HAVE_HWND;
 	UserMenu *menu = NULL;
 	if (!TokenIsEmptyString(aParam))
 	{
 		menu = dynamic_cast<UserMenu *>(TokenToObject(aParam));
 		if (!menu || menu->mMenuType != MENU_TYPE_BAR)
-			_o_throw_type(_T("MenuBar"), aParam);
+			return FTypeError(_T("MenuBar"), aParam);
 		menu->CreateHandle(); // Ensure the menu bar physically exists.
 		menu->AddRef();
 	}
@@ -1025,6 +1003,7 @@ void GuiType::SetMenu(ResultToken &aResultToken, ExprTokenType &aParam)
 		UpdateAccelerators(*menu);
 	else
 		RemoveAccelerators();
+	return OK;
 }
 
 
@@ -2150,12 +2129,12 @@ bool GuiType::Delete() // IObject::Delete()
 
 
 
-void GuiType::Destroy()
+FResult GuiType::Destroy()
 // Destroys the window and performs related cleanup which is only necessary for
 // a successfully constructed Gui, then calls Dispose() for the remaining cleanup.
 {
 	if (!mHwnd)
-		return; // We have already been destroyed.
+		return OK; // We have already been destroyed.
 
 	// First destroy any windows owned by this window, since they will be auto-destroyed
 	// anyway due to their being owned.  By destroying them explicitly, the Destroy()
@@ -2234,6 +2213,7 @@ void GuiType::Destroy()
 
 	// If this Gui was the last thing keeping the script running, exit the script:
 	g_script.ExitIfNotPersistent(EXIT_CLOSE);
+	return OK;
 }
 
 
@@ -2279,7 +2259,6 @@ void GuiType::Dispose()
 
 	RemoveAccelerators();
 	free(mControl); // Free the control array, which was previously malloc'd.
-	free(mName);
 }
 
 
@@ -2336,10 +2315,10 @@ void GuiType::DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall)
 
 
 
-ResultType GuiType::Create(LPTSTR aTitle)
+FResult GuiType::Create(LPCTSTR aTitle)
 {
 	if (mHwnd) // It already exists
-		return FAIL; // Should be impossible since mHwnd is checked by caller.
+		return FR_E_FAILED; // Should be impossible since mHwnd is checked by caller.
 
 	// Use a separate class for GUI, which gives it a separate WindowProc and allows it to be more
 	// distinct when used with the ahk_class method of addressing windows.
@@ -2359,12 +2338,12 @@ ResultType GuiType::Create(LPTSTR aTitle)
 		wc.cbWndExtra = DLGWINDOWEXTRA;  // So that it will be the type that uses DefDlgProc() vs. DefWindowProc().
 		sGuiWinClass = RegisterClassEx(&wc);
 		if (!sGuiWinClass)
-			return g_script.Win32Error();
+			return FR_E_WIN32;
 	}
 
 	if (   !(mHwnd = CreateWindowEx(mExStyle, WINDOW_CLASS_GUI, aTitle
 		, mStyle, 0, 0, 0, 0, mOwner, NULL, g_hInstance, NULL))   )
-		return g_script.Win32Error();
+		return FR_E_WIN32;
 
 	// Set the user pointer in the window to this GuiType object, so that it is possible to retrieve it back from the window handle.
 	SetWindowLongPtr(mHwnd, GWLP_USERDATA, (LONG_PTR)this);
@@ -2403,6 +2382,40 @@ ResultType GuiType::Create(LPTSTR aTitle)
 }
 
 
+FResult GuiType::OnEvent(StrArg aEventName, ExprTokenType &aCallback, optl<int> aAddRemove)
+{
+	GUI_MUST_HAVE_HWND;
+	
+	GuiEventType evt = ConvertEvent(aEventName);
+	if (evt < GUI_EVENT_WINDOW_FIRST || evt > GUI_EVENT_WINDOW_LAST)
+		return FR_E_ARG(0);
+	
+	return OnEvent(nullptr, evt, GUI_EVENTKIND_EVENT, aCallback, aAddRemove);
+}
+
+
+FResult GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
+	, ExprTokenType &aCallback, optl<int> aAddRemove)
+{
+	int max_threads = 1;
+	if (aAddRemove.has_value())
+		max_threads = aAddRemove.value();
+	if (max_threads < -1 || max_threads > 1)
+		// An event can currently only run one thread at a time.  By contrast, OnMessage
+		// applies the thread limit per handler, not per message.  It's hard to say which
+		// approach is better.
+		return FR_E_ARG(2);
+
+	TCHAR nbuf[MAX_NUMBER_SIZE];
+	IObject *func = TokenToObject(aCallback);
+	LPTSTR name = func ? nullptr : TokenToString(aCallback, nbuf);
+	if (!func && !mEventSink)
+		return FR_E_ARG(1);
+	
+	return OnEvent(aControl, aEvent, aEventKind, func, name, max_threads);
+}
+
+
 void GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken)
 {
@@ -2414,23 +2427,15 @@ void GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 		Throw_if_Param_NaN(2);
 		max_threads = ParamIndexToInt(2);
 	}
-	if (max_threads < -1 || max_threads > 1)
-		// An event can currently only run one thread at a time.  By contrast, OnMessage
-		// applies the thread limit per handler, not per message.  It's hard to say which
-		// approach is better.
-		_o_throw_param(2);
 
-	TCHAR nbuf[MAX_NUMBER_SIZE];
-	IObject *func = ParamIndexToObject(1);
-	LPTSTR name = func ? nullptr : ParamIndexToString(1, nbuf);
-	if (!func && !mEventSink)
-		_o_throw_param(1);
-	return OnEvent(aControl, aEvent, aEventKind, func, name, max_threads, aResultToken);
+	auto fr = OnEvent(aControl, aEvent, aEventKind, *aParam[1], max_threads);
+	if (fr != OK)
+		FResultToError(aResultToken, aParam, aParamCount, fr);
 }
 
 
-void GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
-	, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads, ResultToken &aResultToken)
+FResult GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
+	, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads)
 {
 	MsgMonitorList &handlers = aControl ? aControl->events : mEvents;
 	MsgMonitorStruct *mon;
@@ -2443,7 +2448,7 @@ void GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 		if (mon)
 			handlers.Delete(mon);
 		ApplyEventStyles(aControl, aEvent, false);
-		_o_return_empty;
+		return OK;
 	}
 	bool append = aMaxThreads >= 0;
 	if (!append) // Negative values mean "call it last".
@@ -2477,21 +2482,22 @@ void GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 					break;
 				}
 			}
-			if (!ValidateFunctor(aFunc, param_count, aResultToken))
-				return;
+			auto fr = ValidateFunctor(aFunc, param_count);
+			if (fr != OK)
+				return fr;
 			// Add the callback.
 			mon = handlers.Add(aEvent, aFunc, append);
 		}
 		else
 			mon = handlers.Add(aEvent, aMethodName, append);
 		if (!mon)
-			_o_throw_oom;
+			return FR_E_OUTOFMEM;
 	}
 	mon->instance_count = 0;
 	mon->max_instances = aMaxThreads;
 	mon->msg_type = aEventKind;
 	ApplyEventStyles(aControl, aEvent, true);
-	_o_return_empty;
+	return OK;
 }
 
 
@@ -2585,7 +2591,7 @@ LPTSTR GuiType::ConvertEvent(GuiEventType evt)
 	return sBuf;
 }
 
-GuiEventType GuiType::ConvertEvent(LPTSTR evt)
+GuiEventType GuiType::ConvertEvent(LPCTSTR evt)
 {
 	for (GuiEventType i = 0; i < _countof(sEventNames); ++i)
 		if (!_tcsicmp(sEventNames[i], evt))
@@ -2613,23 +2619,6 @@ IObject* GuiType::CreateDropArray(HDROP hDrop)
 		// expected, or for it to raise ERR_OUTOFMEM.
 	}
 	return arr;
-}
-
-
-
-ResultType GuiType::SetName(LPTSTR aName)
-{
-	if (*aName)
-	{
-		aName = _tcsdup(aName);
-		if (!aName)
-			return MemoryError();
-	}
-	else
-		aName = nullptr;
-	free(mName);
-	mName = aName;
-	return OK;
 }
 
 
@@ -2665,7 +2654,7 @@ void GuiType::UpdateMenuBars(HMENU aMenu)
 
 
 
-ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Array *aObj)
+ResultType GuiType::AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTSTR aText, GuiControlType*& apControl, Array *aObj)
 // Caller must have ensured that mHwnd is non-NULL (i.e. that the parent window already exists).
 {
 	apControl = NULL; // Initialize return pointer.
@@ -3435,13 +3424,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 				LPTSTR aTextCopy = new TCHAR[_tcslen(aText) + 1];
 
-				TCHAR *src, *dst;
+				LPCTSTR src;
+				LPTSTR dst;
 				for (src = aText, dst = aTextCopy; *src; ++src)
 				{
 					if (*src == '<' && ctoupper(src[1]) == 'A')
 					{
-						TCHAR *linkText = NULL;
-						TCHAR *cp = omit_leading_whitespace(src + 2);
+						LPCTSTR linkText = NULL;
+						LPCTSTR cp = omit_leading_whitespace(src + 2);
 
 						// It is important to note that while the SysLink control's syntax is similar to HTML,
 						// it is not HTML.  Some valid HTML won't work, and some invalid HTML will.  Testing
@@ -3478,7 +3468,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 						if (linkText)
 						{
 							// Testing indicates that spaces in the end tag are not tolerated:
-							if (LPTSTR endTag = tcscasestr(linkText, _T("</a>")))
+							if (auto endTag = tcscasestr(linkText, _T("</a>")))
 							{
 								// Copy the link text and skip over the end tag.
 								for (cp = linkText; cp < endTag; *dst++ = *cp++);
@@ -3708,7 +3698,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	bool retrieve_dimensions = false;       //
 	int item_height, min_list_height;
 	RECT rect;
-	LPTSTR malloc_buf;
 	HMENU control_id = (HMENU)(size_t)GUI_INDEX_TO_ID(mControlCount); // Cast to size_t avoids compiler warning.
 	HWND parent_hwnd = mHwnd;
 
@@ -4166,6 +4155,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	break;
 
 	case GUI_CONTROL_EDIT:
+	{
 		if (!(style & ES_MULTILINE)) // ES_MULTILINE was not explicitly or automatically specified.
 		{
 			if (opt.limit < 0) // This is the signal to limit input length to visible width of field.
@@ -4183,8 +4173,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// Note that TranslateLFtoCRLF() will return the original buffer we gave it if no translation
 		// is needed.  Otherwise, it will return a new buffer which we are responsible for freeing
 		// when done (or NULL if it failed to allocate the memory).
-		malloc_buf = (*aText && (style & ES_MULTILINE)) ? TranslateLFtoCRLF(aText) : aText;
-		if (control.hwnd = CreateWindowEx(exstyle, _T("Edit"), malloc_buf ? malloc_buf : aText, style  // malloc_buf is checked again in case mem alloc failed.
+		auto malloc_buf = (*aText && (style & ES_MULTILINE)) ? TranslateLFtoCRLF(aText) : nullptr;
+		if (control.hwnd = CreateWindowEx(exstyle, _T("Edit"), malloc_buf ? malloc_buf : aText, style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			// As documented in MSDN, setting a password char will have no effect for multi-line edits
@@ -4204,9 +4194,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			if (opt.tabstop_count)
 				SendMessage(control.hwnd, EM_SETTABSTOPS, opt.tabstop_count, (LPARAM)opt.tabstop);
 		}
-		if (malloc_buf && malloc_buf != aText)
-			free(malloc_buf);
+		free(malloc_buf);
 		break;
+	}
 
 	case GUI_CONTROL_DATETIME:
 	{
@@ -4826,6 +4816,21 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 
 
+FResult GuiType::Opt(StrArg aOptions)
+{
+	GUI_MUST_HAVE_HWND;
+	bool set_last_found_window = false;
+	ToggleValueType own_dialogs = TOGGLE_INVALID;
+	if (!ParseOptions(aOptions, set_last_found_window, own_dialogs))
+		return FR_FAIL; // Above already displayed an error message.
+	if (set_last_found_window)
+		g->hWndLastUsed = mHwnd;
+	SetOwnDialogs(own_dialogs);
+	return OK;
+}
+
+
+
 ResultType GuiType::ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs)
 // This function is similar to ControlParseOptions() further below, so should be maintained alongside it.
 // Caller must have already initialized aSetLastFoundWindow/, bool &aOwnDialogs with desired starting values.
@@ -4901,7 +4906,7 @@ ResultType GuiType::ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, To
 					}
 					if (!new_owner || new_owner == mHwnd) // Window can't own itself!
 					{
-						if (!g_script.RuntimeError(_T("Invalid or nonexistent owner or parent window."), option))
+						if (!ValueError(_T("Invalid or nonexistent owner or parent window."), option, FAIL_OR_OK))
 							return FAIL;
 						// Otherwise, user wants to continue.
 					}
@@ -6939,7 +6944,7 @@ void GuiType::ControlSetChoice(GuiControlType &aControl, int aChoice)
 
 
 
-ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber)
+ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPCTSTR aFilename, int aWidth, int aHeight, int aIconNumber)
 {
 	// LoadPicture() uses CopyImage() to scale the image, which seems to provide better scaling
 	// quality than using MoveWindow() (followed by redrawing the parent window) on the static
@@ -7057,10 +7062,9 @@ ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilenam
 
 
 
-ResultType GuiType::Show(LPTSTR aOptions)
+FResult GuiType::Show(optl<StrArg> aOptions)
 {
-	if (!mHwnd)
-		return FAIL; // Shouldn't be possible.
+	GUI_MUST_HAVE_HWND;
 
 	// In the future, it seems best to rely on mShowIsInProgress to prevent the Window Proc from ever
 	// doing a MsgSleep() to launch a script subroutine.  This is because if anything we do in this
@@ -7108,7 +7112,7 @@ ResultType GuiType::Show(LPTSTR aOptions)
 	else
 		show_mode = SW_SHOWNORMAL;
 
-	for (LPTSTR cp_end = aOptions, cp = aOptions; *cp; cp = cp_end)
+	for (auto cp_end = aOptions.value_or_empty(), cp = cp_end; *cp; cp = cp_end)
 	{
 		switch(ctoupper(*cp))
 		{
@@ -7199,7 +7203,7 @@ ResultType GuiType::Show(LPTSTR aOptions)
 			// Use _tcstod vs _tcstol to support common cases like % "w" A_ScreenWidth/4 even
 			// when the current float format is something unusual.  Something like "w400.5"
 			// could be considered invalid, but is allowed for simplicity and convenience.
-			int n = (int)_tcstod(cp + 1, &cp_end);
+			int n = (int)_tcstod(cp + 1, const_cast<LPTSTR*>(&cp_end));
 			if (cp_end == cp + 1) // No number.
 			{
 				cp_end = cp; // Flag it as invalid.
@@ -7628,6 +7632,43 @@ ResultType GuiType::Show(LPTSTR aOptions)
 
 
 
+FResult GuiType::Minimize()
+{
+	GUI_MUST_HAVE_HWND;
+	ShowWindow(mHwnd, SW_MINIMIZE);
+	return OK;
+}
+
+FResult GuiType::Maximize()
+{
+	GUI_MUST_HAVE_HWND;
+	ShowWindow(mHwnd, SW_MAXIMIZE);
+	return OK;
+}
+
+FResult GuiType::Restore()
+{
+	GUI_MUST_HAVE_HWND;
+	ShowWindow(mHwnd, SW_RESTORE);
+	return OK;
+}
+
+FResult GuiType::Flash(optl<BOOL> aBlink)
+{
+	GUI_MUST_HAVE_HWND;
+	FlashWindow(mHwnd, aBlink.value_or(TRUE));
+	return OK;
+}
+
+FResult GuiType::Hide()
+{
+	GUI_MUST_HAVE_HWND;
+	Cancel();
+	return OK;
+}
+
+
+
 void GuiType::Cancel()
 {
 	if (mHwnd)
@@ -7645,10 +7686,10 @@ void GuiType::Close()
 // If there is an OnClose event handler defined, launch it as a new thread.
 // In this case, don't close or hide the window.  It's up to the handler to do that
 // if it wants to.
-// If there is no handler, treat it the same as Cancel().
+// If there is no handler, treat it the same as Hide().
 {
 	if (!IsMonitoring(GUI_EVENT_CLOSE))
-		return Cancel();
+		return (void)Cancel();
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_CLOSE, NO_EVENT_INFO);
 	// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 	// See its comments for why.
@@ -7691,15 +7732,14 @@ void GuiType::VisibilityChanged()
 
 
 
-void GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
+FResult GuiType::Submit(optl<BOOL> aHideIt, IObject *&aRetVal)
 // Caller has ensured that all controls have valid, non-NULL hwnds:
 {
-	if (!mHwnd)
-		_o_return_FAIL; // Shouldn't be possible.
+	GUI_MUST_HAVE_HWND;
 
 	Object* ret = Object::Create();
 	if (!ret)
-		_o_throw_oom;
+		return FR_E_OUTOFMEM;
 
 	// Handle all non-radio controls:
 	GuiIndexType u;
@@ -7719,7 +7759,7 @@ void GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 			if (value.Exited())
 			{
 				ret->Release();
-				return;
+				return FR_FAIL;
 			}
 			if (!ret->SetOwnProp(control.name, value))
 			{
@@ -7795,13 +7835,14 @@ void GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 		}
 	} // for()
 
-	if (aHideIt)
+	if (aHideIt.value_or(TRUE))
 		Cancel();
-	_o_return(ret);
+	aRetVal = ret;
+	return OK;
 
 outofmem:
 	ret->Release();
-	_o_throw_oom;
+	return FR_E_OUTOFMEM;
 }
 
 
@@ -7874,7 +7915,7 @@ void GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType &aCon
 
 
 
-GuiIndexType GuiType::FindControl(LPTSTR aControlID)
+GuiIndexType GuiType::FindControl(LPCTSTR aControlID)
 // Find the index of the control that matches the string, which can be either:
 // 1) HWND
 // 2) Name
@@ -7946,10 +7987,12 @@ int GuiType::FindGroup(GuiIndexType aControlIndex, GuiIndexType &aGroupStart, Gu
 
 
 
-ResultType GuiType::SetCurrentFont(LPCTSTR aOptions, LPCTSTR aFontName)
+FResult GuiType::SetFont(optl<StrArg> aOptions, optl<StrArg> aFontName)
 {
+	GUI_MUST_HAVE_HWND;
 	COLORREF color;
-	int font_index = FindOrCreateFont(aOptions, aFontName, &sFont[mCurrentFontIndex], &color);
+	int font_index = FindOrCreateFont(aOptions.value_or_empty(), aFontName.value_or_empty()
+		, &sFont[mCurrentFontIndex], &color);
 	if (color != CLR_NONE) // Even if the above call failed, it returns a color if one was specified.
 		mCurrentColor = color;
 	if (font_index > -1) // Success.
@@ -9475,7 +9518,7 @@ bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR 
 }
 
 
-WORD GuiType::TextToHotkey(LPTSTR aText)
+WORD GuiType::TextToHotkey(LPCTSTR aText)
 // Returns a WORD (not a DWORD -- MSDN is wrong about that) compatible with the HKM_SETHOTKEY message:
 // LOBYTE is the virtual key.
 // HIBYTE is a set of modifiers:

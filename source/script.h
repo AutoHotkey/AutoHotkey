@@ -2255,7 +2255,7 @@ struct GuiControlType : public Object
 	GuiControlType(GuiType* owner) : gui(owner) {}
 
 	static LPTSTR sTypeNames[GUI_CONTROL_TYPE_COUNT];
-	static GuiControls ConvertTypeName(LPTSTR aTypeName);
+	static GuiControls ConvertTypeName(LPCTSTR aTypeName);
 	LPTSTR GetTypeName();
 
 	// An array of these attributes is used in place of several long switch() statements,
@@ -2545,40 +2545,77 @@ public:
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since GUIs can be destroyed and recreated, over and over).
+	
+	FResult Add(StrArg aCtrlType, optl<StrArg> aOptions, ExprTokenType *aContent, IObject *&aRetVal);
+	#define ADD_METHOD(NAME, CTRLTYPE) \
+		FResult NAME(optl<StrArg> aOptions, ExprTokenType *aContent, IObject *&aRetVal) { \
+			return AddControl(aOptions, aContent, aRetVal, CTRLTYPE); \
+		}
+	ADD_METHOD(AddActiveX,		GUI_CONTROL_ACTIVEX)
+	ADD_METHOD(AddButton,		GUI_CONTROL_BUTTON)
+	ADD_METHOD(AddCheckBox,		GUI_CONTROL_CHECKBOX)
+	ADD_METHOD(AddComboBox,		GUI_CONTROL_COMBOBOX)
+	ADD_METHOD(AddCustom,		GUI_CONTROL_CUSTOM)
+	ADD_METHOD(AddDateTime,		GUI_CONTROL_DATETIME)
+	ADD_METHOD(AddDDL,			GUI_CONTROL_DROPDOWNLIST)
+	ADD_METHOD(AddDropDownList,	GUI_CONTROL_DROPDOWNLIST)
+	ADD_METHOD(AddEdit,			GUI_CONTROL_EDIT)
+	ADD_METHOD(AddGroupBox,		GUI_CONTROL_GROUPBOX)
+	ADD_METHOD(AddHotkey,		GUI_CONTROL_HOTKEY)
+	ADD_METHOD(AddLink,			GUI_CONTROL_LINK)
+	ADD_METHOD(AddListBox,		GUI_CONTROL_LISTBOX)
+	ADD_METHOD(AddListView,		GUI_CONTROL_LISTVIEW)
+	ADD_METHOD(AddMonthCal,		GUI_CONTROL_MONTHCAL)
+	ADD_METHOD(AddPic,			GUI_CONTROL_PIC)
+	ADD_METHOD(AddPicture,		GUI_CONTROL_PIC)
+	ADD_METHOD(AddProgress,		GUI_CONTROL_PROGRESS)
+	ADD_METHOD(AddRadio,		GUI_CONTROL_RADIO)
+	ADD_METHOD(AddSlider,		GUI_CONTROL_SLIDER)
+	ADD_METHOD(AddStatusBar,	GUI_CONTROL_STATUSBAR)
+	ADD_METHOD(AddTab,			GUI_CONTROL_TAB)
+	ADD_METHOD(AddTab2,			GUI_CONTROL_TAB2)
+	ADD_METHOD(AddTab3,			GUI_CONTROL_TAB3)
+	ADD_METHOD(AddText,			GUI_CONTROL_TEXT)
+	ADD_METHOD(AddTreeView,		GUI_CONTROL_TREEVIEW)
+	ADD_METHOD(AddUpDown,		GUI_CONTROL_UPDOWN)
+	#undef ADD_METHOD
+	
+	FResult __New(optl<StrArg> aOptions, optl<StrArg> aTitle, optl<IObject*> aEventObj);
+	FResult Destroy();
+	FResult Show(optl<StrArg> aOptions);
+	FResult Hide();
+	FResult Minimize();
+	FResult Maximize();
+	FResult Restore();
+	FResult Flash(optl<BOOL> aBlink);
+	
+	FResult GetPos(int *aX, int *aY, int *aWidth, int *aHeight);
+	FResult GetClientPos(int *aX, int *aY, int *aWidth, int *aHeight);
+	FResult Move(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int> aHeight);
+	
+	FResult OnEvent(StrArg aEventName, ExprTokenType &aCallback, optl<int> aAddRemove);
+	FResult Opt(StrArg aOptions);
+	FResult SetFont(optl<StrArg> aOptions, optl<StrArg> aFontName);
+	FResult Submit(optl<BOOL> aHideIt, IObject *&aRetVal);
+	FResult __Enum(optl<int> aVarCount, IObject *&aRetVal);
+	
+	FResult get_Hwnd(UINT &aRetVal);
+	FResult get_Title(StrRet &aRetVal);
+	FResult set_Title(StrArg aValue);
+	FResult get_MenuBar(ResultToken &aRetVal);
+	FResult set_MenuBar(ExprTokenType &aValue);
+	FResult get___Item(ExprTokenType &aIndex, IObject *&aRetVal);
+	FResult get_FocusedCtrl(IObject *&aRetVal);
+	FResult get_MarginX(int &aRetVal) { return get_Margin(aRetVal, mMarginX); }
+	FResult get_MarginY(int &aRetVal) { return get_Margin(aRetVal, mMarginY); }
+	FResult set_MarginX(int aValue) { mMarginX = Scale(aValue); return OK; }
+	FResult set_MarginY(int aValue) { mMarginY = Scale(aValue); return OK; }
+	FResult get_BackColor(ResultToken &aResultToken);
+	FResult set_BackColor(ExprTokenType &aValue);
+	FResult set_Name(StrArg aName);
+	FResult get_Name(StrRet &aRetVal);
 
-	enum MemberID
-	{
-		// Methods
-		M_Destroy,
-		//M_AddControl,
-		M_Show,
-		M_Hide,
-		M_Move,
-		M_GetPos,
-		M_GetClientPos,
-		M_SetFont,
-		M_Opt,
-		M_Minimize,
-		M_Maximize,
-		M_Restore,
-		M_Flash,
-		M_Submit,
-		M___Enum,
-		M_OnEvent,
-
-		// Properties
-		P_Hwnd,
-		P_Title,
-		P_Name,
-		P___Item,
-		P_FocusedCtrl,
-		P_BackColor,
-		P_MarginX,
-		P_MarginY,
-		P_MenuBar,
-	};
-
-	static ObjectMember sMembers[];
+	static ObjectMemberMd sMembers[];
 	static int sMemberCount;
 	static Object *sPrototype;
 
@@ -2621,21 +2658,26 @@ public:
 		SetBase(sPrototype);
 	}
 
-	void Destroy();
+	~GuiType()
+	{
+		// This is done here rather than in Dispose() to allow get_Name() and set_Name()
+		// to omit the mHwnd checks, which allows the Gui to be identified after Destroy()
+		// is called, and also reduces code size marginally.
+		free(mName);
+	}
+	
 	void Dispose();
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	static GuiType *Create() { return new GuiType(); } // For Object::New<GuiType>().
-	void __New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType Create(LPTSTR aTitle);
-	ResultType SetName(LPTSTR aName);
+	FResult AddControl(optl<StrArg> aOptions, ExprTokenType *aContent, IObject *&aRetVal, GuiControls aCtrlType);
+	FResult Create(LPCTSTR aTitle);
 	void OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken);
-	void OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads, ResultToken &aResultToken);
+	FResult OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, ExprTokenType &aCallback, optl<int> aAddRemove);
+	FResult OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads);
 	void ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdded);
 	static LPTSTR sEventNames[];
 	static LPTSTR ConvertEvent(GuiEventType evt);
-	static GuiEventType ConvertEvent(LPTSTR evt);
+	static GuiEventType ConvertEvent(LPCTSTR evt);
 	// Currently this returns true for all events if we're using an event sink,
 	// because checking for the presence of a method in the event sink could be
 	// unreliable (but maybe placing some limitations would solve that?).
@@ -2646,7 +2688,8 @@ public:
 	static IObject* CreateDropArray(HDROP hDrop);
 	void SetMenu(ResultToken &aResultToken, ExprTokenType &aParam);
 	static void UpdateMenuBars(HMENU aMenu);
-	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Array *aObj = NULL);
+	ResultType AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTSTR aText, GuiControlType*& apControl, Array *aObj = NULL);
+	void MethodGetPos(int *aX, int *aY, int *aWidth, int *aHeight, RECT &aRect, HWND aOrigin);
 	void MethodGetPos(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RECT &aPos);
 
 	ResultType ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
@@ -2664,18 +2707,16 @@ public:
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
 	void ControlAddItems(GuiControlType &aControl, Array *aObj);
 	void ControlSetChoice(GuiControlType &aControl, int aChoice);
-	ResultType ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
-	ResultType Show(LPTSTR aOptions);
+	ResultType ControlLoadPicture(GuiControlType &aControl, LPCTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
 	void Cancel();
 	void Close(); // Due to SC_CLOSE, etc.
 	void Escape(); // Similar to close, except typically called when the user presses ESCAPE.
 	void VisibilityChanged();
-	void Submit(ResultToken &aResultToken, bool aHideIt);
 
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
 
-	GuiIndexType FindControl(LPTSTR aControlID);
+	GuiIndexType FindControl(LPCTSTR aControlID);
 	GuiIndexType FindControlIndex(HWND aHwnd)
 	{
 		for (;;)
@@ -2700,7 +2741,6 @@ public:
 
 	int FindGroup(GuiIndexType aControlIndex, GuiIndexType &aGroupStart, GuiIndexType &aGroupEnd);
 
-	ResultType SetCurrentFont(LPCTSTR aOptions, LPCTSTR aFontName);
 	static int FindOrCreateFont(LPCTSTR aOptions = _T(""), LPCTSTR aFontName = _T(""), FontType *aFoundationFont = NULL
 		, COLORREF *aColor = NULL);
 	static int FindFont(FontType &aFont);
@@ -2709,7 +2749,7 @@ public:
 	void Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent = GUI_EVENT_NONE, UINT_PTR aEventInfo = 0);
 	bool ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR &aRetVal);
 
-	static WORD TextToHotkey(LPTSTR aText);
+	static WORD TextToHotkey(LPCTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
 	ResultType ControlSetName(GuiControlType &aControl, LPTSTR aName);
 	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
@@ -2783,6 +2823,7 @@ public:
 	static bool ConvertAccelerator(LPTSTR aString, ACCEL &aAccel);
 
 	void SetDefaultMargins();
+	FResult get_Margin(int &aRetVal, int &aMargin);
 
 	// See DPIScale() and DPIUnscale() for more details.
 	int Scale(int x) { return mUsesDPIScaling ? DPIScale(x) : x; }
@@ -3355,6 +3396,8 @@ FResult FError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), Object *aPrototy
 FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 FResult FTypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
 FResult FParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType = nullptr);
+
+ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FResult aResult);
 
 void PauseCurrentThread();
 void ToggleSuspendState();

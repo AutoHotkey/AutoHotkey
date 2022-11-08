@@ -1414,7 +1414,7 @@ size_t PredictReplacementSize(ptrdiff_t aLengthDelta, int aReplacementCount, int
 
 
 
-LPTSTR TranslateLFtoCRLF(LPTSTR aString)
+LPTSTR TranslateLFtoCRLF(LPCTSTR aString)
 // Can't use StrReplace() for this because any CRLFs originally present in aString are not changed (i.e. they
 // don't become CRCRLF) [there may be other reasons].
 // Translates any naked LFs in aString to CRLF.  If there are none, the original string is returned.
@@ -1423,9 +1423,8 @@ LPTSTR TranslateLFtoCRLF(LPTSTR aString)
 {
 	UINT naked_LF_count = 0;
 	size_t length = 0;
-	LPTSTR cp;
 
-	for (cp = aString; *cp; ++cp)
+	for (auto cp = aString; *cp; ++cp)
 	{
 		++length;
 		if (*cp == '\n' && (cp == aString || cp[-1] != '\r')) // Relies on short-circuit boolean order.
@@ -1433,16 +1432,16 @@ LPTSTR TranslateLFtoCRLF(LPTSTR aString)
 	}
 
 	if (!naked_LF_count)
-		return aString;  // The original string is returned, which the caller must check for (vs. new string).
+		return nullptr;
 
 	// Allocate the new memory that will become the caller's responsibility:
-	LPTSTR buf = (LPTSTR)tmalloc(length + naked_LF_count + 1);  // +1 for zero terminator.
+	LPTSTR buf = tmalloc(length + naked_LF_count + 1);  // +1 for zero terminator.
 	if (!buf)
-		return NULL;
+		return nullptr;
 
 	// Now perform the translation.
 	LPTSTR dp = buf; // Destination.
-	for (cp = aString; *cp; ++cp)
+	for (auto cp = aString; *cp; ++cp)
 	{
 		if (*cp == '\n' && (cp == aString || cp[-1] != '\r')) // Relies on short-circuit boolean order.
 			*dp++ = '\r';  // Insert an extra CR here, then insert the '\n' normally below.

@@ -5,7 +5,6 @@
 
 
 void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken);
-ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FResult aResult);
 
 
 class MdFunc : public NativeFunc

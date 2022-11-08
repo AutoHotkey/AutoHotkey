@@ -688,7 +688,7 @@ UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType 
 	, UINT aLimit = UINT_MAX, size_t aSizeLimit = -1, LPTSTR *aDest = NULL, size_t *aHaystackLength = NULL);
 size_t PredictReplacementSize(ptrdiff_t aLengthDelta, int aReplacementCount, int aLimit, size_t aHaystackLength
 	, size_t aCurrentLength, size_t aEndOffsetOfCurrMatch);
-LPTSTR TranslateLFtoCRLF(LPTSTR aString);
+LPTSTR TranslateLFtoCRLF(LPCTSTR aString);
 bool DoesFilePatternExist(LPCTSTR aFilePattern, DWORD *aFileAttr = NULL, DWORD aRequiredAttr = 0);
 LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFilespec, LPTSTR aBuf, size_t aBufSize, size_t &aBufLength);
 void ConvertFilespecToCorrectCase(LPTSTR aBuf, size_t aBufSize, size_t &aBufLength);
