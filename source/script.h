@@ -333,6 +333,8 @@ INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 #define TABDIALOG_ATTRIB_INDEX(a) (TabControlIndexType)(a & 0xFF)
 #define TABDIALOG_ATTRIB_THEMED 0x100
 
+FResult ControlGetClassNN(HWND aWindow, HWND aControl, LPTSTR aBuf, int aBufSize);
+
 
 typedef UINT LineNumberType;
 typedef WORD FileIndexType; // Use WORD to conserve memory due to its use in the Line class (adjacency to other members and due to 4-byte struct alignment).

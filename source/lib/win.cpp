@@ -735,21 +735,34 @@ bif_impl FResult ControlGetClassNN(CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
 	if (target_window == control_window)
 		target_window = GetNonChildParent(control_window);
 
+	TCHAR class_nn[WINDOW_CLASS_NN_SIZE];
+	auto fr = ControlGetClassNN(target_window, control_window, class_nn, _countof(class_nn));
+	return fr != OK ? fr : aRetVal.Copy(class_nn) ? OK : FR_E_OUTOFMEM;
+}
+
+
+
+// Retrieves the ClassNN of a control.
+// aBuf is ideally sized by WINDOW_CLASS_NN_SIZE to avoid any possibility of
+// the buffer being insufficient.  Must be large enough to fit the class name
+// plus CONTROL_NN_SIZE.
+FResult ControlGetClassNN(HWND aWindow, HWND aControl, LPTSTR aBuf, int aBufSize)
+{
+	ASSERT(aBufSize > CONTROL_NN_SIZE);
 	class_and_hwnd_type cah;
-	TCHAR class_name[WINDOW_CLASS_SIZE];
-	cah.hwnd = control_window;
-	cah.class_name = class_name;
-	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5)) // -5 to allow room for sequence number.
+	cah.hwnd = aControl;
+	cah.class_name = aBuf;
+	int length = GetClassName(cah.hwnd, aBuf, aBufSize - CONTROL_NN_SIZE); // Allow room for sequence number.
+	if (!length)
 		return FR_E_WIN32;
-	
 	cah.class_count = 0;  // Init for the below.
 	cah.is_found = false; // Same.
-	EnumChildWindows(target_window, EnumChildFindSeqNum, (LPARAM)&cah);
+	EnumChildWindows(aWindow, EnumChildFindSeqNum, (LPARAM)&cah);
 	if (!cah.is_found)
 		return FR_E_FAILED;
 	// Append the class sequence number onto the class name:
-	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
-	return aRetVal.Copy(class_name) ? OK : FR_E_OUTOFMEM;
+	sntprintf(aBuf + length, aBufSize - length, _T("%u"), cah.class_count);
+	return OK;
 }
 
 

@@ -775,20 +775,9 @@ FResult GuiControlType::SetFont(optl<StrArg> aOptions, optl<StrArg> aFontName)
 FResult GuiControlType::get_ClassNN(StrRet &aRetVal)
 {
 	CTRL_THROW_IF_DESTROYED;
-	class_and_hwnd_type cah;
-	cah.hwnd = hwnd;
-	cah.class_name = aRetVal.CallerBuf();
-	if (!GetClassName(cah.hwnd, cah.class_name, aRetVal.CallerBufSize - 5)) // -5 to allow room for sequence number.
-		return FError(_T("Class name too long.")); // Short msg since so rare.
-	cah.class_count = 0;  // Init for the below.
-	cah.is_found = false; // Same.
-	EnumChildWindows(gui->mHwnd, EnumChildFindSeqNum, (LPARAM)&cah);
-	if (!cah.is_found) // Should be impossible due to FindControl() having already found it above.
-		return FError(_T("Cannot find control.")); // Short msg since so rare.
-	// Append the class sequence number onto the class name set the output param to be that value:
-	sntprintfcat(cah.class_name, aRetVal.CallerBufSize, _T("%d"), cah.class_count);
-	aRetVal.SetTemp(cah.class_name);
-	return OK;
+	TCHAR class_nn[WINDOW_CLASS_NN_SIZE];
+	auto fr = ControlGetClassNN(gui->mHwnd, hwnd, class_nn, _countof(class_nn));
+	return fr != OK ? fr : aRetVal.Copy(class_nn) ? OK : FR_E_OUTOFMEM;
 }
 
 

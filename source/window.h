@@ -69,6 +69,8 @@ inline bool IsTextMatch(LPCTSTR aHaystack, LPCTSTR aNeedle)
 // copy to the buffer, including the NULL character. If the text exceeds this limit, it is truncated."
 #define WINDOW_TEXT_SIZE 32767
 #define WINDOW_CLASS_SIZE 257  // MSDN implies length can't be greater than 256: "The maximum length for [WNDCLASS] lpszClassName is 256. If lpszClassName is greater than the maximum length, the RegisterClass function will fail."
+#define CONTROL_NN_SIZE 10  // Allows for maximum length of a UINT to ensure buffers are always sufficient (although creating so many controls would be impossible).
+#define WINDOW_CLASS_NN_SIZE (WINDOW_CLASS_SIZE + CONTROL_NN_SIZE)
 
 // Bitwise fields to support multiple criteria in v1.0.36.02
 #define CRITERION_TITLE 0x01
@@ -199,7 +201,7 @@ struct class_and_hwnd_type
 {
 	LPTSTR class_name;
 	bool is_found;
-	int class_count;
+	UINT class_count;
 	HWND hwnd;
 };
 

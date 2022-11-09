@@ -1375,20 +1375,11 @@ bif_impl FResult MouseGetPos(int *aX, int *aY, ResultToken *aParent, ResultToken
 		return OK;
 	}
 
-	class_and_hwnd_type cah;
-	cah.hwnd = child_under_cursor;  // This is the specific control we need to find the sequence number of.
-	TCHAR class_name[WINDOW_CLASS_SIZE];
-	cah.class_name = class_name;
-	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5))  // -5 to allow room for sequence number.
-		return OK;
-	cah.class_count = 0;  // Init for the below.
-	cah.is_found = false; // Same.
-	EnumChildWindows(parent_under_cursor, EnumChildFindSeqNum, (LPARAM)&cah); // Find this control's seq. number.
-	if (!cah.is_found)
-		return OK;
-	// Append the class sequence number onto the class name and set the output param to be that value:
-	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
-	if (!TokenSetResult(*aChild, class_name))
+	TCHAR class_nn[WINDOW_CLASS_NN_SIZE];
+	auto fr = ControlGetClassNN(parent_under_cursor, child_under_cursor, class_nn, _countof(class_nn));
+	if (fr != OK)
+		return fr;
+	if (!TokenSetResult(*aChild, class_nn))
 		return aChild->Exited() ? FR_FAIL : FR_ABORTED;
 	return OK;
 }
