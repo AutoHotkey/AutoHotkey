@@ -2051,35 +2051,6 @@ public:
 	static UserMenu *Create() { return new UserMenu(MENU_TYPE_POPUP); }
 	void Dispose();
 	~UserMenu();
-
-	enum MemberID
-	{
-		INVALID = 0,
-
-		// Methods
-		M_Add,
-		M_AddStandard,
-		M_Insert,
-		M_Delete,
-		M_Rename,
-		M_Check,
-		M_Uncheck,
-		M_ToggleCheck,
-		M_Enable,
-		M_Disable,
-		M_ToggleEnable,
-		M_SetIcon,
-		M_Show,
-		M_SetColor,
-		LastMethodPlusOne,
-
-		// Properties
-		P_Default,
-		P_Handle,
-		P_ClickCount,
-	};
-	
-	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	
 	FResult Add(optl<StrArg> aName, optl<IObject*> aFuncOrSubmenu, optl<StrArg> aOptions);
 	FResult Add(optl<StrArg> aName, optl<IObject*> aFuncOrSubmenu, optl<StrArg> aOptions, UserMenuItem **insert_at);
