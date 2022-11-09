@@ -144,6 +144,10 @@ ResultType YYYYMMDDToSystemTime(LPCTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool
 // (Windows generally does not support earlier years).  Otherwise OK is returned.
 {
 	// sscanf() is avoided because it adds 2 KB to the compressed EXE size.
+	// Alternative approaches were tried to further reduce size but ultimately had the opposite effect:
+	//  - Parse each sequence of digits inline; e.g. (t[0] - '0') * 10 + (t[1] - '0') ...
+	//  - Parse with istrtoi64() and use division and modulo to extract each component.
+	//  - tcslcpy() once and take each component from the right, re-terminating instead of copying each.
 	TCHAR temp[16];
 	size_t length = _tcslen(aYYYYMMDD); // Use this rather than incrementing the pointer in case there are ever partial fields such as 20051 vs. 200501.
 
@@ -213,7 +217,7 @@ ResultType YYYYMMDDToSystemTime(LPCTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool
 	}
 
 	// Callers who check the return value expect this to be done even when !aValidateTimeValues:
-	if (length < 4 || (length & 1) || length > 14)
+	if (length < 4 || (length & 1) || length > 14 || !IsNumeric(aYYYYMMDD, false, false))
 		return FAIL;
 
 	if (aValidateTimeValues)

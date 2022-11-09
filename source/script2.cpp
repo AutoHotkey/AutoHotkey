@@ -2163,10 +2163,7 @@ BIF_DECL(BIF_IsTypeish)
 	case VAR_TYPE_TIME:
 	{
 		SYSTEMTIME st;
-		// Also insist on numeric, because even though YYYYMMDDToFileTime() will properly convert a
-		// non-conformant string such as "2004.4", for future compatibility, we don't want to
-		// report that such strings are valid times:
-		if_condition = IsNumeric(aValueStr, false, false, false) && YYYYMMDDToSystemTime(aValueStr, st, true);
+		if_condition = YYYYMMDDToSystemTime(aValueStr, st, true);
 		break;
 	}
 	case VAR_TYPE_DIGIT:
