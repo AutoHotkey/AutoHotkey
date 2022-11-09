@@ -1268,14 +1268,6 @@ public:
 
 	static UINT ConvertFileEncoding(ExprTokenType &aToken);
 
-	static ResultType ValidateMouseCoords(LPTSTR aX, LPTSTR aY)
-	{
-		// OK: Both are absent, which is the signal to use the current position.
-		// OK: Both are present (that they are numeric is validated elsewhere).
-		// FAIL: One is absent but the other is present.
-		return (!*aX && !*aY) || (*aX && *aY) ? OK : FAIL;
-	}
-
 	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false, bool aLineNumber = true);
 

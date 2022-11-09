@@ -2080,7 +2080,7 @@ void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY
 void MouseClickDrag(vk_type aVK, int aX1, int aY1, int aX2, int aY2, int aSpeed, bool aMoveOffset)
 {
 	// Check if one of the coordinates is missing, which can happen in cases where this was called from
-	// a source that didn't already validate it. Can't call Line::ValidateMouseCoords() because that accepts strings.
+	// a source that didn't already validate it.
 	if (   (aX1 == COORD_UNSPECIFIED && aY1 != COORD_UNSPECIFIED) || (aX1 != COORD_UNSPECIFIED && aY1 == COORD_UNSPECIFIED)
 		|| (aX2 == COORD_UNSPECIFIED && aY2 != COORD_UNSPECIFIED) || (aX2 != COORD_UNSPECIFIED && aY2 == COORD_UNSPECIFIED)   )
 		return;
