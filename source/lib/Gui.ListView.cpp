@@ -19,8 +19,14 @@ GNU General Public License for more details.
 
 
 
+#define CTRL_THROW_IF_DESTROYED if (!hwnd) return ControlDestroyedError()
+FResult ControlDestroyedError();
+
+
+
 FResult GuiControlType::LV_GetCount(optl<StrArg> aMode, int &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	if (aMode.is_blank_or_omitted())
 	{
 		aRetVal = (int)SendMessage(hwnd, LVM_GETITEMCOUNT, 0, 0);
@@ -45,6 +51,7 @@ FResult GuiControlType::LV_GetCount(optl<StrArg> aMode, int &aRetVal)
 // 2: Options string.
 FResult GuiControlType::LV_GetNext(optl<int> aStartIndex, optl<StrArg> aRowType, int &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	HWND control_hwnd = hwnd;
 
 	int index = -1;
@@ -102,10 +109,7 @@ FResult GuiControlType::LV_GetText(int aRow, optl<int> aColumn, StrRet &aRetVal)
 // 1: Row index (one-based when it comes in).
 // 2: Column index (one-based when it comes in).
 {
-	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
-	// the following conditions:
-	// Item not found in ListView.
-	// And others.
+	CTRL_THROW_IF_DESTROYED;
 
 	int row_index = aRow - 1; // -1 to convert to zero-based.
 	if (row_index < -1) // row_index==-1 is reserved to mean "get column heading's text".
@@ -161,6 +165,7 @@ FResult GuiControlType::LV_AddInsertModify(optl<int> aRow, optl<StrArg> aOptions
 // 3 and beyond: Additional field text.
 // In Add/Insert mode, if there are no text fields present, a blank for is appended/inserted.
 {
+	CTRL_THROW_IF_DESTROYED;
 	TCHAR buf[MAX_NUMBER_SIZE];
 	GuiControlType &control = *this;
 
@@ -406,6 +411,7 @@ FResult GuiControlType::LV_Delete(optl<int> aRow)
 // Parameters:
 // 1: Row index (one-based when it comes in).
 {
+	CTRL_THROW_IF_DESTROYED;
 	if (!aRow.has_value())
 	{
 		SendMessage(hwnd, LVM_DELETEALLITEMS, 0, 0);
@@ -423,6 +429,7 @@ FResult GuiControlType::LV_Delete(optl<int> aRow)
 
 FResult GuiControlType::LV_DeleteCol(int aColumn)
 {
+	CTRL_THROW_IF_DESTROYED;
 	int index = aColumn - 1; // -1 to convert to zero-based.
 	if (!ListView_DeleteColumn(hwnd, index))
 		return FR_E_FAILED;
@@ -450,6 +457,7 @@ FResult GuiControlType::LV_InsertModifyCol(optl<int> aColumn, optl<StrArg> aOpti
 // 3: New text of column
 // There are also some special modes when only zero or one parameter is present, see below.
 {
+	CTRL_THROW_IF_DESTROYED;
 	GuiControlType &control = *this;
 	GuiType &gui = *control.gui;
 	lv_attrib_type &lv_attrib = *control.union_lv_attrib;
@@ -734,6 +742,7 @@ FResult GuiControlType::LV_SetImageList(UINT_PTR aImageListID, optl<int> aIconTy
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
 // 2: Optional: Type of list.
 {
+	CTRL_THROW_IF_DESTROYED;
 	HIMAGELIST himl = (HIMAGELIST)aImageListID;
 	int list_type;
 	if (aIconType.has_value())

@@ -905,6 +905,7 @@ FResult GuiControlType::set_Visible(BOOL aValue)
 
 FResult GuiControlType::Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact)
 {
+	CTRL_THROW_IF_DESTROYED;
 	BOOL whole_match = aExact.value_or(FALSE);
 	int index; // int vs TabControlIndexType for detection of negative/out-of-range values.
 	if (!aTab)
@@ -961,6 +962,7 @@ FResult GuiControlType::Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact)
 
 FResult GuiControlType::List_Add(ExprTokenType &aItems)
 {
+	CTRL_THROW_IF_DESTROYED;
 	auto obj = TokenToArray(aItems);
 	if (!obj)
 		return FParamError(0, &aItems, _T("Array"));
@@ -978,6 +980,7 @@ FResult GuiControlType::List_Add(ExprTokenType &aItems)
 
 FResult GuiControlType::List_Delete(optl<int> aIndex)
 {
+	CTRL_THROW_IF_DESTROYED;
 	UINT msg_one;
 	UINT msg_all;
 	switch (type)
@@ -1439,6 +1442,7 @@ error:
 
 FResult GuiControlType::List_Choose(ExprTokenType &aValue)
 {
+	CTRL_THROW_IF_DESTROYED;
 	return gui->ControlChoose(*this, aValue) ? OK : FR_FAIL;
 }
 
@@ -1920,6 +1924,7 @@ FResult GuiType::ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents)
 
 FResult GuiControlType::DT_SetFormat(optl<StrArg> aFormat)
 {
+	CTRL_THROW_IF_DESTROYED;
 	bool use_custom_format = false; // Set default.
 	// Reset style to "pure" so that new style (or custom format) can take effect.
 	DWORD style = GetWindowLong(hwnd, GWL_STYLE) // DTS_SHORTDATEFORMAT==0 so can be omitted below.

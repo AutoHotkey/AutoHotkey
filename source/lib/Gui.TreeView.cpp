@@ -20,6 +20,11 @@ GNU General Public License for more details.
 
 
 
+#define CTRL_THROW_IF_DESTROYED if (!hwnd) return ControlDestroyedError()
+FResult ControlDestroyedError();
+
+
+
 FResult GuiControlType::TV_AddModify(bool add_mode, UINT_PTR aItemID, UINT_PTR aParentItemID, optl<StrArg> aOptions, optl<StrArg> aName, UINT_PTR &aRetVal)
 // TV.Add():
 // Returns the HTREEITEM of the item on success, zero on failure.
@@ -34,6 +39,7 @@ FResult GuiControlType::TV_AddModify(bool add_mode, UINT_PTR aItemID, UINT_PTR a
 //    2: Options.
 //    3: New name.
 {
+	CTRL_THROW_IF_DESTROYED;
 	GuiControlType &control = *this;
 
 	// Since above didn't return, this is TV.Add() or TV.Modify().
@@ -260,6 +266,7 @@ FResult GuiControlType::TV_AddModify(bool add_mode, UINT_PTR aItemID, UINT_PTR a
 
 FResult GuiControlType::TV_Delete(optl<UINT_PTR> aItemID)
 {
+	CTRL_THROW_IF_DESTROYED;
 	// If param #1 is present but is zero, for safety it seems best not to do a delete-all (in case a
 	// script bug is so rare that it is never caught until the script is distributed).  Another reason
 	// is that a script might do something like TV.Delete(TV.GetSelection()), which would be desired
@@ -307,30 +314,35 @@ HTREEITEM GetNextTreeItem(HWND aTreeHwnd, HTREEITEM aItem)
 
 FResult GuiControlType::TV_GetChild(UINT_PTR aItemID, UINT_PTR &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	aRetVal = (UINT_PTR)TreeView_GetChild(hwnd, aItemID);
 	return OK;
 }
 
 FResult GuiControlType::TV_GetCount(UINT &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	aRetVal = TreeView_GetCount(hwnd);
 	return OK;
 }
 
 FResult GuiControlType::TV_GetParent(UINT_PTR aItemID, UINT_PTR &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	aRetVal = (UINT_PTR)TreeView_GetParent(hwnd, aItemID);
 	return OK;
 }
 
 FResult GuiControlType::TV_GetPrev(UINT_PTR aItemID, UINT_PTR &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	aRetVal = (UINT_PTR)TreeView_GetPrevSibling(hwnd, aItemID);
 	return OK;
 }
 
 FResult GuiControlType::TV_GetSelection(UINT_PTR &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	aRetVal = (UINT_PTR)TreeView_GetSelection(hwnd);
 	return OK;
 }
@@ -339,6 +351,7 @@ FResult GuiControlType::TV_GetSelection(UINT_PTR &aRetVal)
 
 FResult GuiControlType::TV_GetNext(optl<UINT_PTR> aItemID, optl<StrArg> aItemType, UINT_PTR &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	HTREEITEM hitem = (HTREEITEM)aItemID.value_or(NULL);
 	
 	if (!aItemType.has_value())
@@ -391,6 +404,7 @@ FResult GuiControlType::TV_GetNext(optl<UINT_PTR> aItemID, optl<StrArg> aItemTyp
 //    2: Name of attribute to get.
 FResult GuiControlType::TV_Get(UINT_PTR aItemID, StrArg aAttribute, UINT_PTR &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	HTREEITEM hitem = (HTREEITEM)aItemID;
 	UINT state_mask;
 	switch (ctoupper(*omit_leading_whitespace(aAttribute)))
@@ -426,6 +440,7 @@ FResult GuiControlType::TV_Get(UINT_PTR aItemID, StrArg aAttribute, UINT_PTR &aR
 //    1: HTREEITEM.
 FResult GuiControlType::TV_GetText(UINT_PTR aItemID, StrRet &aRetVal)
 {
+	CTRL_THROW_IF_DESTROYED;
 	HWND control_hwnd = hwnd;
 
 	TCHAR text_buf[LV_TEXT_BUF_SIZE]; // i.e. uses same size as ListView.
@@ -457,6 +472,7 @@ FResult GuiControlType::TV_SetImageList(UINT_PTR aImageListID, optl<int> aIconTy
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
 // 2: Optional: Type of list.
 {
+	CTRL_THROW_IF_DESTROYED;
 	HIMAGELIST himl = (HIMAGELIST)aImageListID;
 	int list_type = aIconType.value_or(TVSIL_NORMAL);
 	aRetVal = (UINT_PTR)TreeView_SetImageList(hwnd, himl, list_type);
