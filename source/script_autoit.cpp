@@ -1165,9 +1165,6 @@ bif_impl FResult FileGetShortcut(StrArg aShortcutFile, StrRet *aTarget, StrRet *
 	, StrRet *aArgs, StrRet *aDesc, StrRet *aIcon, ResultToken *aIconNum, int *aRunState)
 // Credited to Holger <Holger.Kotsch at GMX de>.
 {
-	if (!Line::Util_DoesFileExist(aShortcutFile))
-		return FR_E_FAILED;
-
 	CoInitialize(NULL);
 	IShellLink *psl;
 	HRESULT hr;
@@ -1728,35 +1725,6 @@ void Line::Util_ExpandFilenameWildcardPart(LPCTSTR szSource, LPCTSTR szDest, LPT
 	{
 		// No wildcard, straight copy of destext
 		_tcscpy(szExpandedDest, szDest);
-	}
-}
-
-
-
-bool Line::Util_DoesFileExist(LPCTSTR szFilename)  // Returns true if file or directory exists.
-{
-	if ( _tcschr(szFilename,'*')||_tcschr(szFilename,'?') )
-	{
-		WIN32_FIND_DATA	wfd;
-		HANDLE			hFile;
-
-		hFile = FindFirstFile(szFilename, &wfd);
-
-		if ( hFile == INVALID_HANDLE_VALUE )
-			return false;
-
-		FindClose(hFile);
-		return true;
-	}
-    else
-	{
-		DWORD dwTemp;
-
-		dwTemp = GetFileAttributes(szFilename);
-		if ( dwTemp != 0xffffffff )
-			return true;
-		else
-			return false;
 	}
 }
 
