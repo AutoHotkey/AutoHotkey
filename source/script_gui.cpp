@@ -890,7 +890,9 @@ FResult GuiControlType::set_Value(ExprTokenType &aValue)
 FResult GuiControlType::get_Visible(BOOL &aRetVal)
 {
 	CTRL_THROW_IF_DESTROYED;
-	aRetVal = IsWindowVisible(hwnd) ? 1 : 0;
+	// Return the requested visibility state, not the actual state, which would
+	// be affected by the parent window's visiblity and currently selected tab.
+	aRetVal = (attrib & GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN) ? 0 : 1;
 	return OK;
 }
 
