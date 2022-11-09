@@ -2905,7 +2905,7 @@ void ClipboardAll::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 			size = (size_t)ParamIndexToIntPtr(1);
 		}
 		else if (size == -1) // i.e. it can be omitted when size != -1 (a string was passed).
-			_o_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
+			return (void)aResultToken.ParamError(1, nullptr);
 		if (  !(data = malloc(size))  ) // More likely to be due to invalid parameter than out of memory.
 			_o_throw_oom;
 		memcpy(data, (void *)caller_data, size);

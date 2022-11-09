@@ -378,7 +378,7 @@ void RegWrite(ResultToken &aResultToken, ExprTokenType *aValue, DWORD aValueType
 	if (aValue) // RegWrite, not RegCreateKey
 	{
 		if (aValueType == REG_NONE) // Omitted
-			_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
+			return (void)aResultToken.ParamError(1, nullptr);
 
 		if (aValueType != REG_DWORD)
 			value = TokenToString(*aValue, nbuf, &length);
