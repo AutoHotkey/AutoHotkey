@@ -100,7 +100,7 @@ bif_impl FResult IniRead(StrArg aFilespec, optl<StrArg> aSection, optl<StrArg> a
 static BOOL IniEncodingFix(LPCWSTR aFilespec, LPCWSTR aSection)
 {
 	BOOL result = TRUE;
-	if (!DoesFilePatternExist(aFilespec))
+	if (GetFileAttributes(aFilespec) == INVALID_FILE_ATTRIBUTES) // File does not appear to exist.
 	{
 		HANDLE hFile;
 		DWORD dwWritten;
