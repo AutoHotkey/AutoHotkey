@@ -688,7 +688,7 @@ BIF_DECL(BIF_Reg)
 		LPTSTR key_name = ParamIndexToOptionalString(0); // No buf needed since numbers aren't valid root keys.
 		root_key = Line::RegConvertKey(key_name, &sub_key, &close_root);
 		if (!root_key)
-			return (void)aResultToken.ParamError(action == FID_RegWrite ? 2 : 0, aParam[0]);
+			return (void)aResultToken.ParamError(action == FID_RegWrite ? 2 : 0, aParamCount ? aParam[0] : nullptr);
 	}
 	if (!ParamIndexIsOmitted(1)) // Implies this isn't RegDeleteKey.
 	{
