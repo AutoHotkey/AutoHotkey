@@ -1651,7 +1651,7 @@ bif_impl FResult FileSelect(optl<StrArg> aOptions, optl<StrArg> aWorkingDir, opt
 		++options_str;
 		flags |= FOS_PICKFOLDERS;
 		if (*pattern)
-			return FValueError(ERR_PARAM4_MUST_BE_BLANK);
+			return FR_E_ARG(3);
 		filter_count = 0;
 		break;
 	case 'M':  // Multi-select.
