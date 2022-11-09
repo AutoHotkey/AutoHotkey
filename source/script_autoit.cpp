@@ -965,13 +965,13 @@ bif_impl FResult Download(StrArg aURL, StrArg aFilespec)
 		return FR_E_WIN32;
 	}
 
-	// Open our output file
-	FILE *fptr = _tfopen(aFilespec, _T("wb"));	// Open in binary write/destroy mode
-	if (!fptr)
+	// Open our output file (overwrite if necessary)
+	auto hOut = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+	if (hOut == INVALID_HANDLE_VALUE)
 	{
 		InternetCloseHandle(hFile);
 		InternetCloseHandle(hInet);
-		return FR_E_FAILED;
+		return FR_E_WIN32;
 	}
 
 	BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during Download.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
@@ -995,7 +995,7 @@ bif_impl FResult Download(StrArg aURL, StrArg aFilespec)
 			if (!buffers.dwBufferLength) // Transfer is complete.
 				break;
 			LONG_OPERATION_UPDATE  // Done in between the net-read and the file-write to improve avg. responsiveness.
-			fwrite(bufData, buffers.dwBufferLength, 1, fptr);
+			WriteFile(hOut, bufData, buffers.dwBufferLength, nullptr, nullptr);
 			buffers.dwBufferLength = sizeof(bufData);  // Reset buffer capacity for next iteration.
 		}
 	}
@@ -1007,7 +1007,7 @@ bif_impl FResult Download(StrArg aURL, StrArg aFilespec)
 			if (!number_of_bytes_read)
 				break;
 			LONG_OPERATION_UPDATE
-			fwrite(bufData, number_of_bytes_read, 1, fptr);
+			WriteFile(hOut, bufData, number_of_bytes_read, nullptr, nullptr);
 		}
 	}
 	DWORD last_error = GetLastError();
@@ -1015,7 +1015,7 @@ bif_impl FResult Download(StrArg aURL, StrArg aFilespec)
 	InternetCloseHandle(hFile);
 	InternetCloseHandle(hInet);
 	// Close output file:
-	fclose(fptr);
+	CloseHandle(hOut);
 
 	if (!result) // An error occurred during the transfer.
 	{
