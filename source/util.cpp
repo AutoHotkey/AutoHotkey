@@ -3164,7 +3164,7 @@ int FTOA(double aValue, LPTSTR aBuf, int aBufSize)
 	size_t search_result = _tcscspn(aBuf, _T(".e")); 
 	if (search_result == result			// if true, no decimal point, '.', or 'e' was found, add ".0",
 		&& result + 3 <= aBufSize		// but only if the buffer has room for two more characters and the null terminator,
-		&& isdigit(aBuf[result - 1]))	// and the number isn't some variation of inf or NaN.
+		&& cisdigit(aBuf[result - 1]))	// and the number isn't some variation of inf or NaN.
 	{
 		aBuf[result] = '.';				// overwrites the current null terminator.
 		aBuf[result+1] = '0';

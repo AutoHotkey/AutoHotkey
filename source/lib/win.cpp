@@ -1405,7 +1405,7 @@ bif_impl FResult WinSetRegion(optl<StrArg> aOptions, WINTITLE_PARAMETERS_DECL)
 		if (pt_count >= MAX_REGION_POINTS)
 			return FR_E_ARG(0);
 
-		if (isdigit(*cp) || *cp == '-' || *cp == '+') // v1.0.38.02: Recognize leading minus/plus sign so that the X-coord is just as tolerant as the Y.
+		if (cisdigit(*cp) || *cp == '-' || *cp == '+') // v1.0.38.02: Recognize leading minus/plus sign so that the X-coord is just as tolerant as the Y.
 		{
 			// Assume it's a pair of X/Y coordinates.  It's done this way rather than using X and Y
 			// as option letters because:

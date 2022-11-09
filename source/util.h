@@ -66,12 +66,14 @@ inline int cisctype(TBYTE c, int type)
 	return (c & (~0x7F)) ? 0 : _isctype(c, type);
 }
 
-inline int cisalpha(TBYTE c)  { return ((c & ~0x7F) ? 0 : isalpha(c)); }
+// These simplified checks significantly reduce code size vs. using the standard C functions:
+inline int cisupper(TBYTE c)  { return c <= 'Z' && c >= 'A'; }
+inline int cislower(TBYTE c)  { return c >= 'a' && c <= 'z'; }
+inline int cisdigit(TBYTE c)  { return c <= '9' && c >= '0'; }
+inline int cisalpha(TBYTE c)  { return cisupper(c) || cislower(c); }
+
 inline int cisalnum(TBYTE c)  { return ((c & ~0x7F) ? 0 : isalnum(c)); }
-inline int cisdigit(TBYTE c)  { return ((c & ~0x7F) ? 0 : isdigit(c)); }
 inline int cisxdigit(TBYTE c) { return ((c & ~0x7F) ? 0 : isxdigit(c)); }
-inline int cisupper(TBYTE c)  { return ((c & ~0x7F) ? 0 : isupper(c)); }
-inline int cislower(TBYTE c)  { return ((c & ~0x7F) ? 0 : islower(c)); }
 inline int cisprint(TBYTE c)  { return ((c & ~0x7F) ? 0 : isprint(c)); }
 inline int cisspace(TBYTE c)  { return ((c & ~0x7F) ? 0 : isspace(c)); }
 
