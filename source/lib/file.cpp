@@ -165,8 +165,6 @@ bif_impl FResult FileRead(StrArg aFilespec, optl<StrArg> aOptions, ResultToken &
 	if (!*aFilespec)
 		return FR_E_ARG(0); // Seems more helpful than throwing OSError(3).
 
-	const DWORD DWORD_MAX = ~0;
-
 	// Set default options:
 	bool translate_crlf_to_lf = false;
 	unsigned __int64 max_bytes_to_load = ULLONG_MAX; // By default, fail if the file is too large.  See comments near bytes_to_read below.
@@ -199,22 +197,22 @@ bif_impl FResult FileRead(StrArg aFilespec, optl<StrArg> aOptions, ResultToken &
 	// In addition to imposing the limit set by the *M option, the following check prevents an error
 	// caused by 64 to 32-bit truncation -- that is, a file size of 0x100000001 would be truncated to
 	// 0x1, allowing the command to complete even though it should fail.  UPDATE: This check was never
-	// sufficient since max_bytes_to_load could exceed DWORD_MAX on x64 (prior to v1.1.16).  It's now
+	// sufficient since max_bytes_to_load could exceed MAXDWORD on x64 (prior to v1.1.16).  It's now
 	// checked separately below to try to match the documented behaviour (truncating the data only to
 	// the caller-specified limit).
 	if (bytes_to_read > max_bytes_to_load) // This is the limit set by the caller.
 		bytes_to_read = max_bytes_to_load;
-	// Fixed for v1.1.16: Show an error message if the file is larger than DWORD_MAX, otherwise the
-	// truncation issue described above could occur.  Reading more than DWORD_MAX could be supported
+	// Fixed for v1.1.16: Show an error message if the file is larger than MAXDWORD, otherwise the
+	// truncation issue described above could occur.  Reading more than MAXDWORD could be supported
 	// by calling ReadFile() in a loop, but it seems unlikely that a script will genuinely want to
 	// do this AND actually be able to allocate a 4GB+ memory block (having 4GB of total free memory
 	// is usually not sufficient, perhaps due to memory fragmentation).
 #ifdef _WIN64
-	if (bytes_to_read > DWORD_MAX)
+	if (bytes_to_read > MAXDWORD)
 #else
 	// Reserve 2 bytes to avoid integer overflow below.  Although any amount larger than 2GB is almost
 	// guaranteed to fail at the malloc stage, that might change if we ever become large address aware.
-	if (bytes_to_read > DWORD_MAX - sizeof(wchar_t))
+	if (bytes_to_read > MAXDWORD - sizeof(wchar_t))
 #endif
 	{
 		CloseHandle(hfile);
