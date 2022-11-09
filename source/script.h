@@ -2650,6 +2650,7 @@ public:
 	}
 	void GetNonClientArea(LONG &aWidth, LONG &aHeight);
 	void GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight);
+	void ParseMinMaxSizeOption(LPCTSTR aOptionValue, LONG &aWidth, LONG &aHeight);
 
 	ResultType ControlParseOptions(LPCTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
 		, GuiIndexType aControlIndex = -1); // aControlIndex is not needed upon control creation.

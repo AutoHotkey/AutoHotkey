@@ -4858,8 +4858,6 @@ ResultType GuiType::ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, To
 // Caller must have already initialized aSetLastFoundWindow/, bool &aOwnDialogs with desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
 {
-	LONG nc_width, nc_height;
-
 	if (mHwnd)
 	{
 		// Since window already exists, its mStyle and mExStyle members might be out-of-date due to
@@ -5031,33 +5029,9 @@ ResultType GuiType::ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, To
 
 		else if (!_tcsnicmp(option, _T("MinSize"), 7)) // v1.0.44.13: Added for use with WM_GETMINMAXINFO.
 		{
-			auto option_value = option + 7;
 			if (adding)
 			{
-				if (*option_value)
-				{
-					// The following will retrieve zeros if window hasn't yet been shown for the first time,
-					// in which case the first showing will do the NC adjustment for us.  The overall approach
-					// used here was chose to avoid any chance for Min/MaxSize to be adjusted more than once
-					// to convert client size to entire-size, which would be wrong since the adjustment must be
-					// applied only once.  Examples of such situations are when one of the coordinates is omitted,
-					// or when +MinSize is specified prior to the first "Gui Show" but +MaxSize is specified after.
-					GetNonClientArea(nc_width, nc_height);
-					// _ttoi() vs. ATOI() is used below to avoid ambiguity of "x" being hex 0x vs. a delimiter.
-					auto pos_of_the_x = StrChrAny(option_value, _T("Xx"));
-					if (pos_of_the_x && pos_of_the_x[1]) // Kept simple due to rarity of transgressions and their being inconsequential.
-						mMinHeight = Scale(_ttoi(pos_of_the_x + 1)) + nc_height;
-					//else it's "MinSize333" or "MinSize333x", so leave height unchanged as documented.
-					if (pos_of_the_x != option_value) // There's no 'x' or it lies to the right of option_value.
-						mMinWidth = Scale(_ttoi(option_value)) + nc_width; // _ttoi() automatically stops converting when it reaches non-numeric character.
-					//else it's "MinSizeX333", so leave width unchanged as documented.
-				}
-				else // Since no width or height was specified:
-					// Use the window's current size. But if window hasn't yet been shown for the
-					// first time, this will set the values to COORD_CENTERED, which tells the
-					// first-show routine to get the total width/height upon first showing (since
-					// that's where the window's initial size is determined).
-					GetTotalWidthAndHeight(mMinWidth, mMinHeight);
+				ParseMinMaxSizeOption(option + 7, mMinWidth, mMinHeight);
 			}
 			else // "-MinSize", so tell the WM_GETMINMAXINFO handler to use system defaults.
 			{
@@ -5068,21 +5042,9 @@ ResultType GuiType::ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, To
 
 		else if (!_tcsnicmp(option, _T("MaxSize"), 7)) // v1.0.44.13: Added for use with WM_GETMINMAXINFO.
 		{
-			// SEE "MinSize" section above for more comments because the section below is nearly identical to it.
-			auto option_value = option + 7;
 			if (adding)
 			{
-				if (*option_value)
-				{
-					GetNonClientArea(nc_width, nc_height);
-					auto pos_of_the_x = StrChrAny(option_value, _T("Xx"));
-					if (pos_of_the_x && pos_of_the_x[1]) // Kept simple due to rarity of transgressions and their being inconsequential.
-						mMaxHeight = Scale(_ttoi(pos_of_the_x + 1)) + nc_height;
-					if (pos_of_the_x != option_value) // There's no 'x' or it lies to the right of option_value.
-						mMaxWidth = Scale(_ttoi(option_value)) + nc_width; // _ttoi() automatically stops converting when it reaches non-numeric character.
-				}
-				else // No width or height was specified. See comment in "MinSize" for details about this.
-					GetTotalWidthAndHeight(mMaxWidth, mMaxHeight); // If window hasn't yet been shown for the first time, this will set them to COORD_CENTERED, which tells the first-show routine to get the total width/height.
+				ParseMinMaxSizeOption(option + 7, mMaxWidth, mMaxHeight);
 			}
 			else // "-MaxSize", so tell the WM_GETMINMAXINFO handler to use system defaults.
 			{
@@ -5243,6 +5205,37 @@ void GuiType::GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight)
 	GetWindowRect(mHwnd, &rect);
 	aWidth = rect.right - rect.left;
 	aHeight = rect.bottom - rect.top;
+}
+
+
+
+void GuiType::ParseMinMaxSizeOption(LPCTSTR option_value, LONG &aWidth, LONG &aHeight)
+{
+	if (*option_value)
+	{
+		// The following will retrieve zeros if window hasn't yet been shown for the first time,
+		// in which case the first showing will do the NC adjustment for us.  The overall approach
+		// used here was chose to avoid any chance for Min/MaxSize to be adjusted more than once
+		// to convert client size to entire-size, which would be wrong since the adjustment must be
+		// applied only once.  Examples of such situations are when one of the coordinates is omitted,
+		// or when +MinSize is specified prior to the first "Gui Show" but +MaxSize is specified after.
+		LONG nc_width, nc_height;
+		GetNonClientArea(nc_width, nc_height);
+		// _ttoi() vs. ATOI() is used below to avoid ambiguity of "x" being hex 0x vs. a delimiter.
+		auto pos_of_the_x = StrChrAny(option_value, _T("Xx"));
+		if (pos_of_the_x && pos_of_the_x[1]) // Kept simple due to rarity of transgressions and their being inconsequential.
+			aHeight = Scale(_ttoi(pos_of_the_x + 1)) + nc_height;
+		//else it's "MinSize333" or "MinSize333x", so leave height unchanged as documented.
+		if (pos_of_the_x != option_value) // There's no 'x' or it lies to the right of option_value.
+			aWidth = Scale(_ttoi(option_value)) + nc_width; // _ttoi() automatically stops converting when it reaches non-numeric character.
+		//else it's "MinSizeX333", so leave width unchanged as documented.
+	}
+	else // Since no width or height was specified:
+		// Use the window's current size. But if window hasn't yet been shown for the
+		// first time, this will set the values to COORD_CENTERED, which tells the
+		// first-show routine to get the total width/height upon first showing (since
+		// that's where the window's initial size is determined).
+		GetTotalWidthAndHeight(aWidth, aHeight);
 }
 
 
