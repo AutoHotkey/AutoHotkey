@@ -422,6 +422,7 @@ private:
 	void ExitBreakState();
 
 	int WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine);
+	Line *FindFirstLineForBreakpoint(int file_index, UINT line_no);
 
 	void AppendPropertyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName);
 	void AppendStringKey(CStringA &aNameBuf, size_t aParentNameLength, const char *aKey);
