@@ -2318,35 +2318,7 @@ struct GuiControlType : public Object
 		return TypeHasAttrib(TYPE_USES_BGCOLOR);
 	}
 
-	enum MemberID
-	{
-		INVALID = 0,
-
-		// Methods
-		M_Opt, // a.k.a. Opt
-		M_Focus,
-		M_Move,
-		M_GetPos,
-		M_OnEvent,
-		M_OnNotify,
-		M_OnCommand,
-		M_SetFont,
-		M_Redraw,
-
-		// Properties
-		P_Hwnd,
-		P_Gui,
-		P_Name,
-		P_Type,
-		P_ClassNN,
-		P_Text,
-		P_Value,
-		P_Enabled,
-		P_Visible,
-		P_Focused,
-	};
-
-	static ObjectMember sMembers[];
+	static ObjectMemberMd sMembers[];
 	static ObjectMemberMd sMembersList[]; // Tab, ListBox, ComboBox, DDL
 	static ObjectMemberMd sMembersTab[];
 	static ObjectMemberMd sMembersDate[];
@@ -2359,8 +2331,31 @@ struct GuiControlType : public Object
 	static void DefineControlClasses();
 	static Object *GetPrototype(GuiControls aType);
 
-	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
+	FResult Focus();
+	FResult GetPos(int *aX, int *aY, int *aWidth, int *aHeight);
+	FResult Move(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int> aHeight);
+	FResult OnCommand(int aNotifyCode, ExprTokenType &aCallback, optl<int> aAddRemove);
+	FResult OnEvent(StrArg aEventName, ExprTokenType &aCallback, optl<int> aAddRemove);
+	FResult OnNotify(int aNotifyCode, ExprTokenType &aCallback, optl<int> aAddRemove);
+	FResult Opt(StrArg aOptions);
+	FResult Redraw();
+	FResult SetFont(optl<StrArg> aOptions, optl<StrArg> aFontName);
+	
+	FResult get_ClassNN(StrRet &aRetVal);
+	FResult get_Enabled(BOOL &aRetVal);
+	FResult set_Enabled(BOOL aValue);
+	FResult get_Focused(BOOL &aRetVal);
+	FResult get_Gui(IObject *&aRetVal);
+	FResult get_Hwnd(UINT &aRetVal);
+	FResult get_Name(StrRet &aRetVal);
+	FResult set_Name(StrArg aValue);
+	FResult get_Text(ResultToken &aResultToken);
+	FResult set_Text(ExprTokenType &aValue);
+	FResult get_Type(StrRet &aRetVal);
+	FResult get_Value(ResultToken &aResultToken);
+	FResult set_Value(ExprTokenType &aValue);
+	FResult get_Visible(BOOL &aRetVal);
+	FResult set_Visible(BOOL aValue);
 	
 	FResult DT_SetFormat(optl<StrArg> aFormat);
 	
@@ -2642,7 +2637,6 @@ public:
 	static GuiType *Create() { return new GuiType(); } // For Object::New<GuiType>().
 	FResult AddControl(optl<StrArg> aOptions, ExprTokenType *aContent, IObject *&aRetVal, GuiControls aCtrlType);
 	FResult Create(LPCTSTR aTitle);
-	void OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken);
 	FResult OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, ExprTokenType &aCallback, optl<int> aAddRemove);
 	FResult OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads);
 	void ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdded);
@@ -2661,7 +2655,6 @@ public:
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTSTR aText, GuiControlType*& apControl, Array *aObj = NULL);
 	void MethodGetPos(int *aX, int *aY, int *aWidth, int *aHeight, RECT &aRect, HWND aOrigin);
-	void MethodGetPos(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RECT &aPos);
 
 	ResultType ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
 	void SetOwnDialogs(ToggleValueType state)
@@ -2722,12 +2715,11 @@ public:
 
 	static WORD TextToHotkey(LPCTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
-	ResultType ControlSetName(GuiControlType &aControl, LPTSTR aName);
+	FResult ControlSetName(GuiControlType &aControl, LPCTSTR aName);
 	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool aVisible);
-	ResultType ParseMoveParams(int aCoord[4], ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType ControlMove(GuiControlType &aControl, int aX, int aY, int aWidth, int aHeight);
-	ResultType ControlSetFont(GuiControlType &aControl, LPTSTR aOptions, LPTSTR aFontName);
+	FResult ControlMove(GuiControlType &aControl, int aX, int aY, int aWidth, int aHeight);
+	ResultType ControlSetFont(GuiControlType &aControl, LPCTSTR aOptions, LPCTSTR aFontName);
 	void ControlSetTextColor(GuiControlType &aControl, COLORREF aColor);
 	void ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor, UINT aMsg);
 	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, BOOL aOneExact = FALSE);
@@ -2742,17 +2734,17 @@ public:
 	GuiControlType *ControlOverrideBkColor(GuiControlType &aControl);
 	void ControlGetBkColor(GuiControlType &aControl, bool aUseWindowColor, HBRUSH &aBrush, COLORREF &aColor);
 	
-	void ControlSetContents(GuiControlType &aControl, ExprTokenType &aContents, ResultToken &aResultToken, bool aIsText);
-	void ControlSetPic(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	void ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText); // DDL, ComboBox, ListBox, Tab
-	void ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
-	void ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	void ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	void ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	void ControlSetCheck(GuiControlType &aControl, int aValue, ResultToken &aResultToken); // CheckBox, Radio
-	void ControlSetUpDown(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
-	void ControlSetSlider(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
-	void ControlSetProgress(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
+	FResult ControlSetContents(GuiControlType &aControl, ExprTokenType &aContents, bool aIsText);
+	FResult ControlSetPic(GuiControlType &aControl, LPTSTR aContents);
+	FResult ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, bool aIsText); // DDL, ComboBox, ListBox, Tab
+	FResult ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, bool aIsText);
+	FResult ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents);
+	FResult ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents);
+	FResult ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents);
+	FResult ControlSetCheck(GuiControlType &aControl, int aValue); // CheckBox, Radio
+	FResult ControlSetUpDown(GuiControlType &aControl, int aValue);
+	FResult ControlSetSlider(GuiControlType &aControl, int aValue);
+	FResult ControlSetProgress(GuiControlType &aControl, int aValue);
 
 	enum ValueModeType { Value_Mode, Text_Mode, Submit_Mode };
 
