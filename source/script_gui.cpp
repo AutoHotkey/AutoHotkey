@@ -7276,6 +7276,9 @@ FResult GuiType::Show(optl<StrArg> aOptions)
 			if (mControl[u]->type == GUI_CONTROL_TAB)
 				AutoSizeTabControl(*mControl[u]);
 		}
+		// For the rare case that Show is called before any controls are added or MarginX/Y
+		// is queried, the following ensures mMarginx and mMarginY have usable values:
+		SetDefaultMargins();
 	}
 
 	// Due to the checking above, if the window is minimized/maximized now, that means it will still be
