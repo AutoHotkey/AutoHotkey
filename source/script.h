@@ -1028,32 +1028,6 @@ public:
 			return -1;
 	}
 
-	static DWORD SoundConvertControlType(LPTSTR aBuf)
-	{
-		// v1.0.37.06: The following was added to allow unnamed control types (if any) to be accessed via number:
-		if (IsNumeric(aBuf, false, false, true)) // Seems best to allowing floating point here, since .000 on the end might happen sometimes.
-			return ATOU(aBuf);
-		// The following are the types that seem to correspond to actual sound attributes.  Some of the
-		// values are not included here, such as MIXERCONTROL_CONTROLTYPE_FADER, which seems to be a type
-		// of sound control rather than a quality of the sound itself.  For performance, put the most
-		// often used ones up top.
-		if (!_tcsicmp(aBuf, _T("Vol"))
-			|| !_tcsicmp(aBuf, _T("Volume"))) return MIXERCONTROL_CONTROLTYPE_VOLUME;
-		if (!_tcsicmp(aBuf, _T("OnOff")))     return MIXERCONTROL_CONTROLTYPE_ONOFF;
-		if (!_tcsicmp(aBuf, _T("Mute")))      return MIXERCONTROL_CONTROLTYPE_MUTE;
-		if (!_tcsicmp(aBuf, _T("Mono")))      return MIXERCONTROL_CONTROLTYPE_MONO;
-		if (!_tcsicmp(aBuf, _T("Loudness")))  return MIXERCONTROL_CONTROLTYPE_LOUDNESS;
-		if (!_tcsicmp(aBuf, _T("StereoEnh"))) return MIXERCONTROL_CONTROLTYPE_STEREOENH;
-		if (!_tcsicmp(aBuf, _T("BassBoost"))) return MIXERCONTROL_CONTROLTYPE_BASS_BOOST;
-		if (!_tcsicmp(aBuf, _T("Pan")))       return MIXERCONTROL_CONTROLTYPE_PAN;
-		if (!_tcsicmp(aBuf, _T("QSoundPan"))) return MIXERCONTROL_CONTROLTYPE_QSOUNDPAN;
-		if (!_tcsicmp(aBuf, _T("Bass")))      return MIXERCONTROL_CONTROLTYPE_BASS;
-		if (!_tcsicmp(aBuf, _T("Treble")))    return MIXERCONTROL_CONTROLTYPE_TREBLE;
-		if (!_tcsicmp(aBuf, _T("Equalizer"))) return MIXERCONTROL_CONTROLTYPE_EQUALIZER;
-		#define MIXERCONTROL_CONTROLTYPE_INVALID 0xFFFFFFFF // 0 might be a valid type, so use something definitely undefined.
-		return MIXERCONTROL_CONTROLTYPE_INVALID;
-	}
-
 	static TitleMatchModes ConvertTitleMatchMode(LPCTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return MATCHMODE_INVALID;
