@@ -65,7 +65,7 @@ FResult UserMenu::Insert(optl<StrArg> aBefore, optl<StrArg> aName, optl<IObject*
 			// The item wasn't found.  Treat it as an error unless it is the position
 			// immediately after the last item.
 			if (  !(search_by_pos && ATOI(aBefore.value()) == (int)mMenuItemCount + 1)  )
-				return FError(_T("Nonexistent menu item."), aBefore.value());
+				return ItemNotFoundError(aBefore.value());
 		}
 	}
 	return Add(aName, aFuncOrSubmenu, aOptions
@@ -154,7 +154,7 @@ FResult UserMenu::Delete(optl<StrArg> aItemName)
 	UserMenuItem *menu_item_prev
 		, *menu_item = FindItem(aItemName.value(), menu_item_prev, search_by_pos);
 	if (!menu_item)
-		return FError(_T("Nonexistent menu item."), aItemName.value());
+		return ItemNotFoundError(aItemName.value());
 	DeleteItem(menu_item, menu_item_prev);
 	return OK;
 }
@@ -454,7 +454,14 @@ FResult UserMenu::GetItem(LPCTSTR aNameOrPos, UserMenuItem *&aItem)
 	aItem = FindItem(aNameOrPos, prev, bypos);
 	if (aItem)
 		return OK;
-	return g_script.RuntimeError(_T("Nonexistent menu item."), aNameOrPos) ? FR_ABORTED : FR_FAIL;
+	return ItemNotFoundError(aNameOrPos);
+}
+
+
+
+FResult UserMenu::ItemNotFoundError(LPCTSTR aItem)
+{
+	return FError(ERR_INVALID_MENU_ITEM, aItem, ErrorPrototype::Target);
 }
 
 
@@ -918,11 +925,10 @@ void UserMenu::SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMas
 
 FResult UserMenu::SetItemState(StrArg aItemName, UINT aState, UINT aStateMask)
 {
-	bool bypos;
-	UserMenuItem *item, *prev;
-	item = FindItem(aItemName, prev, bypos);
-	if (!item)
-		return FError(_T("Nonexistent menu item."), aItemName);
+	UserMenuItem *item;
+	auto fr = GetItem(aItemName, item);
+	if (fr != OK)
+		return fr;
 	SetItemState(item, aState, aStateMask);
 	return OK;
 }
