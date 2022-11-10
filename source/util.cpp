@@ -1436,7 +1436,7 @@ LPTSTR TranslateLFtoCRLF(LPCTSTR aString)
 	}
 
 	if (!naked_LF_count)
-		return nullptr;
+		return const_cast<LPTSTR>(aString);
 
 	// Allocate the new memory that will become the caller's responsibility:
 	LPTSTR buf = tmalloc(length + naked_LF_count + 1);  // +1 for zero terminator.

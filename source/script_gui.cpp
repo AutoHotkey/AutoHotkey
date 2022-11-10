@@ -4204,7 +4204,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTS
 			if (opt.tabstop_count)
 				SendMessage(control.hwnd, EM_SETTABSTOPS, opt.tabstop_count, (LPARAM)opt.tabstop);
 		}
-		free(malloc_buf);
+		if (malloc_buf != aText)
+			free(malloc_buf);
 		break;
 	}
 
