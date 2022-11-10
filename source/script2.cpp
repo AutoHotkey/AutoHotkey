@@ -3451,7 +3451,7 @@ ResultType TokenToStringParam(ResultToken &aResultToken, ExprTokenType *aParam[]
 		aString = ITOA64(token.value_int64, aBuf);
 		if (aLength)
 			*aLength = _tcslen(aBuf);
-		break;
+		return OK;
 	case SYM_OBJECT:
 		if (aPermitObject)
 		{
