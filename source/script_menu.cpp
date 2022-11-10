@@ -87,7 +87,7 @@ FResult UserMenu::Add(optl<StrArg> aName, optl<IObject*> aFuncOrSubmenu, optl<St
 	}
 	
 	bool search_by_pos = false;
-	UserMenuItem *menu_item, *menu_item_prev = nullptr;
+	UserMenuItem *menu_item = nullptr, *menu_item_prev = nullptr;
 	if (!aInsertAt) // Add(), not Insert().
 	{
 		menu_item = FindItem(aName.value(), menu_item_prev, search_by_pos);
