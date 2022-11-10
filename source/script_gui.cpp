@@ -4858,6 +4858,7 @@ ResultType GuiType::ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, To
 
 	TCHAR option[MAX_NUMBER_SIZE + 1]; // Enough for any single option word or number, with room to avoid issues due to truncation.
 	LPCTSTR next_option, option_end;
+	DWORD option_dword;
 	bool adding; // Whether this option is being added (+) or removed (-).
 
 	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
@@ -5064,37 +5065,28 @@ ResultType GuiType::ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, To
 
 		// This one should be near the bottom since "E" is fairly vague and might be contained at the start
 		// of future option words such as Edge, Exit, etc.
-		else if (ctoupper(*option) == 'E') // Extended style
+		else if (ctoupper(*option) == 'E' && ParsePositiveInteger(option + 1, option_dword)) // Extended style
 		{
-			auto option_value = option + 1; // Skip over the E itself.
-			if (IsNumeric(option_value, false, false)) // Disallow whitespace in case option string ends in naked "E".
-			{
-				// Pure numbers are assumed to be style additions or removals:
-				DWORD given_exstyle = ATOU(option_value); // ATOU() for unsigned.
-				if (adding)
-					mExStyle |= given_exstyle;
-				else
-					mExStyle &= ~given_exstyle;
-			}
+			if (adding)
+				mExStyle |= option_dword;
+			else
+				mExStyle &= ~option_dword;
 		}
 
-		else // Handle things that are more general than the above, such as single letter options and pure numbers:
+		else if (ParsePositiveInteger(option, option_dword)) // Above has already verified that *option can't be whitespace.
 		{
-			if (IsNumeric(option)) // Above has already verified that *option can't be whitespace.
-			{
-				// Pure numbers are assumed to be style additions or removals:
-				DWORD given_style = ATOU(option); // ATOU() for unsigned.
-				if (adding)
-					mStyle |= given_style;
-				else
-					mStyle &= ~given_style;
-			}
-			else // v1.1.04: Validate Gui options.
-			{
-				if (!ValueError(ERR_INVALID_OPTION, option, FAIL_OR_OK))
-					return FAIL;
-				// Otherwise, user wants to continue.
-			}
+			// Pure numbers are assumed to be style additions or removals:
+			if (adding)
+				mStyle |= option_dword;
+			else
+				mStyle &= ~option_dword;
+		}
+
+		else // v1.1.04: Validate Gui options.
+		{
+			if (!ValueError(ERR_INVALID_OPTION, option, FAIL_OR_OK))
+				return FAIL;
+			// Otherwise, user wants to continue.
 		}
 
 	} // for() each item in option list
@@ -5234,6 +5226,7 @@ ResultType GuiType::ControlParseOptions(LPCTSTR aOptions, GuiControlOptionsType 
 	TCHAR option[MAX_NUMBER_SIZE + 1]; // Enough for any single option word or number, with room to avoid issues due to truncation.
 	LPCTSTR next_option, option_end;
 	LPCTSTR error_message; // Used by "return_error:" when aControl.hwnd == NULL.
+	DWORD option_dword;
 	bool adding; // Whether this option is being added (+) or removed (-).
 	GuiControlType *tab_control;
 	RECT rect;
@@ -5568,15 +5561,8 @@ ResultType GuiType::ControlParseOptions(LPCTSTR aOptions, GuiControlOptionsType 
 			if (adding) aOpt.listview_style |= LVS_EX_GRIDLINES; else aOpt.listview_style &= ~LVS_EX_GRIDLINES;
 		else if (!_tcsnicmp(option, _T("Count"), 5)) // Script should only provide the option for ListViews.
 			aOpt.limit = ATOI(option + 5); // For simplicity, the value of "adding" is ignored.
-		else if (!_tcsnicmp(option, _T("LV"), 2))
-		{
-			auto option_value = option + 2;
-			if (IsNumeric(option_value, false, false)) // Disallow whitespace in case option string ends in naked "LV".
-			{
-				DWORD given_lvstyle = ATOU(option_value); // ATOU() for unsigned.
-				if (adding) aOpt.listview_style |= given_lvstyle; else aOpt.listview_style &= ~given_lvstyle;
-			}
-		}
+		else if (!_tcsnicmp(option, _T("LV"), 2) && ParsePositiveInteger(option + 2, option_dword))
+			if (adding) aOpt.listview_style |= option_dword; else aOpt.listview_style &= ~option_dword;
 		else if (!_tcsnicmp(option, _T("ImageList"), 9))
 		{
 			if (adding)
@@ -6221,11 +6207,10 @@ ResultType GuiType::ControlParseOptions(LPCTSTR aOptions, GuiControlOptionsType 
 			// if "visible" and "resize" ever become valid option words, the below would otherwise wrongly
 			// detect them as variable=isible and row_count=esize, respectively.
 
-			if (IsNumeric(option)) // Above has already verified that *option can't be whitespace.
+			if (ParsePositiveInteger(option, option_dword)) // Above has already verified that *option can't be whitespace.
 			{
 				// Pure numbers are assumed to be style additions or removals:
-				DWORD given_style = ATOU(option); // ATOU() for unsigned.
-				if (adding) aOpt.style_add |= given_style; else aOpt.style_remove |= given_style;
+				if (adding) aOpt.style_add |= option_dword; else aOpt.style_remove |= option_dword;
 				continue;
 			}
 
