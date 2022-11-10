@@ -82,9 +82,9 @@ HRESULT SoundSetGet_GetDevice(LPTSTR aDeviceString, IMMDevice *&aDevice)
 				target_name = aDeviceString;
 				target_name_length = delim - aDeviceString;
 			}
-			else if (IsNumeric(aDeviceString, FALSE, FALSE))
+			else if (ParseInteger(aDeviceString, target_index))
 			{
-				target_index = ATOI(aDeviceString) - 1;
+				--target_index;
 			}
 			else
 			{
@@ -145,10 +145,9 @@ struct SoundComponentSearch
 
 void SoundConvertComponent(LPTSTR aBuf, SoundComponentSearch &aSearch)
 {
-	if (IsNumeric(aBuf) == PURE_INTEGER)
+	if (ParseInteger(aBuf, aSearch.target_instance))
 	{
 		*aSearch.target_name = '\0';
-		aSearch.target_instance = ATOI(aBuf);
 	}
 	else
 	{

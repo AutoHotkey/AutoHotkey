@@ -1667,10 +1667,9 @@ FResult GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, bo
 	}
 	else // (!aIsText)
 	{
-		if (!IsNumeric(aContents, FALSE, FALSE))
+		if (!ParseInteger(aContents, choice.value_int64))
 			return FError(ERR_INVALID_VALUE, nullptr, ErrorPrototype::Type);
 		choice.symbol = SYM_INTEGER;
-		choice.value_int64 = ATOI(aContents);
 	}
 	return ControlChoose(aControl, choice, TRUE) ? OK : FR_FAIL; // Pass TRUE to find an exact (not partial) match.
 }
@@ -4907,12 +4906,10 @@ ResultType GuiType::ParseOptions(LPCTSTR aOptions, bool &aSetLastFoundWindow, To
 				if (*name || !set_owner) // i.e. "+Parent" on its own is invalid (and should not default to g_hWnd).
 				{
 					HWND new_owner = NULL;
-					if (IsNumeric(name, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
-					{
-						HWND hwnd = (HWND)ATOI64(name);
-						if (IsWindow(hwnd))
-							new_owner = hwnd;
-					}
+					UINT hwnd_uint;
+					if (ParseInteger(name, hwnd_uint))
+						if (IsWindow((HWND)(UINT_PTR)hwnd_uint))
+							new_owner = (HWND)(UINT_PTR)hwnd_uint;
 					if (!new_owner || new_owner == mHwnd) // Window can't own itself!
 					{
 						if (!ValueError(_T("Invalid or nonexistent owner or parent window."), option, FAIL_OR_OK))
@@ -7937,11 +7934,12 @@ GuiIndexType GuiType::FindControl(LPCTSTR aControlID)
 	if (!*aControlID)
 		return -1;
 	GuiIndexType u;
-	if (IsNumeric(aControlID, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
+	UINT hwnd_uint;
+	if (ParseInteger(aControlID, hwnd_uint)) // Allow negatives, for flexibility, but truncate to filter out sign-extended values.
 	{
 		// v1.1.04: Allow Gui controls to be referenced by HWND.  There is some risk of breaking
 		// scripts, but only if the text of one control contains the HWND of another control.
-		u = FindControlIndex((HWND)ATOU64(aControlID));
+		u = FindControlIndex((HWND)(UINT_PTR)hwnd_uint);
 		if (u < mControlCount)
 			return u;
 		// Otherwise: no match was found, so fall back to considering it as text.

@@ -32,6 +32,7 @@ ResultType TrayTipParseOptions(LPCTSTR aOptions, NOTIFYICONDATA &nic)
 {
 	if (!aOptions)
 		return OK;
+	DWORD flag;
 	LPCTSTR next_option, option_end;
 	TCHAR option[1+MAX_NUMBER_SIZE];
 	for (next_option = omit_leading_whitespace(aOptions); ; next_option = omit_leading_whitespace(option_end))
@@ -67,9 +68,9 @@ ResultType TrayTipParseOptions(LPCTSTR aOptions, NOTIFYICONDATA &nic)
 		{
 			nic.dwInfoFlags |= NIIF_NOSOUND;
 		}
-		else if (IsNumeric(option, FALSE, FALSE, FALSE))
+		else if (ParseInteger(option, flag))
 		{
-			nic.dwInfoFlags |= ATOI(option);
+			nic.dwInfoFlags |= flag;
 		}
 		else
 		{
@@ -954,6 +955,7 @@ ResultType MsgBoxParseOptions(LPCTSTR aOptions, int &aType, double &aTimeout, HW
 	//int button_option = 0;
 	//int icon_option = 0;
 
+	int option_int;
 	LPCTSTR next_option, option_end;
 	TCHAR option[1+MAX_NUMBER_SIZE];
 	for (next_option = omit_leading_whitespace(aOptions); ; next_option = omit_leading_whitespace(option_end))
@@ -986,12 +988,11 @@ ResultType MsgBoxParseOptions(LPCTSTR aOptions, int &aType, double &aTimeout, HW
 				goto invalid_option;
 			}
 		}
-		else if (!_tcsnicmp(option, _T("Default"), 7) && IsNumeric(option + 7, FALSE, FALSE, FALSE))
+		else if (!_tcsnicmp(option, _T("Default"), 7) && ParseInteger(option + 7, option_int))
 		{
-			int default_button = ATOI(option + 7);
-			if (default_button < 1 || default_button > 0xF) // Currently MsgBox can only have 4 buttons, but MB_DEFMASK may allow for up to this many in future.
+			if (option_int < 1 || option_int > 0xF) // Currently MsgBox can only have 4 buttons, but MB_DEFMASK may allow for up to this many in future.
 				goto invalid_option;
-			aType = (aType & ~MB_DEFMASK) | ((default_button - 1) << 8); // 1=0, 2=0x100, 3=0x200, 4=0x300
+			aType = (aType & ~MB_DEFMASK) | ((option_int - 1) << 8); // 1=0, 2=0x100, 3=0x200, 4=0x300
 		}
 		else if (toupper(*option) == 'T' && IsNumeric(option + 1, FALSE, FALSE, TRUE))
 		{
@@ -1001,16 +1002,15 @@ ResultType MsgBoxParseOptions(LPCTSTR aOptions, int &aType, double &aTimeout, HW
 		{
 			aOwner = (HWND)ATOI64(option + 5); // This should be consistent with the Gui +Owner option.
 		}
-		else if (IsNumeric(option, FALSE, FALSE, FALSE))
+		else if (ParseInteger(option, option_int))
 		{
-			int other_option = ATOI(option);
 			// Clear any conflicting options which were previously set.
-			if (other_option & MB_TYPEMASK) aType &= ~MB_TYPEMASK;
-			if (other_option & MB_ICONMASK) aType &= ~MB_ICONMASK;
-			if (other_option & MB_DEFMASK)  aType &= ~MB_DEFMASK;
-			if (other_option & MB_MODEMASK) aType &= ~MB_MODEMASK;
+			if (option_int & MB_TYPEMASK) aType &= ~MB_TYPEMASK;
+			if (option_int & MB_ICONMASK) aType &= ~MB_ICONMASK;
+			if (option_int & MB_DEFMASK)  aType &= ~MB_DEFMASK;
+			if (option_int & MB_MODEMASK) aType &= ~MB_MODEMASK;
 			// All remaining options are bit flags (or not conflicting).
-			aType |= other_option;
+			aType |= option_int;
 		}
 		else
 		{
@@ -3725,9 +3725,9 @@ int ConvertJoy(LPCTSTR aBuf, int *aJoystickID, bool aAllowOnlyButtons)
 
 	if (!_tcsnicmp(aBuf, _T("Joy"), 3))
 	{
-		if (IsNumeric(aBuf + 3, false, false))
+		int offset;
+		if (ParseInteger(aBuf + 3, offset))
 		{
-			int offset = ATOI(aBuf + 3);
 			if (offset < 1 || offset > MAX_JOY_BUTTONS)
 				return JOYCTRL_INVALID;
 			return JOYCTRL_1 + offset - 1;

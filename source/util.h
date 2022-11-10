@@ -504,6 +504,34 @@ inline int ATOI(LPCTSTR buf)
 //	return strtoul(buf, NULL, IsHex(buf) ? 16 : 10);
 //}
 
+// ParseInteger() and ParsePositiveInteger() replace several calls to IsNumeric() that would otherwise
+// be immediately followed by a call to ATOI(), ATOI64() or ATOU().  This reduces code size measurably
+// in some cases (I observed between 0 and 440 bytes per call) and may also improve performance.
+
+// If buf is a valid integer, sets i to the converted value and returns true.
+// Otherwise returns false and leaves i unset.
+template<typename T>
+bool ParseInteger(LPCTSTR buf, T &i)
+{
+	LPCTSTR endptr;
+	T temp = static_cast<T>(istrtoi64(buf, &endptr));
+	if (!*endptr) // No invalid suffix.
+	{
+		i = temp; // Set output parameter only now that we know it is valid.
+		return true;
+	}
+	return false;
+}
+
+// If buf is a valid integer not starting with '-', sets i to the converted value and returns true.
+// Otherwise returns false and leaves i unset.
+template<typename T>
+bool ParsePositiveInteger(LPCTSTR buf, T &i)
+{
+	// Callers don't want to permit negative values.
+	return *buf != '-' && ParseInteger(buf, i);
+}
+
 inline double ATOF(LPCTSTR buf)
 // Unlike some Unix versions of strtod(), the VC++ version does not seem to handle hex strings
 // such as "0xFF" automatically.  So this macro must check for hex because some callers rely on that.

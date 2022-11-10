@@ -81,6 +81,7 @@ FResult GuiControlType::TV_AddModify(bool add_mode, UINT_PTR aItemID, UINT_PTR a
 	auto options = aOptions.value_or_empty();
 	TCHAR option_word[16]; // Enough for any single option word or number, with room to avoid false positives due to truncation.
 	LPCTSTR next_option, option_end;
+	UINT_PTR option_uint;
 	bool adding; // Whether this option is being added (+) or removed (-).
 
 	for (next_option = options; *next_option; next_option = omit_leading_whitespace(option_end))
@@ -222,9 +223,9 @@ FResult GuiControlType::TV_AddModify(bool add_mode, UINT_PTR aItemID, UINT_PTR a
 		{
 			tvi.hInsertAfter = TVI_FIRST; // For simplicity, the value of "adding" is ignored.
 		}
-		else if (add_mode && IsNumeric(option_word, false, false, false))
+		else if (add_mode && ParsePositiveInteger(option_word, option_uint))
 		{
-			tvi.hInsertAfter = (HTREEITEM)ATOI64(next_option);
+			tvi.hInsertAfter = (HTREEITEM)option_uint;
 		}
 		else
 		{

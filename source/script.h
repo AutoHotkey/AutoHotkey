@@ -1230,10 +1230,10 @@ public:
 		if (!_tcsicmp(aBuf, _T("UTF-16-RAW")))	return 1200 | CP_AHKNOBOM;
 		if (!_tcsnicmp(aBuf, _T("CP"), 2))
 			aBuf += 2;
-		if (IsNumeric(aBuf, false, false))
+		UINT cp;
+		if (ParseInteger(aBuf, cp))
 		{
 			// CPnnn
-			UINT cp = ATOU(aBuf);
 			// Catch invalid or (not installed) code pages early rather than
 			// failing conversion later on.
 			if (IsValidFileCodePage(cp))
