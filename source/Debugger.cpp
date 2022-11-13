@@ -632,9 +632,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 		case 'h': // hit_value
 		case 'o': // hit_condition = >= | == | %
 		case '-': // expression for conditional breakpoints
-			// These aren't used/supported, but ignored for now.
-			break;
-
+			// These aren't used/supported.
 		default:
 			return DEBUGGER_E_INVALID_OPTIONS;
 		}
