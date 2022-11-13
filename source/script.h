@@ -2063,7 +2063,8 @@ public:
 	static int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, LPCTSTR aFooter);
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
-	
+	void SetThrownToken(global_struct &g, ExprTokenType *aToken);
+
 	ResultType SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride = -1);
 	ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
 	ResultType SetErrorLevelOrThrowBool(bool aError);        //

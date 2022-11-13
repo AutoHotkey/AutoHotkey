@@ -151,6 +151,21 @@ int Debugger::PreExecLine(Line *aLine)
 }
 
 
+bool Debugger::PreThrow(ExprTokenType *aException)
+{
+	if (!mBreakOnException)
+		return false;
+	if (mBreakOnExceptionIsTemporary)
+		mBreakOnException = mBreakOnExceptionWasSet = false;
+	mThrownToken = aException;
+	// The spec doesn't provide a way to differentiate between handled and unhandled exceptions,
+	// nor when to use the "exception" and "error" statuses, so we'll use them for that:
+	Break((g->ExcptMode & EXCPTMODE_CATCH) ? "exception" : "error");
+	mThrownToken = NULL;
+	return true;
+}
+
+
 bool Debugger::HasPendingCommand()
 // Returns true if there is data in the socket's receive buffer.
 // This is used for receiving commands asynchronously.
@@ -162,13 +177,13 @@ bool Debugger::HasPendingCommand()
 }
 
 
-int Debugger::EnterBreakState()
+int Debugger::EnterBreakState(char *aReason)
 {
 	if (mInternalState != DIS_Break)
 	{
 		if (mInternalState != DIS_Starting)
 			// Send a response for the previous continuation command.
-			if (int err = SendContinuationResponse())
+			if (int err = SendContinuationResponse(nullptr, "break", aReason))
 				return err;
 		// Remove keyboard/mouse hooks.
 		if (mDisabledHooks = GetActiveHooks())
@@ -193,7 +208,7 @@ void Debugger::ExitBreakState()
 }
 
 
-int Debugger::Break()
+int Debugger::Break(char *aReason)
 {
 	if (mInternalState == DIS_Break)
 		// Already in a break state, so it's likely that we are currently evaluating a
@@ -201,7 +216,7 @@ int Debugger::Break()
 		// __delete and this causes a breakpoint to be hit.  In that case we must not
 		// re-enter the command loop until the current command has completed.
 		return DEBUGGER_E_OK;
-	int err = EnterBreakState();
+	int err = EnterBreakState(aReason);
 	if (!err)
 		err = ProcessCommands();
 	return err;
@@ -447,7 +462,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 	// Not supported: data_encoding - assume base64.
 	// Not supported: breakpoint_languages - assume only %language_name% is supported.
 	else if (!strcmp(feature_name, "breakpoint_types"))
-		setting = "line";
+		setting = "line exception";
 	else if (!strcmp(feature_name, "multiple_sessions"))
 		setting = "0";
 	else if (!strcmp(feature_name, "max_data"))
@@ -627,8 +642,12 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 			temporary = (*value != '0');
 			break;
 			
-		case 'm': // function
 		case 'x': // exception
+			if (!stricmp(value, "Any")) // Require this or nothing, for now.
+				break;
+			return DEBUGGER_E_INVALID_OPTIONS;
+
+		case 'm': // function
 		case 'h': // hit_value
 		case 'o': // hit_condition = >= | == | %
 		case '-': // expression for conditional breakpoints
@@ -638,8 +657,24 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 		}
 	}
 
-	if (!type || strcmp(type, "line")) // i.e. type != "line"
+	// Breakpoint type is required according to the spec, but allowing it to be omitted
+	// and defaulting to "line" is more convenient for debugging the debugger via console.
+	if (type && strcmp(type, "line")) // i.e. type was specified and is not "line".
+	{
+		if (!strcmp(type, "exception") && lineno == 0 && !filename)
+		{
+			mBreakOnException = state;
+			mBreakOnExceptionIsTemporary = temporary;
+			mBreakOnExceptionWasSet = true;
+			if (!mBreakOnExceptionID)
+				mBreakOnExceptionID = Breakpoint::AllocateID();
+			
+			return mResponseBuf.WriteF(
+				"<response command=\"breakpoint_set\" transaction_id=\"%e\" state=\"%s\" id=\"%i\"/>"
+				, aTransactionId, state ? "enabled" : "disabled", mBreakOnExceptionID);
+		}
 		return DEBUGGER_E_BREAKPOINT_TYPE;
+	}
 	if (lineno < 1)
 		return DEBUGGER_E_BREAKPOINT_INVALID;
 
@@ -720,6 +755,12 @@ int Debugger::WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine)
 	return mResponseBuf.WriteF("\" lineno=\"%u\"/>", aLine->mLineNumber);
 }
 
+int Debugger::WriteExceptionBreakpointXml()
+{
+	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"exception\" state=\"%s\" exception=\"Any\"/>"
+		, mBreakOnExceptionID, mBreakOnException ? "enabled" : "disabled");
+}
+
 DEBUGGER_COMMAND(Debugger::breakpoint_get)
 {
 	// breakpoint_get accepts exactly one arg: -d breakpoint_id.
@@ -739,6 +780,13 @@ DEBUGGER_COMMAND(Debugger::breakpoint_get)
 
 			return DEBUGGER_E_OK;
 		}
+	}
+
+	if (breakpoint_id == mBreakOnExceptionID && mBreakOnExceptionWasSet)
+	{
+		mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%e\">", aTransactionId);
+		WriteExceptionBreakpointXml();
+		return mResponseBuf.Write("</response>");
 	}
 
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
@@ -826,6 +874,12 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 		}
 	}
 
+	if (breakpoint_id == mBreakOnExceptionID)
+	{
+		mBreakOnException = state;
+		return DEBUGGER_E_OK;
+	}
+
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
 }
 
@@ -849,6 +903,13 @@ DEBUGGER_COMMAND(Debugger::breakpoint_remove)
 		}
 	}
 
+	if (breakpoint_id == mBreakOnExceptionID && mBreakOnExceptionWasSet)
+	{
+		mBreakOnException = false;
+		mBreakOnExceptionWasSet = false;
+		return DEBUGGER_E_OK;
+	}
+
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
 }
 
@@ -867,6 +928,9 @@ DEBUGGER_COMMAND(Debugger::breakpoint_list)
 			WriteBreakpointXml(line->mBreakpoint, line);
 		}
 	}
+
+	if (mBreakOnExceptionWasSet)
+		WriteExceptionBreakpointXml();
 
 	return mResponseBuf.Write("</response>");
 }
@@ -1362,6 +1426,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 	Object::FieldType *field;
 	Object::IndexType insert_pos;
 	Object *obj;
+	IObject *iobj;
 
 	aResult.kind = PropNone;
 
@@ -1375,73 +1440,89 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 
 	// Validate name for more accurate error-reporting.
 	if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, DISPLAY_NO_ERROR))
-		return DEBUGGER_E_INVALID_OPTIONS;
-
-	if (aDepth > 0 && aVarScope != FINDVAR_GLOBAL)
 	{
-		Var **vars = NULL, **vars_end;
-		VarBkp *bkps = NULL, *bkps_end;
-		mStack.GetLocalVars(aDepth, vars, vars_end, bkps, bkps_end);
-		if (bkps)
+		if (!_tcsicmp(name, _T("<exception>")))
 		{
-			for ( ; ; ++bkps)
+			if (!mThrownToken)
+				return DEBUGGER_E_UNKNOWN_PROPERTY;
+			if (!name_end)
 			{
-				if (bkps == bkps_end)
-					break;
-				if (!_tcsicmp(bkps->mVar->mName, name))
-				{
-					varbkp = bkps;
-					break;
-				}
+				aResult.kind = PropValue;
+				aResult.value.CopyValueFrom(*mThrownToken);
+				return DEBUGGER_E_OK;
 			}
+			iobj = TokenToObject(*mThrownToken);
 		}
-		else if (vars)
-		{
-			for ( ; ; ++vars)
-			{
-				if (vars == vars_end)
-					break;
-				if (!_tcsicmp((*vars)->mName, name))
-				{
-					var = *vars;
-					break;
-				}
-			}
-		}
-		// If a var wasn't found above, make sure not to return a local var of the wrong function or depth.
-		if (!var)
-			aVarScope = FINDVAR_GLOBAL;
-	}
-
-	// If we're allowed to create variables
-	if (  !varbkp && !var
-		&& (!aVarMustExist
-		// or this variable doesn't exist
-		|| !(var = g_script.FindVar(name, name_length, NULL, aVarScope))
-			// but it is a built-in variable which hasn't been referenced yet:
-			&& g_script.GetBuiltInVar(name))  )
-		// Find or add the variable.
-		var = g_script.FindOrAddVar(name, name_length, aVarScope);
-
-	if (!var && !varbkp)
-		return DEBUGGER_E_UNKNOWN_PROPERTY;
-
-	if (!name_end)
-	{
-		// Just a variable name.
-		if (var)
-			aResult.var = var, aResult.kind = PropVar;
 		else
-			aResult.bkp = varbkp, aResult.kind = PropVarBkp;
-		return DEBUGGER_E_OK;
+			return DEBUGGER_E_INVALID_OPTIONS;
 	}
-	IObject *iobj;
-	if (varbkp && varbkp->mType == VAR_ALIAS)
-		var = varbkp->mAliasFor;
-	if (var)
-		iobj = var->HasObject() ? var->Object() : NULL;
 	else
-		iobj = (varbkp->mAttrib & VAR_ATTRIB_OBJECT) ? varbkp->mObject : NULL;
+	{
+		if (aDepth > 0 && aVarScope != FINDVAR_GLOBAL)
+		{
+			Var **vars = NULL, **vars_end;
+			VarBkp *bkps = NULL, *bkps_end;
+			mStack.GetLocalVars(aDepth, vars, vars_end, bkps, bkps_end);
+			if (bkps)
+			{
+				for ( ; ; ++bkps)
+				{
+					if (bkps == bkps_end)
+						break;
+					if (!_tcsicmp(bkps->mVar->mName, name))
+					{
+						varbkp = bkps;
+						break;
+					}
+				}
+			}
+			else if (vars)
+			{
+				for ( ; ; ++vars)
+				{
+					if (vars == vars_end)
+						break;
+					if (!_tcsicmp((*vars)->mName, name))
+					{
+						var = *vars;
+						break;
+					}
+				}
+			}
+			// If a var wasn't found above, make sure not to return a local var of the wrong function or depth.
+			if (!var)
+				aVarScope = FINDVAR_GLOBAL;
+		}
+
+		// If we're allowed to create variables
+		if (  !varbkp && !var
+			&& (!aVarMustExist
+				// or this variable doesn't exist
+				|| !(var = g_script.FindVar(name, name_length, NULL, aVarScope))
+				// but it is a built-in variable which hasn't been referenced yet:
+				&& g_script.GetBuiltInVar(name))  )
+			// Find or add the variable.
+			var = g_script.FindOrAddVar(name, name_length, aVarScope);
+
+		if (!var && !varbkp)
+			return DEBUGGER_E_UNKNOWN_PROPERTY;
+
+		if (!name_end)
+		{
+			// Just a variable name.
+			if (var)
+				aResult.var = var, aResult.kind = PropVar;
+			else
+				aResult.bkp = varbkp, aResult.kind = PropVarBkp;
+			return DEBUGGER_E_OK;
+		}
+		if (varbkp && varbkp->mType == VAR_ALIAS)
+			var = varbkp->mAliasFor;
+		if (var)
+			iobj = var->HasObject() ? var->Object() : NULL;
+		else
+			iobj = (varbkp->mAttrib & VAR_ATTRIB_OBJECT) ? varbkp->mObject : NULL;
+	}
 
 	if (  !(obj = dynamic_cast<Object *>(iobj))  )
 		return DEBUGGER_E_UNKNOWN_PROPERTY;

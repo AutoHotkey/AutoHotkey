@@ -12645,9 +12645,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			}
 
 			// Throw the newly-created token
-			g.ThrownToken = token;
-			if (!(g.ExcptMode & EXCPTMODE_CATCH))
-				g_script.UnhandledException(line);
+			line->SetThrownToken(g, token);
 			return FAIL;
 		}
 
@@ -16524,9 +16522,7 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTST
 	token->symbol = SYM_OBJECT;
 	token->mem_to_free = NULL;
 
-	g->ThrownToken = token;
-	if (!(g->ExcptMode & EXCPTMODE_CATCH))
-		g_script.UnhandledException(this);
+	SetThrownToken(*g, token);
 
 	// Returning FAIL causes each caller to also return FAIL, until either the
 	// thread has fully exited or the recursion layer handling ACT_TRY is reached:
@@ -16536,6 +16532,23 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTST
 ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
 {
 	return g_script.mCurrLine->ThrowRuntimeException(aErrorText, aWhat, aExtraInfo);
+}
+
+
+void Line::SetThrownToken(global_struct &g, ExprTokenType *aToken)
+{
+#ifdef CONFIG_DEBUGGER
+	if (g_Debugger.IsConnected())
+		if (g_Debugger.PreThrow(aToken) && !(g.ExcptMode & EXCPTMODE_CATCH))
+			// The debugger has entered (and left) a break state, so the client has had a
+			// chance to inspect the exception and report it.  There's nothing in the DBGp
+			// spec about what to do next, probably since PHP would just log the error.
+			// In our case, it seems more useful to suppress the dialog than to show it.
+			return;
+#endif
+	g.ThrownToken = aToken;
+	if (!(g.ExcptMode & EXCPTMODE_CATCH))
+		g_script.UnhandledException(this);
 }
 
 
@@ -16644,7 +16657,11 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 
-	if ((g->ExcptMode || g_script.mOnError.Count()) // OnError also needs an exception object.
+	if ((g->ExcptMode
+#ifdef CONFIG_DEBUGGER
+		|| g_Debugger.BreakOnExceptionIsEnabled()
+#endif
+		|| g_script.mOnError.Count()) // OnError also needs an exception object.
 		&& (aErrorType == FAIL || aErrorType == EARLY_EXIT)) // FAIL is most common, but EARLY_EXIT is used by ComError(). WARN and CRITICAL_ERROR are excluded.
 		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
