@@ -163,7 +163,6 @@ struct DbgStack
 
 	void Push(TCHAR *aDesc);
 	void Push(Label *aSub);
-	void Push(Func *aFunc);
 	void Push(UDFCallInfo *aRecurse);
 
 	void GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aBkp, VarBkp *&aBkpEnd);
