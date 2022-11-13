@@ -721,9 +721,21 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			return hasprop ? aResultToken.Error(ERR_PROPERTY_READONLY, name) : INVOKE_NOT_HANDLED;
 		}
 		
-		if (((field && this == that) // A field already exists in this object.
-				|| (field = Insert(name, insert_pos))) // A new field is inserted.
-			&& field->Assign(**actual_param))
+		if (!field || this != that) // No such property in this object yet.
+		{
+			if (actual_param[0]->symbol == SYM_MISSING)
+				return OK; // No action needed for x.y := unset.
+			if (  !(field = Insert(name, insert_pos))  )
+				return aResultToken.MemoryError();
+		}
+		else if (actual_param[0]->symbol == SYM_MISSING) // x.y := unset
+		{
+			// Completely delete the property, since other sections currently aren't designed to handle properties
+			// with no value (unlike Array and Map items).
+			mFields.Remove((index_t)(field - mFields), 1);
+			return OK;
+		}
+		if (field->Assign(**actual_param))
 			return OK;
 		return aResultToken.MemoryError();
 	}
