@@ -1,0 +1,83 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "windows": {
+        "options": {
+            "shell": {
+                "executable": "cmd.exe",
+                "args": ["/C", "${workspaceFolder}/vsc-build-env.cmd", "&&"]
+            }
+        },
+        "problemMatcher": "$msCompile"
+    },
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "msbuild",
+            "args": [
+                "/p:Platform=${input:platform}",
+                "/p:Configuration=${input:buildconfig}",
+                "/t:build",
+                "/p:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary",
+                "${workspaceFolder}/AutoHotkeyx.sln"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "rebuild",
+            "type": "shell",
+            "command": "msbuild",
+            "args": [
+                "/p:Platform=${input:platform}",
+                "/p:Configuration=${input:buildconfig}",
+                "/t:Rebuild",
+                "/p:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary",
+                "${workspaceFolder}/AutoHotkeyx.sln"
+            ],
+            "group": "build"
+        },
+        {
+            "label": "build-debug",
+            "type": "shell",
+            "command": "msbuild",
+            "args": [
+                "/p:Platform=x64",
+                "/p:Configuration=Debug",
+                "/t:build",
+                "/p:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary",
+                "${workspaceFolder}/AutoHotkeyx.sln"
+            ],
+            "group": "build"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "platform",
+            "description": "Platform",
+            "type": "pickString",
+            "options": [
+                "x64",
+                "Win32"
+            ],
+            "default": "x64"
+        },
+        {
+            "id": "buildconfig",
+            "description": "Build Configuration",
+            "type": "pickString",
+            "options": [
+                "Release",
+                "Debug"
+            ],
+            "default": "Release"
+        }
+    ]
+}
