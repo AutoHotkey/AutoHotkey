@@ -1816,36 +1816,9 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 	aDebugger->BeginProperty(NULL, "object", 2 + (mVarType == VT_DISPATCH)*2 + (mEventSink != NULL), rootCookie);
 	if (aPage == 0 && aDepth > 0)
 	{
-		// For simplicity, assume they all fit within aPageSize.
-		
+		// For simplicity, assume aPageSize >= 2.
 		aDebugger->WriteProperty("Value", ExprTokenType(mVal64));
 		aDebugger->WriteProperty("VarType", ExprTokenType((__int64)mVarType));
-
-		if (mVarType == VT_DISPATCH)
-		{
-			WriteComObjType(aDebugger, this, "DispatchType", _T("Name"));
-			WriteComObjType(aDebugger, this, "DispatchIID", _T("IID"));
-		}
-		
-		// Don't include the event sink property at all if would exceed max_depth,
-		// since any attempt to query its sub-properties would fail anyway.
-		if (mEventSink && aDepth > 1)
-		{
-			DebugCookie sinkCookie;
-			aDebugger->BeginProperty("EventSink", "object", 2, sinkCookie);
-			
-			if (mEventSink->mAhkObject)
-				aDebugger->WriteProperty("Object", ExprTokenType(mEventSink->mAhkObject));
-			else
-				aDebugger->WriteProperty("Prefix", ExprTokenType(mEventSink->mPrefix));
-			
-			OLECHAR buf[40];
-			if (!StringFromGUID2(mEventSink->mIID, buf, _countof(buf)))
-				*buf = 0;
-			aDebugger->WriteProperty("IID", ExprTokenType((LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(buf)));
-			
-			aDebugger->EndProperty(sinkCookie);
-		}
 	}
 	aDebugger->EndProperty(rootCookie);
 }
