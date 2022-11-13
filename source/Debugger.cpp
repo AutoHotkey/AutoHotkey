@@ -1129,7 +1129,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 	DebugCookie cookie;
 	aDebugger->BeginProperty(NULL, "object", (int)mFieldCount + (mBase != NULL), cookie);
 
-	if (aDepth)
+	if (aDepth > 0)
 	{
 		int i = aPageSize * aPage, j = aPageSize * (aPage + 1);
 
