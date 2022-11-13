@@ -1814,7 +1814,7 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 {
 	DebugCookie rootCookie;
 	aDebugger->BeginProperty(NULL, "object", 2 + (mVarType == VT_DISPATCH)*2 + (mEventSink != NULL), rootCookie);
-	if (aPage == 0)
+	if (aPage == 0 && aDepth > 0)
 	{
 		// For simplicity, assume they all fit within aPageSize.
 		
@@ -1827,7 +1827,9 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 			WriteComObjType(aDebugger, this, "DispatchIID", _T("IID"));
 		}
 		
-		if (mEventSink)
+		// Don't include the event sink property at all if would exceed max_depth,
+		// since any attempt to query its sub-properties would fail anyway.
+		if (mEventSink && aDepth > 1)
 		{
 			DebugCookie sinkCookie;
 			aDebugger->BeginProperty("EventSink", "object", 2, sinkCookie);
