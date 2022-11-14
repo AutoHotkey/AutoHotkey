@@ -288,7 +288,6 @@ private:
 	public:
 		int Write(char *aData, size_t aDataSize=-1);
 		int WriteF(const char *aFormat, ...);
-		int WriteFileURI(const char *aPath);
 		int WriteEncodeBase64(const char *aData, size_t aDataSize, bool aSkipBufferSizeCheck = false);
 		int Expand();
 		int ExpandIfNecessary(size_t aRequiredSize);
@@ -306,6 +305,9 @@ private:
 			if (mData)
 				free(mData);
 		}
+	private:
+		int EstimateFileURILength(LPCTSTR aPath);
+		void WriteFileURI(LPCTSTR aPath);
 	} mCommandBuf, mResponseBuf;
 
 	enum DebuggerInternalStateType {

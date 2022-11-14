@@ -749,10 +749,9 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 
 int Debugger::WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine)
 {
-	mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\""
-					, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled");
-	mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[aLine->mFileIndex]));
-	return mResponseBuf.WriteF("\" lineno=\"%u\"/>", aLine->mLineNumber);
+	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\"%r\" lineno=\"%u\"/>"
+		, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled"
+		, Line::sSourceFile[aLine->mFileIndex], aLine->mLineNumber);
 }
 
 int Debugger::WriteExceptionBreakpointXml()
@@ -993,9 +992,8 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 			{
 				line = se->line;
 			}
-			mResponseBuf.WriteF("<stack level=\"%i\" type=\"file\" filename=\"", level);
-			mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[line->mFileIndex]));
-			mResponseBuf.WriteF("\" lineno=\"%u\" where=\"", line->mLineNumber);
+			mResponseBuf.WriteF("<stack level=\"%i\" type=\"file\" filename=\"%r\" lineno=\"%u\" where=\""
+				, level, Line::sSourceFile[line->mFileIndex], line->mLineNumber);
 			switch (se->type)
 			{
 			case DbgStack::SE_Thread:
@@ -2240,10 +2238,9 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 				mResponseBuf.Clear();
 
 				// Write init message.
-				mResponseBuf.WriteF("<init appid=\"" AHK_NAME "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" DEBUGGER_LANG_NAME "\" protocol_version=\"1.0\" fileuri=\""
-					, ide_key.GetString(), session.GetString(), GetCurrentThreadId());
-				mResponseBuf.WriteFileURI(U4T(g_script.mFileSpec));
-				mResponseBuf.Write("\"/>");
+				mResponseBuf.WriteF("<init appid=\"" AHK_NAME "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" DEBUGGER_LANG_NAME
+					"\" protocol_version=\"1.0\" fileuri=\"%r\"/>"
+					, ide_key.GetString(), session.GetString(), GetCurrentThreadId(), g_script.mFileSpec);
 
 				if (SendResponse() == DEBUGGER_E_OK)
 				{
@@ -2497,6 +2494,14 @@ int Debugger::Buffer::WriteF(const char *aFormat, ...)
 					continue;
 				}
 
+				case 'r':
+					if (i == 0)
+						len += EstimateFileURILength(va_arg(vl, LPCTSTR));
+					else
+						WriteFileURI(va_arg(vl, LPCTSTR));
+					++format_ptr; // Skip %, outer loop will skip format char.
+					continue;
+
 				default:
 					s = NULL; // Skip section below.
 				} // switch (format_ptr[1])
@@ -2532,28 +2537,33 @@ int Debugger::Buffer::WriteF(const char *aFormat, ...)
 	return DEBUGGER_E_OK;
 }
 
-// Convert a file path to a URI and write it to the buffer.
-int Debugger::Buffer::WriteFileURI(const char *aPath)
+int Debugger::Buffer::EstimateFileURILength(LPCTSTR aPath)
 {
-	int c, len = 9; // 8 for "file:///", 1 for '\0' (written by sprintf()).
-
-	// Calculate required buffer size for path after encoding.
-	for (const char *ptr = aPath; c = *ptr; ++ptr)
+	TBYTE c, len = 8; // "file:///"
+	for (LPCTSTR ptr = aPath; c = *ptr; ++ptr)
 	{
-		if (cisalnum(c) || strchr("-_.!~*'()/\\", c))
+		if (cisalnum(c) || _tcschr(_T("-_.!~*'()/\\"), c))
 			++len;
 		else
-			len += 3;
+			// For code size, estimate based on worst-case scenario (U+FFFF -> %ef%bf%bf).
+			// Any extra space is likely to be used at some point, as the response buffer gets reused.
+			len += 9;
 	}
+	return len;
+}
 
-	// Ensure the buffer contains enough space.
-	if (ExpandIfNecessary(mDataUsed + len) != DEBUGGER_E_OK)
-		return DEBUGGER_E_INTERNAL_ERROR;
+// Convert a file path to a URI and write it to the buffer.
+// Caller has already verified there is enough space in the buffer.
+void Debugger::Buffer::WriteFileURI(LPCTSTR aPath)
+{
+	memcpy(mData + mDataUsed, "file:///", 8);
+	mDataUsed += 8;
 
-	Write("file:///", 8);
+	CStringUTF8FromTChar path8(aPath);
 
 	// Write to the buffer, encoding as we go.
-	for (const char *ptr = aPath; c = *ptr; ++ptr)
+	int c;
+	for (LPCSTR ptr = path8; c = *ptr; ++ptr)
 	{
 		if (cisalnum(c) || strchr("-_.!~*()/", c))
 		{
@@ -2566,13 +2576,11 @@ int Debugger::Buffer::WriteFileURI(const char *aPath)
 		}
 		else
 		{
-			len = sprintf(mData + mDataUsed, "%%%02X", c & 0xff);
+			int len = sprintf(mData + mDataUsed, "%%%02X", c & 0xff);
 			if (len != -1)
 				mDataUsed += len;
 		}
 	}
-
-	return DEBUGGER_E_OK;
 }
 
 int Debugger::Buffer::WriteEncodeBase64(const char *aInput, size_t aInputSize, bool aSkipBufferSizeCheck/* = false*/)
