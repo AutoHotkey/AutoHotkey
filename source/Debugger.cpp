@@ -161,8 +161,9 @@ bool Debugger::PreThrow(ExprTokenType *aException)
 	// The spec doesn't provide a way to differentiate between handled and unhandled exceptions,
 	// nor when to use the "exception" and "error" statuses, so we'll use them for that:
 	Break((g->ExcptMode & EXCPTMODE_CATCH) ? "exception" : "error");
+	bool suppress_default_handling = mThrownToken == NULL; // Signal from client via property_set.
 	mThrownToken = NULL;
-	return true;
+	return suppress_default_handling;
 }
 
 
@@ -1887,7 +1888,12 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		success = target.field->Assign(val);
 		break;
 	default:
-		success = false;
+		if (success = (!stricmp(name, "<exception>") && !*new_value && mThrownToken))
+		{
+			// `property_get -n <exception>` is our non-standard way to retrieve the thrown value during an exception break.
+			// `property_set -n <exception> --` is our non-standard way to "clear the exception" (suppress the error dialog).
+			mThrownToken = NULL;
+		}
 	}
 
 	return mResponseBuf.WriteF(
