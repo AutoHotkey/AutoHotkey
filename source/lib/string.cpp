@@ -1224,7 +1224,7 @@ BIF_DECL(BIF_StrCompare)
 	//	> 0,	if str1 is greater than str2.
 	// Param 1 and 2, str1 and str2
 	_f_param_string(str1, 0);
-	_f_param_string(str2, 0);
+	_f_param_string(str2, 1);
 	// Could return 0 here if str1 == str2, but it is probably rare to call StrCompare(str_var, str_var)
 	// so for most cases that would just be an unnecessary cost, albeit low.
 	// Param 3 - CaseSensitive
