@@ -221,6 +221,7 @@ md_func_x(PostMessage, ScriptPostMessage, FResult, (In, UInt32, Msg), (In_Opt, V
 md_func(ProcessClose, (In, String, Process), (Ret, UInt32, ClosedPID))
 md_func_x(ProcessExist, ProcessExist, UInt32, (In_Opt, String, Process))
 md_func(ProcessGetName, (In_Opt, String, Process), (Ret, String, Name))
+md_func_x(ProcessGetParent, ProcessGetParent, UInt32, (In_Opt, String, Process))
 md_func(ProcessGetPath, (In_Opt, String, Process), (Ret, String, Path))
 md_func(ProcessSetPriority, (In, String, Priority), (In_Opt, String, Process), (Ret, UInt32, FoundPID))
 md_func(ProcessWait, (In, String, Process), (In_Opt, Float64, Timeout), (Ret, UInt32, FoundPID))

@@ -32,6 +32,14 @@ bif_impl UINT ProcessExist(optl<StrArg> aProcess)
 
 
 
+bif_impl UINT ProcessGetParent(optl<StrArg> aProcess)
+{
+	TCHAR buf[MAX_INTEGER_SIZE];
+	return ProcessExist(aProcess.has_value() ? aProcess.value() : ITOA(GetCurrentProcessId(), buf), true);
+}
+
+
+
 bif_impl FResult ProcessClose(StrArg aProcess, UINT &aRetVal)
 {
 	aRetVal = 0; // Set default in case of failure.
