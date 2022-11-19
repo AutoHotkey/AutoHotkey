@@ -657,9 +657,11 @@ bif_impl FResult ControlMove(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<
 	// Determine the controls current coordinates relative to coord_parent in case one
 	// or more parameters were omitted.
 	RECT control_rect;
-	if (!GetWindowRect(control_window, &control_rect)
-		|| !MapWindowPoints(NULL, coord_parent, (LPPOINT)&control_rect, 2))
+	if (!GetWindowRect(control_window, &control_rect))
 		return FR_E_WIN32;
+	// For simplicity, failure isn't checked for the below since a return value of 0 can
+	// indicate that the coord_parent is at 0,0 (i.e. the translation made no change).
+	MapWindowPoints(NULL, coord_parent, (LPPOINT)&control_rect, 2);
 	
 	POINT point { aX.value_or(control_rect.left), aY.value_or(control_rect.top) };
 
