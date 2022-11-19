@@ -8,10 +8,10 @@
             "name": "Debug x64w",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "AutoHotkey.exe",
+            "program": "bin/x64w_debug/AutoHotkey.exe",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceRoot}/bin/x64w_debug",
+            "cwd": "${workspaceRoot}",
             "preLaunchTask": "build-debug"
         }
     ]
