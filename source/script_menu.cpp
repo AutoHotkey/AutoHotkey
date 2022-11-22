@@ -465,6 +465,7 @@ FResult UserMenu::GetItem(LPCTSTR aNameOrPos, UserMenuItem *&aItem)
 
 
 
+__declspec(noinline)
 FResult UserMenu::ItemNotFoundError(LPCTSTR aItem)
 {
 	return FError(ERR_INVALID_MENU_ITEM, aItem, ErrorPrototype::Target);
@@ -931,6 +932,7 @@ void UserMenu::SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMas
 
 
 
+__declspec(noinline)
 FResult UserMenu::SetItemState(StrArg aItemName, UINT aState, UINT aStateMask, UINT *aNewState)
 {
 	UserMenuItem *item;
