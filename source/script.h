@@ -2046,8 +2046,8 @@ public:
 	FResult SetColor(ExprTokenType *aColor, optl<BOOL> aApplyToSubmenus);
 	FResult SetIcon(StrArg aItemName, StrArg aIconFile, optl<int> aIconNumber, optl<int> aIconWidth);
 	FResult Show(optl<int> aX, optl<int> aY, optl<BOOL> aWait);
-	FResult ToggleCheck(StrArg aItemName);
-	FResult ToggleEnable(StrArg aItemName);
+	FResult ToggleCheck(StrArg aItemName, BOOL &aRetVal);
+	FResult ToggleEnable(StrArg aItemName, BOOL &aRetVal);
 	FResult Uncheck(StrArg aItemName);
 	
 	FResult get_ClickCount(int &aRetVal);
@@ -2065,7 +2065,7 @@ public:
 	ResultType RenameItem(UserMenuItem *aMenuItem, LPCTSTR aNewName);
 	ResultType UpdateName(UserMenuItem *aMenuItem, LPCTSTR aNewName);
 	void SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask);
-	FResult SetItemState(StrArg aItemName, UINT aState, UINT aStateMask);
+	FResult SetItemState(StrArg aItemName, UINT aState, UINT aStateMask, UINT *aNewState = nullptr);
 	void SetDefault(UserMenuItem *aMenuItem = NULL, bool aUpdateGuiMenuBars = true);
 	ResultType CreateHandle();
 	void DestroyHandle();

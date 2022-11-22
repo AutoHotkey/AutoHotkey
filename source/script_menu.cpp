@@ -39,8 +39,8 @@ ObjectMemberMd UserMenu::sMembers[] =
 	md_member(UserMenu, SetColor, CALL, (In_Opt, Variant, Color), (In_Opt, Bool32, ApplyToSubmenus)),
 	md_member(UserMenu, SetIcon, CALL, (In, String, Item), (In, String, File), (In_Opt, Int32, Number), (In_Opt, Int32, Width)),
 	md_member(UserMenu, Show, CALL, (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Bool32, Wait)),
-	md_member(UserMenu, ToggleCheck, CALL, (In, String, Item)),
-	md_member(UserMenu, ToggleEnable, CALL, (In, String, Item)),
+	md_member(UserMenu, ToggleCheck, CALL, (In, String, Item), (Ret, Bool32, RetVal)),
+	md_member(UserMenu, ToggleEnable, CALL, (In, String, Item), (Ret, Bool32, RetVal)),
 	md_member(UserMenu, Uncheck, CALL, (In, String, Item)),
 };
 int UserMenu::sMemberCount = _countof(sMembers);
@@ -214,9 +214,12 @@ FResult UserMenu::Check(StrArg aItemName)
 	return SetItemState(aItemName, MFS_CHECKED, MFS_CHECKED);
 }
 
-FResult UserMenu::ToggleCheck(StrArg aItemName)
+FResult UserMenu::ToggleCheck(StrArg aItemName, BOOL &aRetVal)
 {
-	return SetItemState(aItemName, MFS_CHECKED, 0);
+	UINT state;
+	auto fr = SetItemState(aItemName, MFS_CHECKED, 0, &state);
+	aRetVal = (state & MFS_CHECKED) ? TRUE : FALSE;
+	return fr;
 }
 
 FResult UserMenu::Uncheck(StrArg aItemName)
@@ -234,9 +237,12 @@ FResult UserMenu::Enable(StrArg aItemName)
 	return SetItemState(aItemName, 0, MFS_DISABLED);
 }
 
-FResult UserMenu::ToggleEnable(StrArg aItemName)
+FResult UserMenu::ToggleEnable(StrArg aItemName, BOOL &aRetVal)
 {
-	return SetItemState(aItemName, MFS_DISABLED, 0);
+	UINT state;
+	auto fr = SetItemState(aItemName, MFS_DISABLED, 0, &state);
+	aRetVal = (state & MFS_DISABLED) ? FALSE : TRUE;
+	return fr;
 }
 
 
@@ -925,13 +931,15 @@ void UserMenu::SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMas
 
 
 
-FResult UserMenu::SetItemState(StrArg aItemName, UINT aState, UINT aStateMask)
+FResult UserMenu::SetItemState(StrArg aItemName, UINT aState, UINT aStateMask, UINT *aNewState)
 {
 	UserMenuItem *item;
 	auto fr = GetItem(aItemName, item);
 	if (fr != OK)
 		return fr;
 	SetItemState(item, aState, aStateMask);
+	if (aNewState)
+		*aNewState = item->mMenuState;
 	return OK;
 }
 
