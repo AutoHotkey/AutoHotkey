@@ -935,38 +935,6 @@ FResult UserMenu::SetItemState(StrArg aItemName, UINT aState, UINT aStateMask)
 
 
 
-void UserMenu::CheckItem(UserMenuItem *aMenuItem)
-{
-	return SetItemState(aMenuItem, MFS_CHECKED, MFS_CHECKED);
-}
-
-void UserMenu::UncheckItem(UserMenuItem *aMenuItem)
-{
-	return SetItemState(aMenuItem, MFS_UNCHECKED, MFS_CHECKED);
-}
-
-void UserMenu::ToggleCheckItem(UserMenuItem *aMenuItem)
-{
-	return SetItemState(aMenuItem, (aMenuItem->mMenuState & MFS_CHECKED) ^ MFS_CHECKED, MFS_CHECKED);
-}
-
-void UserMenu::EnableItem(UserMenuItem *aMenuItem)
-{
-	return SetItemState(aMenuItem, MFS_ENABLED, MFS_DISABLED);
-}
-
-void UserMenu::DisableItem(UserMenuItem *aMenuItem)
-{
-	return SetItemState(aMenuItem, MFS_DISABLED, MFS_DISABLED);
-}
-
-void UserMenu::ToggleEnableItem(UserMenuItem *aMenuItem)
-{
-	return SetItemState(aMenuItem, (aMenuItem->mMenuState & MFS_DISABLED) ^ MFS_DISABLED, MFS_DISABLED);
-}
-
-
-
 void UserMenu::SetDefault(UserMenuItem *aMenuItem, bool aUpdateGuiMenuBars)
 {
 	if (mDefault == aMenuItem)

@@ -2045,12 +2045,6 @@ public:
 	ResultType UpdateName(UserMenuItem *aMenuItem, LPCTSTR aNewName);
 	void SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask);
 	FResult SetItemState(StrArg aItemName, UINT aState, UINT aStateMask);
-	void CheckItem(UserMenuItem *aMenuItem);
-	void UncheckItem(UserMenuItem *aMenuItem);
-	void ToggleCheckItem(UserMenuItem *aMenuItem);
-	void EnableItem(UserMenuItem *aMenuItem);
-	void DisableItem(UserMenuItem *aMenuItem);
-	void ToggleEnableItem(UserMenuItem *aMenuItem);
 	void SetDefault(UserMenuItem *aMenuItem = NULL, bool aUpdateGuiMenuBars = true);
 	ResultType CreateHandle();
 	void DestroyHandle();
