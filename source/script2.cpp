@@ -10268,7 +10268,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	{
 		DWORD flags = TextStream::APPEND | (open_as_binary ? 0 : TextStream::EOL_CRLF);
 		
-		UINT codepage = mArgc > 2 ? ConvertFileEncoding(ARG3) : g->Encoding;
+		UINT codepage = *ARG3 ? ConvertFileEncoding(ARG3) : g->Encoding;
 		if (codepage == -1) // ARG3 was invalid.
 			return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
 		
