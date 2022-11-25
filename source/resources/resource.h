@@ -50,3 +50,18 @@
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
+
+
+
+#ifdef UNICODE
+#define AHK_ENC "Unicode"
+#else
+#define AHK_ENC "ANSI"
+#endif
+#ifdef _WIN64
+#define AHK_BIT "64-bit"
+#else
+#define AHK_BIT "32-bit"
+#endif
+
+#define AHK_DESCRIPTION "AutoHotkey " AHK_ENC " " AHK_BIT
