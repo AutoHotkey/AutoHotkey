@@ -988,6 +988,7 @@ bif_impl FResult Download(StrArg aURL, StrArg aFilespec)
 	// having it return the moment there is any data in the buffer, the program is made more
 	// responsive, especially when the download is very slow and/or one of the hooks is installed:
 	BOOL result;
+	DWORD bytes_written;
 	if (*aURL == 'h' || *aURL == 'H')
 	{
 		while (result = InternetReadFileExA(hFile, &buffers, IRF_NO_WAIT, NULL)) // Assign
@@ -995,7 +996,9 @@ bif_impl FResult Download(StrArg aURL, StrArg aFilespec)
 			if (!buffers.dwBufferLength) // Transfer is complete.
 				break;
 			LONG_OPERATION_UPDATE  // Done in between the net-read and the file-write to improve avg. responsiveness.
-			WriteFile(hOut, bufData, buffers.dwBufferLength, nullptr, nullptr);
+			result = WriteFile(hOut, bufData, buffers.dwBufferLength, &bytes_written, nullptr);
+			if (!result)
+				break;
 			buffers.dwBufferLength = sizeof(bufData);  // Reset buffer capacity for next iteration.
 		}
 	}
@@ -1007,7 +1010,9 @@ bif_impl FResult Download(StrArg aURL, StrArg aFilespec)
 			if (!number_of_bytes_read)
 				break;
 			LONG_OPERATION_UPDATE
-			WriteFile(hOut, bufData, number_of_bytes_read, nullptr, nullptr);
+			result = WriteFile(hOut, bufData, number_of_bytes_read, &bytes_written, nullptr);
+			if (!result)
+				break;
 		}
 	}
 	DWORD last_error = GetLastError();
