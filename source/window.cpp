@@ -44,12 +44,7 @@ HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR a
 
 
 
-#ifdef _DEBUG_WINACTIVATE
-#define LOGF "c:\\AutoHotkey SetForegroundWindowEx.txt"
-HWND AttemptSetForeground(HWND aTargetWindow, HWND aForeWindow, LPTSTR aTargetTitle)
-#else
 HWND AttemptSetForeground(HWND aTargetWindow, HWND aForeWindow)
-#endif
 // Returns NULL if aTargetWindow or its owned-window couldn't be brought to the foreground.
 // Otherwise, on success, it returns either aTargetWindow or an HWND owned by aTargetWindow.
 {
@@ -78,29 +73,13 @@ HWND AttemptSetForeground(HWND aTargetWindow, HWND aForeWindow)
 	SLEEP_WITHOUT_INTERRUPTION(SLEEP_INTERVAL); // Specify param so that it will try to specifically sleep that long.
 	HWND new_fore_window = GetForegroundWindow();
 	if (new_fore_window == aTargetWindow)
-	{
-#ifdef _DEBUG_WINACTIVATE
-		if (!result)
-		{
-			FileAppend(LOGF, _T("SetForegroundWindow() indicated failure even though it succeeded: "), false);
-			FileAppend(LOGF, aTargetTitle);
-		}
-#endif
 		return aTargetWindow;
-	}
 	if (new_fore_window != aForeWindow && aTargetWindow == GetWindow(new_fore_window, GW_OWNER))
 		// The window we're trying to get to the foreground is the owner of the new foreground window.
 		// This is considered to be a success because a window that owns other windows can never be
 		// made the foreground window, at least if the windows it owns are visible.
 		return new_fore_window;
 	// Otherwise, failure:
-#ifdef _DEBUG_WINACTIVATE
-	if (result)
-	{
-		FileAppend(LOGF, _T("SetForegroundWindow() indicated success even though it failed: "), false);
-		FileAppend(LOGF, aTargetTitle);
-	}
-#endif
 	return NULL;
 }
 
@@ -119,11 +98,6 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 	DWORD target_thread = GetWindowThreadProcessId(aTargetWindow, NULL);
 	if (target_thread != g_MainThreadID && IsWindowHung(aTargetWindow)) // Calls to IsWindowHung should probably be avoided if the window belongs to our thread.  Relies upon short-circuit boolean order.
 		return NULL;
-
-#ifdef _DEBUG_WINACTIVATE
-	TCHAR win_name[64];
-	GetWindowText(aTargetWindow, win_name, _countof(win_name));
-#endif
 
 	HWND orig_foreground_wnd = GetForegroundWindow();
 	// AutoIt3: If there is not any foreground window, then input focus is on the TaskBar.
@@ -165,11 +139,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 
 	if (!g_WinActivateForce)
 		// Try a simple approach first:
-#ifdef _DEBUG_WINACTIVATE
-#define IF_ATTEMPT_SET_FORE if (new_foreground_wnd = AttemptSetForeground(aTargetWindow, orig_foreground_wnd, win_name))
-#else
 #define IF_ATTEMPT_SET_FORE if (new_foreground_wnd = AttemptSetForeground(aTargetWindow, orig_foreground_wnd))
-#endif
 		IF_ATTEMPT_SET_FORE
 			return new_foreground_wnd;
 		// Otherwise continue with the more drastic methods below.
@@ -191,10 +161,6 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 	// as a side-effect, sometimes trigger the need for the "two-alts" case
 	// below.  So that's another reason to just keep it simple and do it this way
 	// only.
-
-#ifdef _DEBUG_WINACTIVATE
-	TCHAR buf[1024];
-#endif
 
 	bool is_attached_my_to_fore = false, is_attached_fore_to_target = false;
 	DWORD fore_thread;
@@ -257,17 +223,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 			KeyEvent(KEYUP, VK_MENU, 0, NULL, false, KEY_BLOCK_THIS);
 		}
 		IF_ATTEMPT_SET_FORE
-		{
-#ifdef _DEBUG_WINACTIVATE
-			if (i > 0) // More than one attempt was needed.
-			{
-				sntprintf(buf, _countof(buf), _T("AttachThreadInput attempt #%d indicated success: %s")
-					, i + 1, win_name);
-				FileAppend(LOGF, buf);
-			}
-#endif
 			break;
-		}
 	}
 
 	// I decided to avoid the quick minimize + restore method of activation.  It's
@@ -313,26 +269,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 		//KeyEvent(KEYUP, VK_MENU);
 		// Also replacing "2-alts" with "alt-tab" below, for now:
 
-#ifndef _DEBUG_WINACTIVATE
 		new_foreground_wnd = AttemptSetForeground(aTargetWindow, orig_foreground_wnd);
-#else // debug mode
-		IF_ATTEMPT_SET_FORE
-			FileAppend(LOGF, _T("2-alts ok: "), false);
-		else
-		{
-			FileAppend(LOGF, _T("2-alts (which is the last resort) failed.  "), false);
-			HWND h = GetForegroundWindow();
-			if (h)
-			{
-				TCHAR fore_name[64];
-				GetWindowText(h, fore_name, _countof(fore_name));
-				FileAppend(LOGF, _T("Foreground: "), false);
-				FileAppend(LOGF, fore_name, false);
-			}
-			FileAppend(LOGF, _T(".  Was trying to activate: "), false);
-		}
-		FileAppend(LOGF, win_name);
-#endif
 	} // if()
 
 	// Very important to detach any threads whose inputs were attached above,
