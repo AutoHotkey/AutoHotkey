@@ -2939,10 +2939,11 @@ int CompareVersion(LPCTSTR a, LPCTSTR b)
 {
 	while (*a || *b)
 	{
-		// 1.1-a001 < 1.1 = 1.1.0 = 1.1.0+foo
+		// 1.1-a001 < 1.1 = 1.1.0 = 1.1.0+foo = 1.1.0+123
 		LPTSTR pa, pb;
-		int ia = _tcstol(a, &pa, 10);
-		int ib = _tcstol(b, &pb, 10);
+		int ia, ib;
+		if (*a == '+') ia = 0, pa = const_cast<LPTSTR>(a); else ia = _tcstol(a, &pa, 10);
+		if (*b == '+') ib = 0, pb = const_cast<LPTSTR>(b); else ib = _tcstol(b, &pb, 10);
 		// If *pa is not in the set .-+\0, this component is non-numeric (and not empty).
 		// Treat non-numeric as greater than numeric (but assume any absent component is 0).
 		if (!_tcschr(_T(".-+"), *pa)) ia = INT_MAX; else a = pa;
