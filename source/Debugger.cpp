@@ -222,6 +222,22 @@ int Debugger::PreExecLine(Line *aLine)
 }
 
 
+bool Debugger::PreThrow(ExprTokenType *aException)
+{
+	if (!mBreakOnException)
+		return false;
+	if (mBreakOnExceptionIsTemporary)
+		mBreakOnException = mBreakOnExceptionWasSet = false;
+	mThrownToken = aException;
+	// The spec doesn't provide a way to differentiate between handled and unhandled exceptions,
+	// nor when to use the "exception" and "error" statuses, so we'll use them for that:
+	Break((g->ExcptMode & EXCPTMODE_CATCH) ? "exception" : "error");
+	bool suppress_default_handling = mThrownToken == NULL; // Signal from client via property_set.
+	mThrownToken = NULL;
+	return suppress_default_handling;
+}
+
+
 bool Debugger::HasPendingCommand()
 // Returns true if there is data in the socket's receive buffer.
 // This is used for receiving commands asynchronously.
@@ -233,13 +249,13 @@ bool Debugger::HasPendingCommand()
 }
 
 
-int Debugger::EnterBreakState()
+int Debugger::EnterBreakState(LPCSTR aReason)
 {
 	if (mInternalState != DIS_Break)
 	{
 		if (mInternalState != DIS_Starting)
 			// Send a response for the previous continuation command.
-			if (int err = SendContinuationResponse())
+			if (int err = SendContinuationResponse(nullptr, "break", aReason))
 				return err;
 		// Remove keyboard/mouse hooks.
 		if (mDisabledHooks = GetActiveHooks())
@@ -264,15 +280,15 @@ void Debugger::ExitBreakState()
 }
 
 
-int Debugger::Break()
+int Debugger::Break(LPCSTR aReason)
 {
-	return ProcessCommands(true);
+	return ProcessCommands(aReason);
 }
 
 
 const int MAX_DBGP_ARGS = 16; // More than currently necessary.
 
-int Debugger::ProcessCommands(bool aBreakFirst)
+int Debugger::ProcessCommands(LPCSTR aBreakReason)
 {
 	int err;
 
@@ -284,8 +300,8 @@ int Debugger::ProcessCommands(bool aBreakFirst)
 	//  - property_set when an object with __delete is released.
 	if (mInternalState == DIS_Break)
 		return DEBUGGER_E_OK;
-	if (aBreakFirst)
-		if (err = EnterBreakState())
+	if (aBreakReason)
+		if (err = EnterBreakState(aBreakReason))
 			return err;
 
 	// Disable notification of READ readiness and reset socket to synchronous mode.
@@ -517,7 +533,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 	// Not supported: data_encoding - assume base64.
 	// Not supported: breakpoint_languages - assume only %language_name% is supported.
 	else if (!strcmp(feature_name, "breakpoint_types"))
-		setting = "line";
+		setting = "line exception";
 	else if (!strcmp(feature_name, "multiple_sessions"))
 		setting = "0";
 	else if (!strcmp(feature_name, "max_data"))
@@ -697,21 +713,39 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 			temporary = (*value != '0');
 			break;
 			
-		case 'm': // function
 		case 'x': // exception
+			if (!stricmp(value, "Any")) // Require this or nothing, for now.
+				break;
+			return DEBUGGER_E_INVALID_OPTIONS;
+
+		case 'm': // function
 		case 'h': // hit_value
 		case 'o': // hit_condition = >= | == | %
 		case '-': // expression for conditional breakpoints
-			// These aren't used/supported, but ignored for now.
-			break;
-
+			// These aren't used/supported.
 		default:
 			return DEBUGGER_E_INVALID_OPTIONS;
 		}
 	}
 
-	if (!type || strcmp(type, "line")) // i.e. type != "line"
+	// Breakpoint type is required according to the spec, but allowing it to be omitted
+	// and defaulting to "line" is more convenient for debugging the debugger via console.
+	if (type && strcmp(type, "line")) // i.e. type was specified and is not "line".
+	{
+		if (!strcmp(type, "exception") && lineno == 0 && !filename)
+		{
+			mBreakOnException = state;
+			mBreakOnExceptionIsTemporary = temporary;
+			mBreakOnExceptionWasSet = true;
+			if (!mBreakOnExceptionID)
+				mBreakOnExceptionID = Breakpoint::AllocateID();
+			
+			return mResponseBuf.WriteF(
+				"<response command=\"breakpoint_set\" transaction_id=\"%e\" state=\"%s\" id=\"%i\"/>"
+				, aTransactionId, state ? "enabled" : "disabled", mBreakOnExceptionID);
+		}
 		return DEBUGGER_E_BREAKPOINT_TYPE;
+	}
 	if (lineno < 1)
 		return DEBUGGER_E_BREAKPOINT_INVALID;
 
@@ -753,10 +787,15 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 
 int Debugger::WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine)
 {
-	mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\""
-					, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled");
-	mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[aLine->mFileIndex]));
-	return mResponseBuf.WriteF("\" lineno=\"%u\"/>", aLine->mLineNumber);
+	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"line\" state=\"%s\" filename=\"%r\" lineno=\"%u\"/>"
+		, aBreakpoint->id, aBreakpoint->state ? "enabled" : "disabled"
+		, Line::sSourceFile[aLine->mFileIndex], aLine->mLineNumber);
+}
+
+int Debugger::WriteExceptionBreakpointXml()
+{
+	return mResponseBuf.WriteF("<breakpoint id=\"%i\" type=\"exception\" state=\"%s\" exception=\"Any\"/>"
+		, mBreakOnExceptionID, mBreakOnException ? "enabled" : "disabled");
 }
 
 DEBUGGER_COMMAND(Debugger::breakpoint_get)
@@ -778,6 +817,13 @@ DEBUGGER_COMMAND(Debugger::breakpoint_get)
 
 			return DEBUGGER_E_OK;
 		}
+	}
+
+	if (breakpoint_id == mBreakOnExceptionID && mBreakOnExceptionWasSet)
+	{
+		mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%e\">", aTransactionId);
+		WriteExceptionBreakpointXml();
+		return mResponseBuf.Write("</response>");
 	}
 
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
@@ -854,6 +900,12 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 		}
 	}
 
+	if (breakpoint_id == mBreakOnExceptionID)
+	{
+		mBreakOnException = state;
+		return DEBUGGER_E_OK;
+	}
+
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
 }
 
@@ -876,6 +928,13 @@ DEBUGGER_COMMAND(Debugger::breakpoint_remove)
 		}
 	}
 
+	if (breakpoint_id == mBreakOnExceptionID && mBreakOnExceptionWasSet)
+	{
+		mBreakOnException = false;
+		mBreakOnExceptionWasSet = false;
+		return DEBUGGER_E_OK;
+	}
+
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
 }
 
@@ -894,6 +953,9 @@ DEBUGGER_COMMAND(Debugger::breakpoint_list)
 			WriteBreakpointXml(line->mBreakpoint, line);
 		}
 	}
+
+	if (mBreakOnExceptionWasSet)
+		WriteExceptionBreakpointXml();
 
 	return mResponseBuf.Write("</response>");
 }
@@ -954,9 +1016,8 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 			{
 				line = se->line;
 			}
-			mResponseBuf.WriteF("<stack level=\"%i\" type=\"file\" filename=\"", level);
-			mResponseBuf.WriteFileURI(U4T(Line::sSourceFile[line->mFileIndex]));
-			mResponseBuf.WriteF("\" lineno=\"%u\" where=\"", line->mLineNumber);
+			mResponseBuf.WriteF("<stack level=\"%i\" type=\"file\" filename=\"%r\" lineno=\"%u\" where=\""
+				, level, Line::sSourceFile[line->mFileIndex], line->mLineNumber);
 			switch (se->type)
 			{
 			case DbgStack::SE_Thread:
@@ -1450,6 +1511,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	Var *var = NULL;
 	VarBkp *varbkp = NULL;
 	SymbolType key_type;
+	IObject *iobj = NULL;
 
 	aResult.kind = PropNone;
 
@@ -1463,77 +1525,102 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 
 	// Validate name for more accurate error-reporting.
 	if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, DISPLAY_NO_ERROR))
-		return DEBUGGER_E_INVALID_OPTIONS;
-
-	VarList *vars = nullptr;
-	bool search_local = (aVarScope & VAR_LOCAL) && g->CurrentFunc;
-	if (search_local && aDepth > 0)
 	{
-		VarList *static_vars = nullptr;
-		VarBkp *bkps = nullptr, *bkps_end = nullptr;
-		mStack.GetLocalVars(aDepth, vars, static_vars, bkps, bkps_end);
-		for ( ; bkps < bkps_end; ++bkps)
-			if (!_tcsicmp(bkps->mVar->mName, name))
+		if (!_tcsicmp(name, _T("<exception>")))
+		{
+			if (!mThrownToken)
+				return DEBUGGER_E_UNKNOWN_PROPERTY;
+			if (!name_end)
 			{
-				varbkp = bkps;
-				break;
+				// `property_get -n <exception>` is our non-standard way to retrieve the thrown value during an exception break.
+				// `property_set -n <exception> --` is our non-standard way to "clear the exception" (suppress the error dialog).
+				if (aSetValue && TokenIsEmptyString(*aSetValue))
+				{
+					mThrownToken = nullptr;
+					return DEBUGGER_E_OK;
+				}
+				aResult.kind = PropValue;
+				aResult.value.CopyValueFrom(*mThrownToken);
+				if (aResult.value.symbol == SYM_OBJECT)
+					aResult.value.object->AddRef();
+				return DEBUGGER_E_OK;
 			}
-		if (!varbkp && static_vars)
-			var = static_vars->Find(name);
-		// If a var wasn't found above, make sure not to return a local var of the wrong function or depth.
-		if (!var)
-			aVarScope = FINDVAR_GLOBAL;
-	}
-
-	if (!var && !varbkp)
-	{
-		int insert_pos;
-		if (vars) // Use this first to support aDepth.
-			var = vars->Find(name, &insert_pos);
-		if (!var) // Use FindVar to support built-ins and globals.
-			var = g_script.FindVar(name, name_length, aVarScope, &vars, &insert_pos);
-		if (!var && aSetValue) // Avoid creating empty variables.
-			var = g_script.AddVar(name, name_length, vars, insert_pos
-				, search_local ? VAR_LOCAL : VAR_GLOBAL);
-	}
-
-	if (!var && !varbkp)
-		return DEBUGGER_E_UNKNOWN_PROPERTY;
-
-	if (!name_end)
-	{
-		// Just a variable name.
-		if (var)
-			aResult.var = var, aResult.kind = PropVar;
+			iobj = TokenToObject(*mThrownToken);
+		}
 		else
-			aResult.bkp = varbkp, aResult.kind = PropVarBkp;
-		return DEBUGGER_E_OK;
-	}
-	IObject *iobj = nullptr;
-	if (varbkp && varbkp->mType == VAR_ALIAS)
-		var = varbkp->mAliasFor;
-	if (var)
-	{
-		auto error = GetPropertyValue(*var, aResult); // Supports built-in vars.
-		if (error)
-			return error;
-		if (aResult.value.symbol == SYM_OBJECT)
-			iobj = aResult.value.object; // Take ownership of this reference, which is overwitten below.
-		else
-			aResult.value.Free(); // Free mem_to_free if non-null.
-		// aResult.value must be reinitialized because Invoke expects it to have a default of "".
-		// For x.<base> and x.<enum>, it's expected to have a value that doesn't need Free() called.
-		aResult.value.InitResult(aResult.value.buf);
+			return DEBUGGER_E_INVALID_OPTIONS;
 	}
 	else
 	{
-		if (varbkp->mAttrib & VAR_ATTRIB_IS_OBJECT) 
+		VarList *vars = nullptr;
+		bool search_local = (aVarScope & VAR_LOCAL) && g->CurrentFunc;
+		if (search_local && aDepth > 0)
 		{
-			iobj = varbkp->mObject;
-			iobj->AddRef();
+			VarList *static_vars = nullptr;
+			VarBkp *bkps = nullptr, *bkps_end = nullptr;
+			mStack.GetLocalVars(aDepth, vars, static_vars, bkps, bkps_end);
+			for ( ; bkps < bkps_end; ++bkps)
+				if (!_tcsicmp(bkps->mVar->mName, name))
+				{
+					varbkp = bkps;
+					break;
+				}
+			if (!varbkp && static_vars)
+				var = static_vars->Find(name);
+			// If a var wasn't found above, make sure not to return a local var of the wrong function or depth.
+			if (!var)
+				aVarScope = FINDVAR_GLOBAL;
+		}
+
+		if (!var && !varbkp)
+		{
+			int insert_pos;
+			if (vars) // Use this first to support aDepth.
+				var = vars->Find(name, &insert_pos);
+			if (!var) // Use FindVar to support built-ins and globals.
+				var = g_script.FindVar(name, name_length, aVarScope, &vars, &insert_pos);
+			if (!var && aSetValue) // Avoid creating empty variables.
+				var = g_script.AddVar(name, name_length, vars, insert_pos
+					, search_local ? VAR_LOCAL : VAR_GLOBAL);
+		}
+
+		if (!var && !varbkp)
+			return DEBUGGER_E_UNKNOWN_PROPERTY;
+
+		if (!name_end)
+		{
+			// Just a variable name.
+			if (var)
+				aResult.var = var, aResult.kind = PropVar;
+			else
+				aResult.bkp = varbkp, aResult.kind = PropVarBkp;
+			return DEBUGGER_E_OK;
+		}
+		if (varbkp && varbkp->mType == VAR_ALIAS)
+			var = varbkp->mAliasFor;
+		if (var)
+		{
+			auto error = GetPropertyValue(*var, aResult); // Supports built-in vars.
+			if (error)
+				return error;
+			if (aResult.value.symbol == SYM_OBJECT)
+				iobj = aResult.value.object; // Take ownership of this reference, which is overwitten below.
+			else
+				aResult.value.Free(); // Free mem_to_free if non-null.
+			// aResult.value must be reinitialized because Invoke expects it to have a default of "".
+			// For x.<base> and x.<enum>, it's expected to have a value that doesn't need Free() called.
+			aResult.value.InitResult(aResult.value.buf);
+		}
+		else
+		{
+			if (varbkp->mAttrib & VAR_ATTRIB_IS_OBJECT) 
+			{
+				iobj = varbkp->mObject;
+				iobj->AddRef();
+			}
 		}
 	}
-
+	
 	if (!iobj)
 		return DEBUGGER_E_UNKNOWN_PROPERTY;
 
@@ -2151,7 +2238,7 @@ int Debugger::SendStandardResponse(char *aCommandName, char *aTransactionId)
 	return SendResponse();
 }
 
-int Debugger::SendContinuationResponse(char *aCommand, char *aStatus, char *aReason)
+int Debugger::SendContinuationResponse(LPCSTR aCommand, LPCSTR aStatus, LPCSTR aReason)
 {
 	if (!aCommand)
 	{
@@ -2304,10 +2391,9 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 				mResponseBuf.Clear();
 
 				// Write init message.
-				mResponseBuf.WriteF("<init appid=\"" AHK_NAME "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" DEBUGGER_LANG_NAME "\" protocol_version=\"1.0\" fileuri=\""
-					, ide_key.GetString(), session.GetString(), GetCurrentThreadId());
-				mResponseBuf.WriteFileURI(U4T(g_script.mFileSpec));
-				mResponseBuf.Write("\"/>");
+				mResponseBuf.WriteF("<init appid=\"" AHK_NAME "\" ide_key=\"%e\" session=\"%e\" thread=\"%u\" parent=\"\" language=\"" DEBUGGER_LANG_NAME
+					"\" protocol_version=\"1.0\" fileuri=\"%r\"/>"
+					, ide_key.GetString(), session.GetString(), GetCurrentThreadId(), g_script.mFileSpec);
 
 				if (SendResponse() == DEBUGGER_E_OK)
 				{
@@ -2561,6 +2647,14 @@ int Debugger::Buffer::WriteF(const char *aFormat, ...)
 					continue;
 				}
 
+				case 'r':
+					if (i == 0)
+						len += EstimateFileURILength(va_arg(vl, LPCTSTR));
+					else
+						WriteFileURI(va_arg(vl, LPCTSTR));
+					++format_ptr; // Skip %, outer loop will skip format char.
+					continue;
+
 				default:
 					s = NULL; // Skip section below.
 				} // switch (format_ptr[1])
@@ -2596,28 +2690,33 @@ int Debugger::Buffer::WriteF(const char *aFormat, ...)
 	return DEBUGGER_E_OK;
 }
 
-// Convert a file path to a URI and write it to the buffer.
-int Debugger::Buffer::WriteFileURI(const char *aPath)
+int Debugger::Buffer::EstimateFileURILength(LPCTSTR aPath)
 {
-	int c, len = 9; // 8 for "file:///", 1 for '\0' (written by sprintf()).
-
-	// Calculate required buffer size for path after encoding.
-	for (const char *ptr = aPath; c = *ptr; ++ptr)
+	TBYTE c, len = 8; // "file:///"
+	for (LPCTSTR ptr = aPath; c = *ptr; ++ptr)
 	{
-		if (cisalnum(c) || strchr("-_.!~*'()/\\", c))
+		if (cisalnum(c) || _tcschr(_T("-_.!~*'()/\\"), c))
 			++len;
 		else
-			len += 3;
+			// For code size, estimate based on worst-case scenario (U+FFFF -> %ef%bf%bf).
+			// Any extra space is likely to be used at some point, as the response buffer gets reused.
+			len += 9;
 	}
+	return len;
+}
 
-	// Ensure the buffer contains enough space.
-	if (ExpandIfNecessary(mDataUsed + len) != DEBUGGER_E_OK)
-		return DEBUGGER_E_INTERNAL_ERROR;
+// Convert a file path to a URI and write it to the buffer.
+// Caller has already verified there is enough space in the buffer.
+void Debugger::Buffer::WriteFileURI(LPCTSTR aPath)
+{
+	memcpy(mData + mDataUsed, "file:///", 8);
+	mDataUsed += 8;
 
-	Write("file:///", 8);
+	CStringUTF8FromTChar path8(aPath);
 
 	// Write to the buffer, encoding as we go.
-	for (const char *ptr = aPath; c = *ptr; ++ptr)
+	int c;
+	for (LPCSTR ptr = path8; c = *ptr; ++ptr)
 	{
 		if (cisalnum(c) || strchr("-_.!~*()/", c))
 		{
@@ -2630,13 +2729,11 @@ int Debugger::Buffer::WriteFileURI(const char *aPath)
 		}
 		else
 		{
-			len = sprintf(mData + mDataUsed, "%%%02X", c & 0xff);
+			int len = sprintf(mData + mDataUsed, "%%%02X", c & 0xff);
 			if (len != -1)
 				mDataUsed += len;
 		}
 	}
-
-	return DEBUGGER_E_OK;
 }
 
 int Debugger::Buffer::WriteEncodeBase64(const char *aInput, size_t aInputSize, bool aSkipBufferSizeCheck/* = false*/)

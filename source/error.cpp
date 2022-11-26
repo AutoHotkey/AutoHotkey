@@ -123,10 +123,8 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 		token->symbol = SYM_OBJECT;
 		token->mem_to_free = NULL;
 
-		g->ThrownToken = token;
+		aLine->SetThrownToken(*g, token);
 	}
-	if (!(g->ExcptMode & EXCPTMODE_CATCH))
-		return UnhandledException(aLine, aErrorType);
 
 	// Returning FAIL causes each caller to also return FAIL, until either the
 	// thread has fully exited or the recursion layer handling ACT_TRY is reached:
@@ -136,6 +134,23 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 {
 	return ThrowRuntimeException(aErrorText, aExtraInfo, mCurrLine, FAIL);
+}
+
+
+void Line::SetThrownToken(global_struct &g, ResultToken *aToken)
+{
+#ifdef CONFIG_DEBUGGER
+	if (g_Debugger.IsConnected())
+		if (g_Debugger.PreThrow(aToken) && !(g.ExcptMode & EXCPTMODE_CATCH))
+			// The debugger has entered (and left) a break state, so the client has had a
+			// chance to inspect the exception and report it.  There's nothing in the DBGp
+			// spec about what to do next, probably since PHP would just log the error.
+			// In our case, it seems more useful to suppress the dialog than to show it.
+			return;
+#endif
+	g.ThrownToken = aToken;
+	if (!(g.ExcptMode & EXCPTMODE_CATCH))
+		g_script.UnhandledException(this);
 }
 
 
@@ -228,7 +243,11 @@ ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultTy
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 	
-	if ((g->ExcptMode || mOnError.Count() || aPrototype && aPrototype->HasOwnProps()) && aErrorType != WARN)
+	if ((g->ExcptMode || mOnError.Count()
+#ifdef CONFIG_DEBUGGER
+		|| g_Debugger.BreakOnExceptionIsEnabled()
+#endif
+		|| aPrototype && aPrototype->HasOwnProps()) && aErrorType != WARN)
 		return ThrowRuntimeException(aErrorText, aExtraInfo, aLine, aErrorType, aPrototype);
 
 	return ShowError(aErrorText, aErrorType, aExtraInfo, aLine);

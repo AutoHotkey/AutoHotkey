@@ -1252,7 +1252,8 @@ public:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
-	
+	void SetThrownToken(global_struct &g, ResultToken *aToken);
+
 	ResultType ValidateVarUsage(Var *aVar, int aUsage);
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
 	ResultType LineUnexpectedError();
@@ -2845,6 +2846,7 @@ private:
 	static bool IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf);
 	ResultType IsDirective(LPTSTR aBuf);
 	ResultType ConvertDirectiveBool(LPTSTR aBuf, bool &aResult, bool aDefault);
+	ResultType RequirementError(LPCTSTR aRequirement);
 	ResultType ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID
 		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
 	ResultType ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref, int *aPos = NULL, TCHAR aEndChar = 0);

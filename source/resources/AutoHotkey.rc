@@ -179,12 +179,6 @@ END
 
 #include "..\ahkversion.h"
 
-#ifdef _WIN64
-#define AHK_BIT "64-bit"
-#else
-#define AHK_BIT "32-bit"
-#endif
-
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION AHK_VERSION_N
  PRODUCTVERSION AHK_VERSION_N
@@ -205,11 +199,13 @@ BEGIN
 #ifdef AUTOHOTKEYSC
             VALUE "FileDescription", ""
             VALUE "FileVersion", AHK_VERSION
+            VALUE "CompanyName", ""
             VALUE "ProductName", ""
             VALUE "ProductVersion", AHK_VERSION
 #else
-            VALUE "FileDescription", "AutoHotkey " AHK_BIT
+            VALUE "FileDescription", AHK_DESCRIPTION
             VALUE "FileVersion", AHK_VERSION
+            VALUE "CompanyName", "AutoHotkey Foundation LLC"
             VALUE "ProductName", "AutoHotkey"
             VALUE "ProductVersion", AHK_VERSION
 #endif

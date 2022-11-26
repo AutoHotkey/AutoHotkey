@@ -92,9 +92,11 @@ public:
 	
 	// Not yet supported: function, hit_count, hit_value, hit_condition, exception
 
-	Breakpoint() : id(++sMaxId), type(BT_Line), state(BS_Enabled), temporary(false)
+	Breakpoint() : id(AllocateID()), type(BT_Line), state(BS_Enabled), temporary(false)
 	{
 	}
+
+	static int AllocateID() { return ++sMaxId; }
 
 private:
 	static int sMaxId; // Highest used breakpoint ID.
@@ -190,6 +192,7 @@ public:
 	inline bool IsStepping() { return mInternalState >= DIS_StepInto; }
 	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }
 	inline bool HasStdOutHook() { return mStdOutMode != SR_Disabled; }
+	inline bool BreakOnExceptionIsEnabled() { return mBreakOnException; }
 
 	LPCTSTR WhatThrew();
 
@@ -216,10 +219,11 @@ public:
 
 	// Code flow notification functions:
 	int PreExecLine(Line *aLine); // Called before executing each line.
+	bool PreThrow(ExprTokenType *aException);
 	
 	// Receive and process commands. Returns when a continuation command is received.
-	int ProcessCommands(bool aBreakFirst = false);
-	int Break();
+	int ProcessCommands(LPCSTR aBreakReason = nullptr);
+	int Break(LPCSTR aReason = "ok");
 	
 	bool HasPendingCommand();
 
@@ -271,6 +275,7 @@ public:
 	Debugger() : mSocket(INVALID_SOCKET), mInternalState(DIS_Starting)
 		, mMaxPropertyData(1024), mContinuationTransactionId(""), mStdErrMode(SR_Disabled), mStdOutMode(SR_Disabled)
 		, mMaxChildren(20), mMaxDepth(2), mDisabledHooks(0)
+		, mThrownToken(NULL), mBreakOnExceptionID(0), mBreakOnExceptionWasSet(false), mBreakOnExceptionIsTemporary(false), mBreakOnException(false)
 	{
 	}
 
@@ -282,13 +287,15 @@ public:
 private:
 	SOCKET mSocket;
 	Line *mCurrLine; // Similar to g_script.mCurrLine, but may be different when breaking post-function-call, before continuing expression evaluation.
+	ExprTokenType *mThrownToken; // The exception that triggered the current exception breakpoint.
+	bool mBreakOnExceptionWasSet, mBreakOnExceptionIsTemporary, mBreakOnException; // Supports a single coverall breakpoint exception.
+	int mBreakOnExceptionID;
 
 	class Buffer
 	{
 	public:
 		int Write(char *aData, size_t aDataSize=-1);
 		int WriteF(const char *aFormat, ...);
-		int WriteFileURI(const char *aPath);
 		int WriteEncodeBase64(const char *aData, size_t aDataSize, bool aSkipBufferSizeCheck = false);
 		int Expand();
 		int ExpandIfNecessary(size_t aRequiredSize);
@@ -306,6 +313,9 @@ private:
 			if (mData)
 				free(mData);
 		}
+	private:
+		int EstimateFileURILength(LPCTSTR aPath);
+		void WriteFileURI(LPCTSTR aPath);
 	} mCommandBuf, mResponseBuf;
 
 	enum DebuggerInternalStateType {
@@ -416,12 +426,13 @@ private:
 	int SendResponse();
 	int SendErrorResponse(char *aCommandName, char *aTransactionId, int aError=999, char *aExtraAttributes=NULL);
 	int SendStandardResponse(char *aCommandName, char *aTransactionId);
-	int SendContinuationResponse(char *aCommand=NULL, char *aStatus="break", char *aReason="ok");
+	int SendContinuationResponse(LPCSTR aCommand = nullptr, LPCSTR aStatus = "break", LPCSTR aReason = "ok");
 
-	int EnterBreakState();
+	int EnterBreakState(LPCSTR aReason = "ok");
 	void ExitBreakState();
 
 	int WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine);
+	int WriteExceptionBreakpointXml();
 	Line *FindFirstLineForBreakpoint(int file_index, UINT line_no);
 
 	void AppendPropertyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName);
