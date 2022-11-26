@@ -789,7 +789,7 @@ LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex); // L17: Fi
 HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, int aHeight // L17: Extract icon of the appropriate size from an executable (or compatible) file.
 	, HMODULE *apModule = NULL);
 
-bool VersionSatisfies(LPCTSTR v, LPCTSTR r);
+int VersionSatisfies(LPCTSTR v, LPCTSTR r, bool aThreeWayDefault = false);
 int CompareVersion(LPCTSTR a, LPCTSTR b);
 
 // This is used due to the popcnt instruction not being supported on old CPUs.

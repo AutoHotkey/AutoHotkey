@@ -18893,7 +18893,7 @@ BIF_DECL(BIF_VerCompare)
 	TCHAR buf[MAX_NUMBER_SIZE];
 	LPTSTR a = ParamIndexToString(0, aResultToken.buf);
 	LPTSTR b = ParamIndexToString(1, buf);
-	aResultToken.value_int64 = CompareVersion(a, b);
+	aResultToken.value_int64 = VersionSatisfies(a, b, true);
 }
 
 
