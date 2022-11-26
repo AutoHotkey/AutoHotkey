@@ -3663,8 +3663,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 						return CONDITION_TRUE;
 					
 					for (end = cp; *end && !IS_SPACE_OR_TAB(*end); ++end);
-					if (*cp == 'v' && cisdigit(cp[1]))
-						++cp;
 					tcslcpy(word, cp, min(_countof(word), end - cp + 1));
 
 					// Allow these words when appropriate: Unicode, ANSI, 32-bit, 64-bit
@@ -3672,8 +3670,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 						continue;
 
 					// It's either an unment requirement or a version number.
-					if (!_tcsncmp(word, T_AHK_VERSION, 3) && (!word[3] || word[3] == '.') // Major version matches.
-						&& CompareVersion(word, T_AHK_VERSION) <= 0) // Required minor and patch versions <= A_AhkVersion (also taking into account any pre-release suffix).
+					if (VersionSatisfies(T_AHK_VERSION, word))
 						continue;
 
 					break;

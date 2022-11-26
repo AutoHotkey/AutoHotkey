@@ -2977,6 +2977,25 @@ int CompareVersion(LPCTSTR a, LPCTSTR b)
 
 
 
+bool VersionSatisfies(LPCTSTR v, LPCTSTR req)
+{
+	// Support prefixes <, >, <=, >=, =; default to >=.
+	bool rmap[] = { *req == '<', *req != '<' || req[1] == '=', *req != '<' && *req != '=' };
+	LPCTSTR reqv = req;
+	if (*reqv == '<' || *reqv == '>') ++reqv;
+	if (*reqv == '=') ++reqv;
+	bool has_op = reqv != req;
+	// Support optional v prefix.
+	if (*v == 'v') ++v;
+	if (*reqv == 'v') ++reqv;
+	// Perform the comparison.
+	bool result = rmap[CompareVersion(v, reqv) + 1];
+	// When no operator is specified, also require that the major version matches.
+	return result && !has_op && _ttoi(v) != _ttoi(reqv) ? false : result;
+}
+
+
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 void OutputDebugStringFormat(LPCTSTR fmt, ...)
 {
