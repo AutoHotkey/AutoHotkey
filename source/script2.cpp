@@ -18888,6 +18888,16 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_VerCompare)
+{
+	TCHAR buf[MAX_NUMBER_SIZE];
+	LPTSTR a = ParamIndexToString(0, aResultToken.buf);
+	LPTSTR b = ParamIndexToString(1, buf);
+	aResultToken.value_int64 = CompareVersion(a, b);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
