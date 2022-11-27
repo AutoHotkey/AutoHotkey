@@ -1243,11 +1243,13 @@ for (;;)
 
     if (ecode[LINK_SIZE+1] == OP_CALLOUT)
       {
+      int arglen = ecode[LINK_SIZE+1 + 1]; /* AutoHotkey: arg len and null-terminated arg precede the standard bytes */
+      const pcre_uchar *cnptr = ecode + LINK_SIZE+1 + 1 + arglen + 1;
       if (PUBL(callout) != NULL)
         {
         PUBL(callout_block) cb;
         cb.version          = 2;   /* Version 1 of the callout block */
-        cb.callout_number   = ecode[LINK_SIZE+2];
+        cb.callout_number   = *cnptr;
         cb.offset_vector    = md->offset_vector;
 #ifdef COMPILE_PCRE8
         cb.subject          = (PCRE_SPTR)md->start_subject;
@@ -1257,8 +1259,8 @@ for (;;)
         cb.subject_length   = (int)(md->end_subject - md->start_subject);
         cb.start_match      = (int)(mstart - md->start_subject);
         cb.current_position = (int)(eptr - md->start_subject);
-        cb.pattern_position = GET(ecode, LINK_SIZE + 3);
-        cb.next_item_length = GET(ecode, 3 + 2*LINK_SIZE);
+        cb.pattern_position = GET(cnptr, 1);
+        cb.next_item_length = GET(cnptr, 3);
         cb.capture_top      = offset_top/2;
         cb.capture_last     = md->capture_last;
         cb.callout_data     = md->callout_data;
@@ -1266,7 +1268,7 @@ for (;;)
         if ((rrc = (*PUBL(callout))(&cb)) > 0) RRETURN(MATCH_NOMATCH);
         if (rrc < 0) RRETURN(rrc);
         }
-      ecode += PRIV(OP_lengths)[OP_CALLOUT];
+      ecode += arglen + PRIV(OP_lengths)[OP_CALLOUT];
       }
 
     condcode = ecode[LINK_SIZE+1];
@@ -1661,11 +1663,13 @@ for (;;)
     function is able to force a failure. */
 
     case OP_CALLOUT:
+    length = ecode[1]; /* AutoHotkey: arg len and null-terminated arg precede the standard bytes */
     if (PUBL(callout) != NULL)
       {
       PUBL(callout_block) cb;
+      const pcre_uchar *cnptr = ecode + 2 + length + 1;
       cb.version          = 2;   /* Version 1 of the callout block */
-      cb.callout_number   = ecode[1];
+      cb.callout_number   = *cnptr;
       cb.offset_vector    = md->offset_vector;
 #ifdef COMPILE_PCRE8
       cb.subject          = (PCRE_SPTR)md->start_subject;
@@ -1675,17 +1679,17 @@ for (;;)
       cb.subject_length   = (int)(md->end_subject - md->start_subject);
       cb.start_match      = (int)(mstart - md->start_subject);
       cb.current_position = (int)(eptr - md->start_subject);
-      cb.pattern_position = GET(ecode, 2 + IMMPTR_SIZE);
-      cb.next_item_length = GET(ecode, 2 + IMMPTR_SIZE + LINK_SIZE);
+      cb.pattern_position = GET(cnptr, 1);
+      cb.next_item_length = GET(cnptr, 1 + LINK_SIZE);
       cb.capture_top      = offset_top/2;
       cb.capture_last     = md->capture_last;
       cb.callout_data     = md->callout_data;
       cb.mark             = md->nomatch_mark;
-      cb.user_callout     = *(void **)(ecode + 2); /* AutoHotkey */
+      cb.user_callout     = (ecode + 2); /* AutoHotkey */
       if ((rrc = (*PUBL(callout))(&cb)) > 0) RRETURN(MATCH_NOMATCH);
       if (rrc < 0) RRETURN(rrc);
       }
-    ecode += 2 + IMMPTR_SIZE + 2*LINK_SIZE;
+    ecode += 2 + length + 2 + 2*LINK_SIZE;
     break;
 
     /* Recursion either matches the current regex, or some subexpression. The

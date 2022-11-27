@@ -2550,12 +2550,14 @@ for (;;)
 
         if (code[LINK_SIZE+1] == OP_CALLOUT)
           {
+          int arglen = code[LINK_SIZE+1 + 1]; /* AutoHotkey: arg len and null-terminated arg precede the standard bytes */
+          const pcre_uchar *cnptr = code + LINK_SIZE+1 + 2 + arglen + 1;
           rrc = 0;
           if (PUBL(callout) != NULL)
             {
             PUBL(callout_block) cb;
             cb.version          = 1;   /* Version 1 of the callout block */
-            cb.callout_number   = code[LINK_SIZE+2];
+            cb.callout_number   = *cnptr;
             cb.offset_vector    = offsets;
 #ifdef COMPILE_PCRE8
             cb.subject          = (PCRE_SPTR)start_subject;
@@ -2565,16 +2567,17 @@ for (;;)
             cb.subject_length   = (int)(end_subject - start_subject);
             cb.start_match      = (int)(current_subject - start_subject);
             cb.current_position = (int)(ptr - start_subject);
-            cb.pattern_position = GET(code, LINK_SIZE + 3);
-            cb.next_item_length = GET(code, 3 + 2*LINK_SIZE);
+            cb.pattern_position = GET(cnptr, 1);
+            cb.next_item_length = GET(cnptr, 1 + LINK_SIZE);
             cb.capture_top      = 1;
             cb.capture_last     = -1;
             cb.callout_data     = md->callout_data;
             cb.mark             = NULL;   /* No (*MARK) support */
+            cb.user_callout     = (code + 2); /* AutoHotkey */
             if ((rrc = (*PUBL(callout))(&cb)) < 0) return rrc;   /* Abandon */
             }
           if (rrc > 0) break;                      /* Fail this thread */
-          code += PRIV(OP_lengths)[OP_CALLOUT];    /* Skip callout data */
+          code += arglen + PRIV(OP_lengths)[OP_CALLOUT];    /* Skip callout data */
           }
 
         condcode = code[LINK_SIZE+1];

@@ -1905,7 +1905,7 @@ in UTF-8 mode. The code that uses this table must know about such things. */
   1+IMM2_SIZE,                   /* REF                                    */ \
   1+IMM2_SIZE,                   /* REFI                                   */ \
   1+LINK_SIZE,                   /* RECURSE                                */ \
-  2+IMMPTR_SIZE+2*LINK_SIZE,     /* CALLOUT                                */ \
+  4+2*LINK_SIZE,                 /* CALLOUT                                */ \
   1+LINK_SIZE,                   /* Alt                                    */ \
   1+LINK_SIZE,                   /* Ket                                    */ \
   1+LINK_SIZE,                   /* KetRmax                                */ \

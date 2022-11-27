@@ -351,7 +351,7 @@ typedef struct pcre_callout_block {
   /* ------------------- Added for Version 2 -------------------------- */
   const unsigned char *mark;      /* Pointer to current mark or NULL    */
   /* ------------------- Added for AutoHotkey ------------------------- */
-  void        *user_callout;
+  const unsigned char *user_callout;
   /* ------------------------------------------------------------------ */
 } pcre_callout_block;
 
@@ -375,7 +375,7 @@ typedef struct pcre16_callout_block {
   /* ------------------- Added for Version 2 -------------------------- */
   const PCRE_UCHAR16 *mark;       /* Pointer to current mark or NULL    */
   /* ------------------- Added for AutoHotkey ------------------------- */
-  void        *user_callout;
+  const PCRE_UCHAR16 *user_callout;
   /* ------------------------------------------------------------------ */
 } pcre16_callout_block;
 
@@ -410,9 +410,6 @@ PCRE_EXP_DECL void *pcre16_stack_malloc(size_t);
 PCRE_EXP_DECL void  pcre16_stack_free(void *);
 PCRE_EXP_DECL int   pcre16_callout(pcre16_callout_block *);
 #endif  /* VPCOMPAT */
-
-PCRE_EXP_DECL void *pcre_resolve_user_callout(const char *, int);
-PCRE_EXP_DECL void *pcre16_resolve_user_callout(const PCRE_UCHAR16 *, int);
 
 /* User defined callback which provides a stack just before the match starts. */
 typedef pcre_jit_stack *(*pcre_jit_callback)(void *);

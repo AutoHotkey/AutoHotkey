@@ -179,7 +179,6 @@ for (;;)
     case OP_RREF:
     case OP_NRREF:
     case OP_DEF:
-    case OP_CALLOUT:
     case OP_SOD:
     case OP_SOM:
     case OP_EOD:
@@ -493,6 +492,7 @@ for (;;)
 
     /* Skip these, but we need to add in the name length. */
 
+    case OP_CALLOUT: /* AutoHotkey */
     case OP_MARK:
     case OP_PRUNE_ARG:
     case OP_SKIP_ARG:
@@ -885,7 +885,7 @@ do
       /* Skip over callout */
 
       case OP_CALLOUT:
-      tcode += 2 + IMMPTR_SIZE + 2*LINK_SIZE;
+      tcode += 1 /* opcode */ + 1 /* arglen */ + tcode[1] /* arg */ + 1 /* \0 */ + 1 /* callout number */ + 2*LINK_SIZE; /* AutoHotkey */
       break;
 
       /* Skip over lookbehind and negative lookahead assertions */

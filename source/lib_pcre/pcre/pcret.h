@@ -10,8 +10,6 @@
 #define pcret_stack_free					pcre16_stack_free
 #define pcret_callout						pcre16_callout
 
-#define pcret_resolve_user_callout			pcre16_resolve_user_callout
-
 #define pcret_compile						pcre16_compile
 #define pcret_compile2						pcre16_compile2
 #define pcret_config						pcre16_config
@@ -48,8 +46,6 @@
 #define pcret_stack_malloc					pcre_stack_malloc
 #define pcret_stack_free					pcre_stack_free
 #define pcret_callout						pcre_callout
-
-#define pcret_resolve_user_callout			pcre_resolve_user_callout
 
 #define pcret_compile						pcre_compile
 #define pcret_compile2						pcre_compile2

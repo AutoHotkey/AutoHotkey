@@ -232,15 +232,6 @@ void RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, Ex
 }
 
 
-void *pcret_resolve_user_callout(LPCTSTR aCalloutParam, int aCalloutParamLength)
-{
-	// If no Func is found, pcre will handle the case where aCalloutParam is a pure integer.
-	// In that case, the callout param becomes an integer between 0 and 255. No valid pointer
-	// could be in this range, but we must take care to check (ptr>255) rather than (ptr!=NULL).
-	auto callout_var = g_script.FindVar(aCalloutParam, aCalloutParamLength);
-	return callout_var ? callout_var->ToObject() : nullptr;
-}
-
 struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegExCallout.
 {
 	pcret *re;
@@ -269,25 +260,20 @@ int RegExCallout(pcret_callout_block *cb)
 	if (GetCurrentThreadId() != g_MainThreadID)
 		return 0;
 
-	if (!cb->callout_data)
+	if (!cb->callout_data) // Callout not coming from RegExMatch/RegExReplace.
 		return 0;
 	RegExCalloutData &cd = *(RegExCalloutData *)cb->callout_data;
 
-	auto callout_func = (IObject *)cb->user_callout;
+	// Callout functions must be resolved each time, since patterns are cached, and the scope
+	// may be different each time the pattern is executed.  Aside from potentially having the
+	// wrong nested function, AddRef/Release would be needed in places to support closures.
+	auto callout_name = *cb->user_callout ? cb->user_callout : _T("pcre_callout");
+	auto callout_var = g_script.FindVar(callout_name, 0, FINDVAR_FOR_READ);
+	auto callout_func = callout_var ? callout_var->ToObject() : nullptr;
 	if (!callout_func)
 	{
-		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12, FINDVAR_FOR_READ); // This may be a local of the UDF which called RegExMatch/Replace().
-		if (!pcre_callout_var)
-			return 0; // Seems best to ignore the callout rather than aborting the match.
-		callout_func = pcre_callout_var->ToObject();
-		if (!callout_func)
-		{
-			if (!pcre_callout_var->HasContents()) // Var exists but is empty.
-				return 0;
-			// Could be an invalid name, or the name of a built-in function.
-			cd.result_token->Error(_T("Invalid pcre_callout"));
-			return PCRE_ERROR_CALLOUT;
-		}
+		cd.result_token->ValueError(_T("Invalid callout"), callout_name);
+		return PCRE_ERROR_CALLOUT;
 	}
 
 	// Adjust offset to account for options, which are excluded from the regex passed to PCRE.

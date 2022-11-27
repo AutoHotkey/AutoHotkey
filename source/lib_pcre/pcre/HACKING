@@ -465,6 +465,10 @@ cases there follows a two-byte (one short) value giving the offset in the
 pattern to the start of the following item, and another two-byte (one short)
 item giving the length of the next item.
 
+AutoHotkey: OP_CALLOUT is followed by one unit of data that holds the length
+of the function name, followed by the name itself, followed by a null char,
+then finally the callout number etc. as above.
+
 
 Philip Hazel
 December 2011

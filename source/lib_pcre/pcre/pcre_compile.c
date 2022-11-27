@@ -1649,6 +1649,9 @@ for (;;)
     /* Fall through */
 
     case OP_CALLOUT:
+    code += code[1] + PRIV(OP_lengths)[*code]; /* AutoHotkey */
+    break;
+    
     case OP_CREF:
     case OP_NCREF:
     case OP_RREF:
@@ -1776,6 +1779,7 @@ for (;;)
 
     /* Skip over things that don't match chars */
 
+    case OP_CALLOUT: /* AutoHotkey */
     case OP_MARK:
     case OP_PRUNE_ARG:
     case OP_SKIP_ARG:
@@ -1783,7 +1787,6 @@ for (;;)
     cc += cc[1] + PRIV(OP_lengths)[*cc];
     break;
 
-    case OP_CALLOUT:
     case OP_CIRC:
     case OP_CIRCM:
     case OP_CLOSE:
@@ -2081,12 +2084,10 @@ for (;;)
         || code[1 + IMM2_SIZE] == OP_NOTPROP) code += 2;
       break;
 
+      case OP_CALLOUT: /* AutoHotkey */
       case OP_MARK:
       case OP_PRUNE_ARG:
       case OP_SKIP_ARG:
-      code += code[1];
-      break;
-
       case OP_THEN_ARG:
       code += code[1];
       break;
@@ -2201,13 +2202,10 @@ for (;;)
         || code[1 + IMM2_SIZE] == OP_NOTPROP) code += 2;
       break;
 
+      case OP_CALLOUT: /* AutoHotkey */
       case OP_MARK:
       case OP_PRUNE_ARG:
       case OP_SKIP_ARG:
-      code += code[1];
-      break;
-
-      case OP_THEN_ARG:
       code += code[1];
       break;
       }
@@ -2540,12 +2538,10 @@ for (code = first_significant_code(code + PRIV(OP_lengths)[*code], TRUE);
     /* MARK, and PRUNE/SKIP/THEN with an argument must skip over the argument
     string. */
 
+    case OP_CALLOUT: /* AutoHotkey */
     case OP_MARK:
     case OP_PRUNE_ARG:
     case OP_SKIP_ARG:
-    code += code[1];
-    break;
-
     case OP_THEN_ARG:
     code += code[1];
     break;
@@ -2789,8 +2785,9 @@ static pcre_uchar *
 auto_callout(pcre_uchar *code, const pcre_uchar *ptr, compile_data *cd)
 {
 *code++ = OP_CALLOUT;
+*code++ = 0; /* AutoHotkey: zero length name */
+*code++ = 0; /* AutoHotkey: null terminator */
 *code++ = 255;
-*((void **)code)++ = NULL;
 PUT(code, 0, (int)(ptr - cd->start_pattern));  /* Pattern offset */
 PUT(code, LINK_SIZE, 0);                       /* Default length */
 return code + 2 * LINK_SIZE;
@@ -2817,8 +2814,9 @@ Returns:             nothing
 static void
 complete_callout(pcre_uchar *previous_callout, const pcre_uchar *ptr, compile_data *cd)
 {
-int length = (int)(ptr - cd->start_pattern - GET(previous_callout, 2 + IMMPTR_SIZE));
-PUT(previous_callout, 2 + IMMPTR_SIZE + LINK_SIZE, length);
+int links_offset = 2 /* opcode, arg length */ + previous_callout[1] /* arg */ + 2 /* terminator, callout number */; /* AutoHotkey */
+int length = (int)(ptr - cd->start_pattern - GET(previous_callout, links_offset));
+PUT(previous_callout, links_offset + LINK_SIZE, length);
 }
 
 
@@ -5964,45 +5962,42 @@ for (;; ptr++)
         after_manual_callout = 1;    /* Skip one item before completing */
         *code++ = OP_CALLOUT;
           {
-          int n = 0;
-		  void *user_callout = NULL;
-		  tempptr = ptr;
+          int n = 0, arglen = 0;
+          tempptr = ptr;
           ptr++;
           while(IS_DIGIT(*ptr))
             n = n * 10 + *ptr++ - CHAR_0;
           if (*ptr != CHAR_RIGHT_PARENTHESIS)
             {
-			if (*ptr) /* Not end of string, so try to resolve it to a user-defined callout */
-			  {
-			  if (*ptr != ':') /* Treat (?C123Func) as 123Func() with callout_number == 0 */
-				{
-				n = 0;
-				ptr = tempptr; /* Reset to address saved above */
-				}
-			  /* ptr now points at the character immediately preceding the function name - i.e. 'C' or ':' */
-			  tempptr = ptr + 1;
-			  while (*(++ptr) && *ptr != ')');
-			  if (*ptr)
-#ifdef COMPILE_PCRE16
-			    user_callout = pcre16_resolve_user_callout(tempptr, (int)(ptr - tempptr));
-#else
-			    user_callout = pcre_resolve_user_callout(tempptr, (int)(ptr - tempptr));
-#endif
-			  /* else fall through to return ERR39 */
-			  }
-			if (user_callout == NULL) /* Unresolved user callout, or missing ')' */
-			  {
-            *errorcodeptr = ERR39;
-            goto FAILED;
+            if (*ptr) /* Not end of string, so try to resolve it to a user-defined callout */
+              {
+              if (*ptr != ':') /* Treat (?C123Func) as 123Func() with callout_number == 0 */
+                {
+                n = 0;
+                ptr = tempptr; /* Reset to address saved above */
+                }
+              /* ptr now points at the character immediately preceding the function name - i.e. 'C' or ':' */
+              tempptr = ptr + 1;
+              while (*(++ptr) && *ptr != ')');
+              }
+            if (!*ptr) /* or missing ')' */
+              {
+              *errorcodeptr = ERR39;
+              goto FAILED;
+              }
             }
-			}
           if (n > 255)
             {
             *errorcodeptr = ERR38;
             goto FAILED;
             }
+          arglen = (int)(ptr - tempptr);
+          /* AutoHotkey: store the name the same way as (*MARK:NAME), and before the callout number */
+          *code++ = arglen;
+          memcpy(code, tempptr, IN_UCHARS(arglen));
+          code += arglen;
+          *code++ = 0; /* AutoHotkey: null-terminator for the name */
           *code++ = n;
-		  *((void **)code)++ = user_callout;
           PUT(code, 0, (int)(ptr - cd->start_pattern + 1)); /* Pattern offset */
           PUT(code, LINK_SIZE, 0);                          /* Default length */
           code += 2 * LINK_SIZE;
@@ -7408,7 +7403,7 @@ do {
    if (op == OP_COND)
      {
      scode += 1 + LINK_SIZE;
-     if (*scode == OP_CALLOUT) scode += PRIV(OP_lengths)[OP_CALLOUT];
+     if (*scode == OP_CALLOUT) scode += scode[1] + PRIV(OP_lengths)[OP_CALLOUT]; /* AutoHotkey: add name length */
      switch (*scode)
        {
        case OP_CREF:
