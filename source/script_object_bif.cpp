@@ -247,3 +247,77 @@ BIF_DECL(BIF_GetMethod)
 	method->AddRef();
 	_f_return(method);
 }
+
+
+bif_impl FResult ObjSetDataPtr(IObject *aObj, UINT_PTR aPtr)
+{
+	if (!aObj->IsOfType(Object::sPrototype))
+		return FR_E_ARG(0);
+	((Object*)aObj)->SetDataPtr(aPtr);
+	return OK;
+}
+
+void Object::SetDataPtr(UINT_PTR aPtr)
+{
+	if (mFlags & DataIsAllocatedFlag)
+		free(mData);
+	mData = (void*)aPtr;
+	mFlags = (mFlags & ~DataIsAllocatedFlag) | DataIsSetFlag;
+}
+
+
+bif_impl FResult ObjGetDataPtr(IObject *aObj, UINT_PTR &aPtr)
+{
+	if (!aObj->IsOfType(Object::sPrototype))
+		return FR_E_ARG(0);
+	return ((Object*)aObj)->GetDataPtr(aPtr);
+}
+
+FResult Object::GetDataPtr(UINT_PTR &aPtr)
+{
+	if (!(mFlags & DataIsSetFlag))
+		return FR_E_FAILED;
+	aPtr = (UINT_PTR)mData;
+	return OK;
+}
+
+
+bif_impl FResult ObjAllocData(IObject *aObj, UINT_PTR aSize)
+{
+	if (!aObj->IsOfType(Object::sPrototype))
+		return FR_E_ARG(0);
+	return ((Object*)aObj)->AllocDataPtr(aSize);
+}
+
+FResult Object::AllocDataPtr(UINT_PTR aSize)
+{
+	auto p = malloc(aSize);
+	if (!p)
+		return FR_E_OUTOFMEM;
+	if (mFlags & DataIsAllocatedFlag)
+		free(mData);
+	mData = p;
+	mFlags |= DataIsAllocatedFlag | DataIsSetFlag;
+	return OK;
+}
+
+
+bif_impl FResult ObjFreeData(IObject *aObj)
+{
+	if (!aObj->IsOfType(Object::sPrototype))
+		return FR_E_ARG(0);
+	return ((Object*)aObj)->FreeDataPtr();
+}
+
+FResult Object::FreeDataPtr()
+{
+	if (mFlags & DataIsAllocatedFlag)
+	{
+		free(mData);
+		mData = nullptr;
+		mFlags &= ~(DataIsAllocatedFlag | DataIsSetFlag);
+	}
+	else if (mData)
+		return FR_E_FAILED;
+	return OK;
+}

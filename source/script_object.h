@@ -322,7 +322,9 @@ protected:
 	{
 		ClassPrototype = 0x01,
 		NativeClassPrototype = 0x02,
-		LastObjectFlag = 0x02
+		DataIsSetFlag = 0x04,
+		DataIsAllocatedFlag = 0x08,
+		LastObjectFlag = 0x08
 	};
 
 	Object *CloneTo(Object &aTo);
@@ -333,6 +335,7 @@ protected:
 private:
 	Object *mBase = nullptr;
 	FlatVector<FieldType, index_t> mFields;
+	void *mData = nullptr;
 
 	FieldType *FindField(name_t name, index_t &insert_pos);
 	FieldType *FindField(name_t name)
@@ -500,6 +503,10 @@ public:
 	void GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void SetDataPtr(UINT_PTR aPtr);
+	FResult GetDataPtr(UINT_PTR &aPtr);
+	FResult AllocDataPtr(UINT_PTR aSize);
+	FResult FreeDataPtr();
 
 	// Methods and functions:
 	void DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);

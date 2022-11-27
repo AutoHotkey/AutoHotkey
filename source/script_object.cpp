@@ -468,6 +468,8 @@ Object::~Object()
 {
 	if (mBase)
 		mBase->Release();
+	if (mFlags & DataIsAllocatedFlag)
+		free(mData);
 }
 
 

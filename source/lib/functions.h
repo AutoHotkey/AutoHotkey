@@ -201,6 +201,11 @@ md_func(MouseMove,
 
 md_func(MsgBox, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options), (Ret, String, RetVal))
 
+md_func(ObjAllocData, (In, Object, Obj), (In, UIntPtr, Size))
+md_func(ObjFreeData, (In, Object, Obj))
+md_func(ObjGetDataPtr, (In, Object, Obj), (Ret, UIntPtr, Ptr))
+md_func(ObjSetDataPtr, (In, Object, Obj), (In, UIntPtr, Ptr))
+
 md_func(OnClipboardChange, (In, Object, Function), (In_Opt, Int32, AddRemove))
 md_func(OnError, (In, Object, Function), (In_Opt, Int32, AddRemove))
 md_func(OnExit, (In, Object, Function), (In_Opt, Int32, AddRemove))
