@@ -249,6 +249,10 @@ BIF_DECL(BIF_GetMethod)
 }
 
 
+//
+// Low level data pointer API
+//
+
 bif_impl FResult ObjSetDataPtr(IObject *aObj, UINT_PTR aPtr)
 {
 	if (!aObj->IsOfType(Object::sPrototype))
@@ -277,7 +281,7 @@ FResult Object::GetDataPtr(UINT_PTR &aPtr)
 {
 	if (!(mFlags & DataIsSetFlag))
 		return FR_E_FAILED;
-	aPtr = (UINT_PTR)mData;
+	aPtr = DataPtr();
 	return OK;
 }
 
@@ -291,13 +295,23 @@ bif_impl FResult ObjAllocData(IObject *aObj, UINT_PTR aSize)
 
 FResult Object::AllocDataPtr(UINT_PTR aSize)
 {
-	auto p = malloc(aSize);
+	auto p = (UINT_PTR*)malloc(sizeof(UINT_PTR) + aSize);
 	if (!p)
 		return FR_E_OUTOFMEM;
 	if (mFlags & DataIsAllocatedFlag)
 		free(mData);
+	*p = aSize;
 	mData = p;
 	mFlags |= DataIsAllocatedFlag | DataIsSetFlag;
+	return OK;
+}
+
+
+bif_impl FResult ObjGetDataSize(IObject *aObj, UINT_PTR &aRetVal)
+{
+	if (!aObj->IsOfType(Object::sPrototype))
+		return FR_E_ARG(0);
+	aRetVal = ((Object*)aObj)->DataSize();
 	return OK;
 }
 

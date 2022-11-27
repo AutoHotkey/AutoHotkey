@@ -507,6 +507,8 @@ public:
 	FResult GetDataPtr(UINT_PTR &aPtr);
 	FResult AllocDataPtr(UINT_PTR aSize);
 	FResult FreeDataPtr();
+	UINT_PTR DataPtr() { return (UINT_PTR)mData + ((mFlags & DataIsAllocatedFlag) ? sizeof(UINT_PTR) : 0); }
+	UINT_PTR DataSize() { return (mFlags & DataIsAllocatedFlag) ? *(UINT_PTR*)mData : 0; }
 
 	// Methods and functions:
 	void DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);

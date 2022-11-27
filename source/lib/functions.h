@@ -204,6 +204,7 @@ md_func(MsgBox, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String
 md_func(ObjAllocData, (In, Object, Obj), (In, UIntPtr, Size))
 md_func(ObjFreeData, (In, Object, Obj))
 md_func(ObjGetDataPtr, (In, Object, Obj), (Ret, UIntPtr, Ptr))
+md_func(ObjGetDataSize, (In, Object, Obj), (Ret, UIntPtr, Size))
 md_func(ObjSetDataPtr, (In, Object, Obj), (In, UIntPtr, Ptr))
 
 md_func(OnClipboardChange, (In, Object, Function), (In_Opt, Int32, AddRemove))
