@@ -14292,19 +14292,11 @@ struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegE
 
 int RegExCallout(pcret_callout_block *cb)
 {
-	// It should be documented that (?C) is ignored if encountered by the hook thread,
-	// which could happen if SetTitleMatchMode,Regex and #IfWin are used. This would be a
-	// problem if the callout should affect the outcome of the match or should be called
-	// even if #IfWin will ultimately prevent the hotkey from firing. This is because:
-	//	- The callout cannot be called from the hook thread, and therefore cannot affect
-	//		the outcome of #IfWin when called by the hook thread.
-	//	- If #IfWin does NOT prevent the hotkey from firing, it will be reevaluated from
-	//		the main thread before the hotkey is actually fired. This will allow any
-	//		callouts to occur on the main thread.
-	//  - By contrast, if #IfWin DOES prevent the hotkey from firing, #IfWin will not be
-	//		reevaluated from the main thread, so callouts cannot occur.
-	if (GetCurrentThreadId() != g_MainThreadID)
-		return 0;
+	// Continuing execution on the hook thread wouldn't be safe, but there's no need to check
+	// the following since cb->callout_data is non-null only when the regex is being evaluated
+	// by RegExMatch/RegExReplace:
+	//if (GetCurrentThreadId() != g_MainThreadID)
+	//	return 0;
 
 	if (!cb->callout_data)
 		return 0;
