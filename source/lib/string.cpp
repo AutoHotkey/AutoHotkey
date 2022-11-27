@@ -1625,5 +1625,5 @@ BIF_DECL(BIF_VerCompare)
 {
 	_f_param_string(a, 0);
 	_f_param_string(b, 1);
-	_f_return(CompareVersion(a, b));
+	_f_return_i(VersionSatisfies(a, b, true));
 }

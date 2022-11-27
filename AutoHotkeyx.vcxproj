@@ -119,12 +119,16 @@
   <!-- paths and basic settings -->
   <PropertyGroup>
     <IntDir>$(ProjectDir)temp\$(Platform)\$(Configuration)\</IntDir>
-    <BinDir>$(ProjectDir)bin\$(Platform)</BinDir>
-    <BinDir Condition="'$(CharacterSet)'=='Unicode'">$(BinDir)w</BinDir>
-    <BinDir Condition="'$(CharacterSet)'=='MultiByte'">$(BinDir)a</BinDir>
+    <BinDir>bin</BinDir>
     <OutDir>$(BinDir)\</OutDir>
     <OutDir Condition="$(ConfigDebug)">$(BinDir)_debug\</OutDir>
     <OutDir Condition="$(ConfigMinSize)">$(BinDir)_minimal\</OutDir>
+    <BinSuffixChar Condition="'$(CharacterSet)'=='MultiByte'">A</BinSuffixChar>
+    <BinTypeWord>$(CharacterSet)</BinTypeWord>
+    <BinTypeWord Condition="'$(CharacterSet)'=='MultiByte'">ANSI</BinTypeWord>
+    <BinSuffixBits Condition="'$(Platform)'=='Win32'">32</BinSuffixBits>
+    <BinSuffixBits Condition="'$(Platform)'=='x64'">64</BinSuffixBits>
+    <TargetName>AutoHotkey$(BinSuffixChar)$(BinSuffixBits)</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -140,7 +144,7 @@
   </ItemDefinitionGroup>
   <!-- self-contained: required settings -->
   <PropertyGroup Condition="$(ConfigSC)">
-    <TargetName>AutoHotkeySC</TargetName>
+    <TargetName>$(BinTypeWord) $(BinSuffixBits)-bit</TargetName>
     <TargetExt>.bin</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="$(ConfigSC)">

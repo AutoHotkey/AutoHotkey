@@ -3230,9 +3230,10 @@ int CompareVersion(LPCTSTR a, LPCTSTR b)
 
 
 
-bool VersionSatisfies(LPCTSTR v, LPCTSTR req)
+__declspec(noinline) // Prioritize code size for this.
+int VersionSatisfies(LPCTSTR v, LPCTSTR req, bool aThreeWayDefault)
 {
-	// Support prefixes <, >, <=, >=, =; default to >=.
+	// Support prefixes <, >, <=, >=, =; default to >= unless aThreeWayDefault.
 	bool rmap[] = { *req == '<', *req != '<' || req[1] == '=', *req != '<' && *req != '=' };
 	LPCTSTR reqv = req;
 	if (*reqv == '<' || *reqv == '>') ++reqv;
@@ -3242,7 +3243,10 @@ bool VersionSatisfies(LPCTSTR v, LPCTSTR req)
 	if (*v == 'v') ++v;
 	if (*reqv == 'v') ++reqv;
 	// Perform the comparison.
-	bool result = rmap[CompareVersion(v, reqv) + 1];
+	int result = CompareVersion(v, reqv);
+	if (!has_op && aThreeWayDefault)
+		return result;
+	result = rmap[result + 1];
 	// When no operator is specified, also require that the major version matches.
 	return result && !has_op && _ttoi(v) != _ttoi(reqv) ? false : result;
 }
