@@ -556,6 +556,11 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			continue;
 		if (field->symbol != SYM_DYNAMIC) // 'that' has a value property.
 		{
+			if (field->symbol == SYM_TYPED_FIELD)
+			{
+				hasprop = true;
+				break;
+			}
 			if (hasprop && setting)
 				// This value property has been overridden with a getter, but no setter.
 				// Treat it as read-only rather than allowing the getter to implicitly be overridden.
@@ -605,8 +610,30 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		if (result != INVOKE_NOT_HANDLED)
 			return result;
 	}
-
-	if (etter) // Property with getter/setter.
+	
+	if (field && field->symbol == SYM_TYPED_FIELD)
+	{
+		auto realthis = this;
+		if (aFlags & (IF_SUBSTITUTE_THIS | IF_SUPER))
+			realthis = dynamic_cast<Object*>(TokenToObject(aThisToken));
+		if (!realthis || !realthis->mData || (realthis->mFlags & DataIsStructInfo))
+			return aResultToken.Error(_T("Property invalid for object with null data."), name);
+		// TODO: allow inheriting DataPtr()?
+		auto ptr = (void*)(realthis->DataPtr() + field->tprop->data_offset);
+		handle_params_recursively = actual_param_count || calling;
+		if (setting && !handle_params_recursively)
+		{
+			return SetValueOfTypeAtPtr(field->tprop->type, ptr, *actual_param[0], aResultToken);
+		}
+		else
+		{
+			TypedPtrToToken(field->tprop->type, ptr
+				, handle_params_recursively ? token_for_recursion : aResultToken);
+			if (!handle_params_recursively)
+				return OK;
+		}
+	}
+	else if (etter) // Property with getter/setter.
 	{
 		// Prepare the parameter list: this, [value,] actual_param*
 		ExprTokenType this_etter(etter);
@@ -643,7 +670,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	{
 		ExprTokenType func_token;
 
-		if (etter)
+		if (etter || field && field->symbol == SYM_TYPED_FIELD)
 			func_token.CopyValueFrom(token_for_recursion);
 		else if (!field)
 			return INVOKE_NOT_HANDLED;
@@ -654,10 +681,16 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		auto result = CallAsMethod(func_token, aResultToken, aThisToken, actual_param, actual_param_count);
 		if (etter)
 			token_for_recursion.Free();
+		if (result == INVOKE_NOT_HANDLED)
+		{
+			// Something like obj.x(y) where obj.x exists but has no Call method.  Throw here
+			// to override the default error message, which would indicate that "x" is unknown.
+			result = aResultToken.UnknownMemberError(func_token, IT_CALL, nullptr);
+		}
 		return result;
 	}
 
-	if (actual_param_count > 0)
+	if (actual_param_count)
 	{
 		// This section handles parameters being passed to a property, such as this.x[y],
 		// when that property doesn't accept parameters (i.e. none were declared, or the
@@ -665,7 +698,11 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		if (!etter)
 		{
 			if (field)
-				field->ToToken(token_for_recursion);
+			{
+				if (field->symbol != SYM_TYPED_FIELD)
+					field->ToToken(token_for_recursion);
+				//else token_for_recursion was already set.
+			}
 			else if (method)
 				token_for_recursion.SetValue(method);
 			else
@@ -1414,6 +1451,37 @@ Property *Object::DefineProperty(name_t aName)
 	return field->prop;
 }
 
+TypedProperty *Object::DefineTypedProperty(name_t aName)
+{
+	index_t insert_pos;
+	auto field = FindField(aName, insert_pos);
+	if (!field && !(field = Insert(aName, insert_pos)))
+		return nullptr;
+	if (field->symbol != SYM_TYPED_FIELD)
+	{
+		field->Free();
+		field->symbol = SYM_TYPED_FIELD;
+		field->tprop = new TypedProperty();
+	}
+	return field->tprop;
+}
+
+Object::StructInfo *Object::GetStructInfo()
+{
+	if (!(mFlags & DataIsStructInfo))
+	{
+		if (mFlags & DataIsSetFlag)
+			return nullptr;
+		if (mData = malloc(sizeof(StructInfo)))
+		{
+			((StructInfo*)mData)->size = 0;
+			((StructInfo*)mData)->align = 1;
+			mFlags |= DataIsStructInfo | DataIsAllocatedFlag;
+		}
+	}
+	return (StructInfo*)mData;
+}
+
 ResultType GetObjMaxParams(IObject *aObj, int &aMaxParams, ResultToken &aResultToken)
 {
 	__int64 propval = 0;
@@ -1453,6 +1521,28 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	method.symbol = SYM_INVALID;
 	value.symbol = SYM_INVALID;
 	auto desc = dynamic_cast<Object *>(ParamIndexToObject(1));
+	if (desc && desc->GetOwnProp(value, _T("Type"))) // TODO: make this properly mutually exclusive with the others
+	{
+		auto ptype = TypeCode(TokenToString(value));
+		auto psize = TypeSize(ptype);
+		if (!psize)
+			_o_throw_param(1);
+		auto si = GetStructInfo();
+		if (!si)
+			_o_throw(_T("Cannot add typed property to active struct."));
+		auto tprop = DefineTypedProperty(name);
+		if (!tprop)
+			_o_throw_oom;
+		tprop->type = ptype;
+		if (psize > si->align) // TODO: allow overriding struct packing
+			si->align = psize;
+		ASSERT(si->align && ((si->align & (si->align - 1)) == 0)); // Must be a power of 2.
+		si->size = (si->size + si->align - 1) & ~(si->align - 1);
+		tprop->data_offset = si->size;
+		si->size += psize; // size may be unaligned until the struct definition is closed (if psize < si-align).
+		AddRef();
+		_o_return(this);
+	}
 	if (!desc // Must be an Object.
 		|| desc->GetOwnProp(getter, _T("Get")) && getter.symbol != SYM_OBJECT  // If defined, must be an object.
 		|| desc->GetOwnProp(setter, _T("Set")) && setter.symbol != SYM_OBJECT
@@ -1521,6 +1611,11 @@ void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, Expr
 		if (auto setter = field->prop->Setter()) desc->SetOwnProp(_T("Set"), setter);
 		if (auto method = field->prop->Method()) desc->SetOwnProp(_T("Call"), method);
 	}
+	else if (field->symbol == SYM_TYPED_FIELD)
+	{
+		desc->SetOwnProp(_T("Type"), TypeName(field->tprop->type));
+		desc->SetOwnProp(_T("Offset"), field->tprop->data_offset);
+	}
 	else
 	{
 		ExprTokenType value;
@@ -1548,6 +1643,14 @@ ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 	{
 		Release();
 		return FAIL;
+	}
+	while (proto && !(proto->mFlags & DataIsStructInfo))
+		proto = proto->mBase;
+	if (proto) // Typed properties are defined.
+	{
+		if (FAILED(AllocDataPtr(proto->GetStructInfo()->size)))
+			return aResultToken.MemoryError();
+		ZeroMemory((void*)DataPtr(), DataSize());
 	}
 	return Construct(aResultToken, aParam + 1, aParamCount - 1);
 }
@@ -1720,6 +1823,10 @@ bool Object::Variant::InitCopy(Variant &val)
 		prop->SetSetter(val.prop->Setter());
 		prop->SetMethod(val.prop->Method());
 		break;
+	case SYM_TYPED_FIELD:
+		tprop = new TypedProperty();
+		*tprop = *val.tprop;
+		break;
 	//case SYM_INTEGER:
 	//case SYM_FLOAT:
 	default:
@@ -1770,6 +1877,9 @@ void Object::Variant::ReturnMove(ResultToken &result)
 		break;
 	case SYM_MISSING:
 	case SYM_DYNAMIC:
+	case SYM_TYPED_FIELD:
+		// Since functons currently aren't permitted to return unset, these cases return ""
+		// (as documented for RemoveAt, Delete, etc.).
 		result.SetValue(_T(""), 0);
 		break;
 	//case SYM_INTEGER:
@@ -1789,6 +1899,8 @@ void Object::Variant::ToToken(ExprTokenType &aToken)
 		aToken.marker_length = string.Length();
 		break;
 	case SYM_DYNAMIC:
+	case SYM_TYPED_FIELD:
+		ASSERT(!"These cases should not be reached");
 		aToken.SetValue(_T(""), 0);
 		break;
 	default:
@@ -1806,6 +1918,7 @@ void Object::Variant::Free()
 	case SYM_STRING: string.~String(); break;
 	case SYM_OBJECT: object->Release(); break;
 	case SYM_DYNAMIC: delete prop; break;
+	case SYM_TYPED_FIELD: delete tprop; break;
 	}
 }
 
@@ -2204,6 +2317,11 @@ ResultType Object::GetEnumProp(UINT &aIndex, Var *aName, Var *aVal, int aVarCoun
 					aVal->Assign(result_token);
 					result_token.Free();
 				}
+			}
+			else if (field.symbol == SYM_TYPED_FIELD)
+			{
+				// TODO: enumerate typed properties based on fields in base?
+				aVal->Free(VAR_NEVER_FREE | VAR_REQUIRE_INIT);
 			}
 			else
 			{

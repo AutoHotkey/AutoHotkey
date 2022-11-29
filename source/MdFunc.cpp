@@ -553,6 +553,74 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 }
 
 
+ResultType SetValueOfTypeAtPtr(MdType aType, void *aPtr, ExprTokenType &aValue, ResultToken &aResultToken)
+{
+	ExprTokenType nt;
+	ASSERT(MdType_IsNum(aType));
+	if (!TokenToDoubleOrInt64(aValue, nt))
+		return aResultToken.TypeError(_T("Number"), aValue);
+	if (MdType_IsInt(aType) && nt.symbol == SYM_FLOAT)
+		nt.value_int64 = (__int64)nt.value_double;
+	switch (aType)
+	{
+	//case MdType::Bool32:
+	case MdType::Int32:
+	case MdType::UInt32: *(UINT*)aPtr = (UINT)nt.value_int64; break;
+	case MdType::UInt64:
+	case MdType::Int64: *(__int64*)aPtr = nt.value_int64; break;
+	case MdType::Float64: *(double*)aPtr = nt.symbol == SYM_FLOAT ? nt.value_double : (double)nt.value_int64; break;
+	case MdType::Float32: *(float*)aPtr = nt.symbol == SYM_FLOAT ? (float)nt.value_double : (float)nt.value_int64; break;
+	case MdType::Int8:
+	case MdType::UInt8: *(UINT8*)aPtr = (UINT8)nt.value_int64; break;
+	case MdType::Int16:
+	case MdType::UInt16: *(UINT16*)aPtr = (UINT16)nt.value_int64; break;
+	//case MdType::Object:
+	default:
+		ASSERT(!"MdType not implemented or not valid");
+	}
+	return OK;
+}
+
+
+size_t TypeSize(MdType aType)
+{
+	switch (aType)
+	{
+	case MdType::Int8:
+	case MdType::UInt8: return 1;
+	case MdType::Int16:
+	case MdType::UInt16: return 2;
+	case MdType::Float32:
+	case MdType::Int32:
+	case MdType::UInt32: return 4;
+	case MdType::Float64:
+	case MdType::Int64:
+	case MdType::UInt64: return 8;
+	default: return 0;
+	}
+}
+
+
+static LPCTSTR sTypeNames[] = { MDTYPE_NAMES };
+
+
+MdType TypeCode(LPCTSTR aName)
+{
+	for (int i = 1; i < _countof(sTypeNames); ++i)
+		if (!_tcsicmp(sTypeNames[i], aName))
+			return (MdType)i;
+	return MdType::Void;
+}
+
+
+LPCTSTR TypeName(MdType aType)
+{
+	if ((int)aType > 0 && (int)aType < _countof(sTypeNames))
+		return sTypeNames[(int)aType];
+	return nullptr;
+}
+
+
 bool MdFunc::ArgIsOutputVar(int aIndex)
 {
 	auto atp = mArgType;

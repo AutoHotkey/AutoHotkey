@@ -247,6 +247,13 @@ public:
 };
 
 
+struct TypedProperty
+{
+	MdType type;
+	size_t data_offset;
+};
+
+
 //
 // Object - Scriptable associative array.
 //
@@ -275,6 +282,7 @@ protected:
 			IObject *object;	// for SYM_OBJECT
 			String string;		// for SYM_STRING
 			Property *prop;		// for SYM_DYNAMIC
+			TypedProperty *tprop; // SYM_TYPED_FIELD
 		};
 		SymbolType symbol;
 		// key_c contains the first character of key.s. This utilizes space that would
@@ -306,6 +314,12 @@ protected:
 		~FieldType() { free(name); }
 	};
 
+	struct StructInfo
+	{
+		size_t size;
+		size_t align;
+	};
+
 	enum EnumeratorType
 	{
 		Enum_Properties,
@@ -324,7 +338,8 @@ protected:
 		NativeClassPrototype = 0x02,
 		DataIsSetFlag = 0x04,
 		DataIsAllocatedFlag = 0x08,
-		LastObjectFlag = 0x08
+		DataIsStructInfo = 0x10,
+		LastObjectFlag = 0x10
 	};
 
 	Object *CloneTo(Object &aTo);
@@ -352,6 +367,8 @@ private:
 	{
 		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
+	
+	StructInfo *GetStructInfo();
 
 protected:
 	ResultType CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
@@ -449,6 +466,7 @@ public:
 	}
 	
 	Property *DefineProperty(name_t aName);
+	TypedProperty *DefineTypedProperty(name_t aName);
 	bool DefineMethod(name_t aName, IObject *aFunc);
 	void DefineClass(name_t aName, Object *aClass);
 	

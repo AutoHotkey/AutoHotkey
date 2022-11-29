@@ -228,6 +228,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define SYM_IS_RESERVED(symbol) ((symbol) >= SYM_RESERVED_WORD) // No need to exclude SYM_COUNT in this case.
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
+	, SYM_TYPED_FIELD
 };
 
 // This should include all operators which can produce SYM_VAR for a subsequent assignment:
