@@ -12700,10 +12700,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				result = OK;
 			}
 			else
-				result = line->ExpandSingleArg(0, switch_value, our_deref_buf, our_deref_buf_size);
+				result = line->ExpandSingleArg(0, switch_value, our_deref_buf, our_deref_buf_size, SYM_OPERAND);
 			if (result == OK)
 			{
-				if (switch_value.symbol == SYM_STRING && switch_value.marker == our_deref_buf)
+				if (switch_value.symbol == SYM_OPERAND && switch_value.marker == our_deref_buf)
 				{
 					// Prevent the case expressions from reusing our_deref_buf, since we'll need it.
 					// A new buf will be allocated by ExpandSingleArg() if required, which would only
@@ -12725,7 +12725,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					for (arg = 0; arg < arg_count; ++arg)
 					{
 						ExprTokenType case_value;
-						result = case_line->ExpandSingleArg(arg, case_value, our_deref_buf, our_deref_buf_size);
+						result = case_line->ExpandSingleArg(arg, case_value, our_deref_buf, our_deref_buf_size, SYM_OPERAND);
 						if (result != OK)
 						{
 							line_to_execute = NULL; // Do not execute default case.

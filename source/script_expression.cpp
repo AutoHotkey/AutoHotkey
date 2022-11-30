@@ -1736,7 +1736,8 @@ double_deref_fail: // For the rare cases when the name of a dynamic function cal
 
 
 
-ResultType Line::ExpandSingleArg(int aArgIndex, ExprTokenType &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize)
+ResultType Line::ExpandSingleArg(int aArgIndex, ExprTokenType &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize
+	, SymbolType aStringSymbol)
 {
 	ExprTokenType *postfix = mArg[aArgIndex].postfix;
 	if (postfix->symbol < SYM_DYNAMIC // i.e. any other operand type.
@@ -1790,7 +1791,7 @@ ResultType Line::ExpandSingleArg(int aArgIndex, ExprTokenType &aResultToken, LPT
 
 	if (aResultToken.symbol == SYM_INVALID) // It wasn't set by ExpandExpression().
 	{
-		aResultToken.symbol = SYM_STRING;
+		aResultToken.symbol = aStringSymbol;
 		aResultToken.marker = string_result;
 	}
 	return OK;

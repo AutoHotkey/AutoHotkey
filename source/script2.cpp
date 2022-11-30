@@ -19237,8 +19237,13 @@ SymbolType TypeOfToken(ExprTokenType &aToken)
 BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right)
 // Compares two tokens using similar rules to SYM_EQUAL, but case sensitive if appropriate.
 {
-	SymbolType left_type = TypeOfToken(left)
-			, right_type = TypeOfToken(right);
+	// v1.1.36: SYM_STRING coming in means this is a literal quoted string, which is now always
+	// compared non-numerically because:
+	//  - There's otherwise no way for cases like "0" and "00" to co-exist.
+	//  - It makes little sense to quote values that are to be compared numerically.
+	//  - It's more consistent with expression operators such as SYM_EQUAL (=).
+	SymbolType left_type = left.symbol == SYM_STRING ? PURE_NOT_NUMERIC : TypeOfToken(left)
+			, right_type = right.symbol == SYM_STRING ? PURE_NOT_NUMERIC : TypeOfToken(right);
 
 	if (left_type == SYM_OBJECT || right_type == SYM_OBJECT)
 		return TokenToObject(left) == TokenToObject(right);
