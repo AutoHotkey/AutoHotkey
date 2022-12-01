@@ -1291,7 +1291,7 @@ void ReleaseStaticVarObjects(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		ASSERT(!aFuncs.mItem[i]->IsBuiltIn());
+		ASSERT(dynamic_cast<UserFunc*>(aFuncs.mItem[i]));
 		auto &f = *(UserFunc *)aFuncs.mItem[i];
 		// Since it doesn't seem feasible to release all var backups created by recursive function
 		// calls and all tokens in the 'stack' of each currently executing expression, currently
@@ -7339,7 +7339,7 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		ASSERT(!aFuncs.mItem[i]->IsBuiltIn());
+		ASSERT(dynamic_cast<UserFunc*>(aFuncs.mItem[i]));
 		auto &func = *(UserFunc *)aFuncs.mItem[i];
 		g->CurrentFunc = &func;
 		if (!PreparseExpressions(func.mJumpToLine)) // Preparse this function's body.
@@ -11880,7 +11880,7 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		ASSERT(!aFuncs.mItem[i]->IsBuiltIn());
+		ASSERT(dynamic_cast<UserFunc*>(aFuncs.mItem[i]));
 		auto &func = *(UserFunc *)aFuncs.mItem[i];
 		if (!PreprocessLocalVars(func))
 			return FAIL;
