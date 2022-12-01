@@ -9318,7 +9318,8 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 				if (param_count > func->mParamCount && !func->mIsVariadic)
 					return LineError(ERR_TOO_MANY_PARAMS, FAIL, func->mName);
 
-				auto *bif = func && func->IsBuiltIn() ? ((BuiltInFunc *)func)->mBIF : nullptr;
+				auto func_as_bif = dynamic_cast<BuiltInFunc*>(func);
+				auto *bif = func_as_bif ? func_as_bif->mBIF : nullptr;
 
 				for (int i = 0; i < param_count; ++i)
 				{
