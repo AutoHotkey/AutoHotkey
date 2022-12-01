@@ -1708,7 +1708,7 @@ public:
 	static BoundFunc *Bind(IObject *aFunc, int aFlags, LPCTSTR aMember, ExprTokenType **aParam, int aParamCount);
 	~BoundFunc();
 	
-	bool IsBuiltIn() override { return true; }
+	bool IsBuiltIn() override { return false; }
 	bool ArgIsOutputVar(int aArg) override { return false; }
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 };
