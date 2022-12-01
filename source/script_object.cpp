@@ -1509,7 +1509,7 @@ void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, Expr
 	if (!field)
 		_o__ret(aResultToken.UnknownMemberError(ExprTokenType(this), IT_GET, name));
 	auto desc = Object::Create();
-	desc->SetInternalCapacity(1 + (field->symbol == SYM_DYNAMIC));
+	desc->SetInternalCapacity(field->symbol == SYM_DYNAMIC ? 3 : 1);
 	if (field->symbol == SYM_DYNAMIC)
 	{
 		if (auto getter = field->prop->Getter()) desc->SetOwnProp(_T("Get"), getter);
