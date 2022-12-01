@@ -1815,7 +1815,7 @@ ResultType Array::SetCapacity(index_t aNewCapacity)
 	if (mLength > aNewCapacity)
 		RemoveAt(aNewCapacity, mLength - aNewCapacity);
 	auto new_item = (Variant *)realloc(mItem, sizeof(Variant) * aNewCapacity);
-	if (!new_item)
+	if (!new_item && aNewCapacity)
 		return FAIL;
 	mItem = new_item;
 	mCapacity = aNewCapacity;
