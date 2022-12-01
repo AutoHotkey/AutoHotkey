@@ -9294,18 +9294,14 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 			if (stack_count < 0)
 				return LineError(ERR_EXPR_SYNTAX);
 			Func *func = nullptr;
-			ExprTokenType *func_op = nullptr;
 			if (this_postfix->callsite->func)
-				func = dynamic_cast<Func*>(this_postfix->callsite->func);
+				func = this_postfix->callsite->func;
 			else
 			{
 				if (stack_count < 1)
 					return LineError(ERR_EXPR_SYNTAX);
-				func_op = stack[--stack_count];
-				if (func_op->symbol == SYM_VAR && func_op->var->HasObject())
-					func = dynamic_cast<Func*>(func_op->var->Object());
-				else if (func_op->symbol == SYM_OBJECT)
-					func = dynamic_cast<Func*>(func_op->object);
+				auto func_op = stack[--stack_count];
+				func = dynamic_cast<Func*>(TokenToObject(*func_op));
 			}
 			if (this_postfix->callsite->flags & EIF_LEAVE_PARAMS)
 				stack_count = prev_stack_count;
