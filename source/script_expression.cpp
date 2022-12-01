@@ -1681,8 +1681,12 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 {
 	if (aParamCount > mParamCount && !mIsVariadic) // v2 policy.
 	{
-		aResultToken.Error(ERR_TOO_MANY_PARAMS, mName);
-		return false;
+		for ( ; aParamCount && aParam[aParamCount - 1]->symbol == SYM_MISSING; --aParamCount);
+		if (aParamCount > mParamCount)
+		{
+			aResultToken.Error(ERR_TOO_MANY_PARAMS, mName);
+			return false;
+		}
 	}
 	return true;
 }
