@@ -77,19 +77,11 @@ bool FileCreateDir(LPCTSTR aDirSpec)
 
 static bool FileCreateDirRecursive(LPTSTR aDirSpec)
 {
-	DWORD attr = GetFileAttributes(aDirSpec);
-	if (attr != 0xFFFFFFFF)  // aDirSpec already exists.
-	{
-		SetLastError(ERROR_ALREADY_EXISTS);
-		return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0; // Indicate success if it already exists as a dir.
-	}
-
 	// If it has a backslash, make sure all its parent directories exist before we attempt
 	// to create this directory:
 	LPTSTR last_backslash = _tcsrchr(aDirSpec, '\\');
 	if (last_backslash > aDirSpec // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
-		&& last_backslash[-1] != ':' // v1.1.31.00: Don't attempt FileCreateDir("C:") since that's equivalent to either "C:\" or the working directory (which already exists), or FileCreateDir("\\?\C:") since it always fails.
-		&& last_backslash[1]) // Skip the recursive call if it's just a trailing backslash.
+		&& last_backslash[-1] != ':') // v1.1.31.00: Don't attempt FileCreateDir("C:") since that's equivalent to either "C:\" or the working directory (which already exists), or FileCreateDir("\\?\C:") since it always fails.
 	{
 		*last_backslash = '\0'; // Temporarily terminate for parent directory.
 		auto exists = FileCreateDirRecursive(aDirSpec); // Recursively create all needed ancestor directories.
@@ -100,7 +92,7 @@ static bool FileCreateDirRecursive(LPTSTR aDirSpec)
 
 	// The above has recursively created all parent directories of aDirSpec if needed.
 	// Now we can create aDirSpec.
-	return CreateDirectory(aDirSpec, NULL);
+	return CreateDirectory(aDirSpec, NULL) || GetLastError() == ERROR_ALREADY_EXISTS;
 }
 
 
