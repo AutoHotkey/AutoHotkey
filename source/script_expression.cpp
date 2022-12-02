@@ -1793,6 +1793,7 @@ ResultType Line::ExpandSingleArg(int aArgIndex, ExprTokenType &aResultToken, LPT
 	{
 		aResultToken.symbol = aStringSymbol;
 		aResultToken.marker = string_result;
+		aResultToken.buf = nullptr; // Necessary for SYM_OPERAND.
 	}
 	return OK;
 }
