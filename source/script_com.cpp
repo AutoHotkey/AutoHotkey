@@ -312,6 +312,14 @@ BIF_DECL(BIF_ComObjConnect)
 {
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
+	
+	LPCTSTR prefix = nullptr;    // Set default: disconnect.
+	IObject *handlers = nullptr; //
+	if (!ParamIndexIsOmitted(1))
+	{
+		prefix = ParamIndexToString(1);
+		handlers = ParamIndexToObject(1);
+	}
 
 	if (ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0])))
 	{
@@ -321,8 +329,28 @@ BIF_DECL(BIF_ComObjConnect)
 			return;
 		}
 		
-		ITypeInfo *ptinfo;
-		if (  !obj->mEventSink && (ptinfo = GetClassTypeInfo(obj->mUnknown))  )
+		bool already_connected = obj->mEventSink;
+		if (already_connected)
+		{
+			if (!prefix)
+			{
+				HRESULT hr = obj->mEventSink->Connect(); // This should result in mEventSink being deleted.
+				if (FAILED(hr))
+					ComError(hr);
+				return;
+			}
+		}
+		else
+			obj->mEventSink = new ComEvent(obj);
+		
+		// Set or update prefix/event sink prior to calling Advise().
+		obj->mEventSink->SetPrefixOrSink(prefix, handlers);
+		if (already_connected)
+			return;
+		
+		HRESULT hr = E_NOINTERFACE;
+		
+		if (ITypeInfo *ptinfo = GetClassTypeInfo(obj->mUnknown))
 		{
 			TYPEATTR *typeattr;
 			WORD cImplTypes = 0;
@@ -345,7 +373,10 @@ BIF_DECL(BIF_ComObjConnect)
 					{
 						if (typeattr->typekind == TKIND_DISPATCH)
 						{
-							obj->mEventSink = new ComEvent(obj, prinfo, typeattr->guid);
+							hr = obj->mEventSink->Connect(prinfo, &typeattr->guid);
+							// Let the connection point's reference be the only one, so we can detect when it releases.
+							// If Connect() failed, this will delete the event sink, which will set mEventSink = nullptr.
+							obj->mEventSink->Release();
 							prinfo->ReleaseTypeAttr(typeattr);
 							break;
 						}
@@ -357,22 +388,25 @@ BIF_DECL(BIF_ComObjConnect)
 			ptinfo->Release();
 		}
 
-		if (obj->mEventSink)
-		{
-			HRESULT hr;
-			if (aParamCount < 2)
-				hr = obj->mEventSink->Connect(); // Disconnect.
-			else
-				hr = obj->mEventSink->Connect(TokenToString(*aParam[1]), TokenToObject(*aParam[1]));
-			if (FAILED(hr))
-				ComError(hr);
-			return;
-		}
-
-		ComError(E_NOINTERFACE);
+		if (FAILED(hr))
+			ComError(hr);
 	}
 	else
 		ComError(-1); // "No COM object"
+}
+
+
+ComEvent::~ComEvent()
+{
+	// At this point, all references have been released, including the
+	// reference held by the connection point (if a connection was made),
+	// so Unadvise() isn't necessary and couldn't be successful anyway.
+	if (mObject)
+		mObject->mEventSink = nullptr;
+	if (mTypeInfo)
+		mTypeInfo->Release();
+	if (mAhkObject)
+		mAhkObject->Release();
 }
 
 
@@ -1012,7 +1046,7 @@ STDMETHODIMP ComEvent::GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNam
 
 STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
 {
-	if (!mObject) // mObject == NULL should be next to impossible since it is only set NULL after calling Unadvise(), in which case there shouldn't be anyone left to call this->Invoke().  Check it anyway since it might be difficult to debug, depending on what we're connected to.
+	if (!mObject) // mObject == NULL should be impossible unless Unadvise() somehow fails while leaving behind a valid connection.  Check it anyway since it might be difficult to debug, depending on what we're connected to.
 		return DISP_E_MEMBERNOTFOUND;
 
 	// Resolve method name.
@@ -1070,57 +1104,50 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	return S_OK;
 }
 
-HRESULT ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
+HRESULT ComEvent::Connect(ITypeInfo *tinfo, IID *iid)
 {
-	HRESULT hr;
-
-	if ((pfx != NULL) != (mCookie != 0)) // want_connection != have_connection
+	bool want_to_connect = tinfo;
+	if (want_to_connect)
 	{
-		IConnectionPointContainer *pcpc;
-		hr = mObject->mDispatch->QueryInterface(IID_IConnectionPointContainer, (void **)&pcpc);
-		if (SUCCEEDED(hr))
-		{
-			IConnectionPoint *pconn;
-			hr = pcpc->FindConnectionPoint(mIID, &pconn);
-			if (SUCCEEDED(hr))
-			{
-				if (pfx)
-				{
-					hr = pconn->Advise(this, &mCookie);
-				}
-				else
-				{
-					hr = pconn->Unadvise(mCookie);
-					if (SUCCEEDED(hr))
-						mCookie = 0;
-					if (mAhkObject) // Even if above failed:
-					{
-						mAhkObject->Release();
-						mAhkObject = NULL;
-					}
-				}
-				pconn->Release();
-			}
-			pcpc->Release();
-		}
+		// Set these unconditionally to ensure they are released on failure or disconnection.
+		ASSERT(!mTypeInfo && iid);
+		mTypeInfo = tinfo;
+		mIID = *iid;
 	}
-	else
-		hr = S_OK; // No change required.
-
+	
+	IConnectionPointContainer *pcpc;
+	HRESULT hr = mObject->mDispatch->QueryInterface(IID_IConnectionPointContainer, (void **)&pcpc);
 	if (SUCCEEDED(hr))
 	{
-		if (mAhkObject)
-			// Release this object before storing the new one below.
-			mAhkObject->Release();
-		// Update prefix/object.
-		if (mAhkObject = ahkObject)
-			mAhkObject->AddRef();
-		if (pfx)
-			_tcscpy(mPrefix, pfx);
-		else
-			*mPrefix = '\0'; // For maintainability.
+		IConnectionPoint *pconn;
+		hr = pcpc->FindConnectionPoint(mIID, &pconn);
+		if (SUCCEEDED(hr))
+		{
+			if (want_to_connect)
+				hr = pconn->Advise(this, &mCookie);
+			else if (mCookie != 0) // This check preserves legacy behaviour of ComObjConnect(obj) without a prior connection.
+				hr = pconn->Unadvise(mCookie); // This should result in this ComEvent being deleted.
+			pconn->Release();
+		}
+		pcpc->Release();
 	}
 	return hr;
+}
+
+void ComEvent::SetPrefixOrSink(LPCTSTR pfx, IObject *ahkObject)
+{
+	if (mAhkObject)
+	{
+		mAhkObject->Release();
+		mAhkObject = NULL;
+	}
+	if (ahkObject)
+	{
+		ahkObject->AddRef();
+		mAhkObject = ahkObject;
+	}
+	if (pfx)
+		tcslcpy(mPrefix, pfx, _countof(mPrefix));
 }
 
 ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)

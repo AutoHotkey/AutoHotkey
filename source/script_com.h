@@ -29,18 +29,11 @@ public:
 	}
 	IObject_Type_Impl("ComEvent") // Unlikely to be called; see above.
 
-	HRESULT Connect(LPTSTR pfx = NULL, IObject *ahkObject = NULL);
+	HRESULT Connect(ITypeInfo *tinfo = nullptr, IID *iid = nullptr);
+	void SetPrefixOrSink(LPCTSTR pfx, IObject *ahkObject);
 
-	ComEvent(ComObject *obj, ITypeInfo *tinfo, IID iid)
-		: mCookie(0), mObject(obj), mTypeInfo(tinfo), mIID(iid), mAhkObject(NULL)
-	{
-	}
-	~ComEvent()
-	{
-		mTypeInfo->Release();
-		if (mAhkObject)
-			mAhkObject->Release();
-	}
+	ComEvent(ComObject *obj) : mObject(obj), mCookie(0), mTypeInfo(NULL), mAhkObject(NULL) { }
+	~ComEvent();
 
 	friend class ComObject;
 };
@@ -85,9 +78,9 @@ public:
 		{
 			if (mEventSink)
 			{
-				mEventSink->Connect();
-				mEventSink->mObject = NULL;
-				mEventSink->Release();
+				mEventSink->Connect(FALSE);
+				if (mEventSink) // i.e. it wasn't fully released as a result of calling Unadvise().
+					mEventSink->mObject = nullptr;
 			}
 			mUnknown->Release();
 		}
