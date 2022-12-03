@@ -7,11 +7,11 @@ extern bool g_ComErrorNotify;
 class ComObject;
 class ComEvent : public ObjectBase
 {
-	DWORD mCookie;
+	DWORD mCookie = 0;
 	ComObject *mObject;
-	ITypeInfo *mTypeInfo;
+	ITypeInfo *mTypeInfo = nullptr;
 	IID mIID;
-	IObject *mAhkObject;
+	IObject *mAhkObject = nullptr;
 	TCHAR mPrefix[64];
 
 public:
@@ -27,18 +27,11 @@ public:
 	IObject_Type_Impl("ComEvent") // Unlikely to be called; see above.
 	Object *Base() { return nullptr; }
 
-	HRESULT Connect(LPCTSTR pfx = NULL, IObject *ahkObject = NULL);
+	HRESULT Connect(ITypeInfo *tinfo = nullptr, IID *iid = nullptr);
+	void SetPrefixOrSink(LPCTSTR pfx, IObject *ahkObject);
 
-	ComEvent(ComObject *obj, ITypeInfo *tinfo, IID iid)
-		: mCookie(0), mObject(obj), mTypeInfo(tinfo), mIID(iid), mAhkObject(NULL)
-	{
-	}
-	~ComEvent()
-	{
-		mTypeInfo->Release();
-		if (mAhkObject)
-			mAhkObject->Release();
-	}
+	ComEvent(ComObject *obj) : mObject(obj) { }
+	~ComEvent();
 
 	friend class ComObject;
 };
@@ -103,9 +96,9 @@ public:
 		{
 			if (mEventSink)
 			{
-				mEventSink->Connect();
-				mEventSink->mObject = NULL;
-				mEventSink->Release();
+				mEventSink->Connect(FALSE);
+				if (mEventSink) // i.e. it wasn't fully released as a result of calling Unadvise().
+					mEventSink->mObject = nullptr;
 			}
 			mUnknown->Release();
 		}
