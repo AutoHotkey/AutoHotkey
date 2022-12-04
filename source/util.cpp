@@ -3234,7 +3234,7 @@ __declspec(noinline) // Prioritize code size for this.
 int VersionSatisfies(LPCTSTR v, LPCTSTR req, bool aThreeWayDefault)
 {
 	// Support prefixes <, >, <=, >=, =; default to >= unless aThreeWayDefault.
-	bool rmap[] = { *req == '<', *req != '<' || req[1] == '=', *req != '<' && *req != '=' };
+	bool rmap[] = { *req == '<', !(*req == '<' || *req == '>') || req[1] == '=', *req != '<' && *req != '=' };
 	LPCTSTR reqv = req;
 	if (*reqv == '<' || *reqv == '>') ++reqv;
 	if (*reqv == '=') ++reqv;
