@@ -315,11 +315,20 @@ Script::Script()
 
 Script::~Script() // Destructor.
 {
-	// MSDN: "Before terminating, an application must call the UnhookWindowsHookEx function to free
-	// system resources associated with the hook."
-	AddRemoveHooks(0); // Remove all hooks.
+	Hotkey::AllDestruct(); // Unregister hooks and hotkeys.
+
 	if (mNIC.hWnd) // Tray icon is installed.
 		Shell_NotifyIcon(NIM_DELETE, &mNIC); // Remove it.
+
+	if (mOnClipboardChangeLabel || mOnClipboardChange.Count()) // Remove from viewer chain.
+		EnableClipboardListener(false);
+
+	// DestroyWindow() will cause MainWindowProc() to immediately receive and process the
+	// WM_DESTROY msg, which should in turn result in any child windows being destroyed
+	// and other cleanup being done:
+	g_DestroyWindowCalled = true;
+	DestroyWindow(g_hWnd);
+
 	// Destroy any Progress/SplashImage windows that haven't already been destroyed.  This is necessary
 	// because sometimes these windows aren't owned by the main window:
 	int i;
@@ -394,9 +403,6 @@ Script::~Script() // Destructor.
 
 	if (g_hFontSplash) // The splash window itself should auto-destroyed, since it's owned by main.
 		DeleteObject(g_hFontSplash);
-
-	if (mOnClipboardChangeLabel || mOnClipboardChange.Count()) // Remove from viewer chain.
-		EnableClipboardListener(false);
 
 	// Close any open sound item to prevent hang-on-exit in certain operating systems or conditions.
 	// If there's any chance that a sound was played and not closed out, or that it is still playing,
@@ -1194,16 +1200,18 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 	g_Debugger.Exit(aExitReason);
 #endif
 
-	// We call DestroyWindow() because MainWindowProc() has left that up to us.
-	// DestroyWindow() will cause MainWindowProc() to immediately receive and process the
-	// WM_DESTROY msg, which should in turn result in any child windows being destroyed
-	// and other cleanup being done:
-	if (IsWindow(g_hWnd)) // Adds peace of mind in case WM_DESTROY was already received in some unusual way.
-	{
-		g_DestroyWindowCalled = true;
-		DestroyWindow(g_hWnd);
-	}
-	Hotkey::AllDestructAndExit(aExitCode);
+	// PostQuitMessage() might be needed to prevent hang-on-exit.  Once this is done, no message boxes or
+	// other dialogs can be displayed.  MSDN: "The exit value returned to the system must be the wParam
+	// parameter of the WM_QUIT message."  In our case, PostQuitMessage() should announce the same exit code
+	// that we will eventually call exit() with:
+	PostQuitMessage(aExitCode);
+
+	// I know this isn't the preferred way to exit the program.  However, due to unusual
+	// conditions such as the script having MsgBoxes or other dialogs displayed on the screen
+	// at the time the user exits (in which case our main event loop would be "buried" underneath
+	// the event loops of the dialogs themselves), this is the only reliable way I've found to exit
+	// so far.
+	exit(aExitCode); // exit() is insignificant in code size.  It does more than ExitProcess(), but perhaps nothing more that this application actually requires.
 }
 
 

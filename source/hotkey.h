@@ -202,7 +202,7 @@ public:
 	static bool sJoystickHasHotkeys[MAX_JOYSTICKS];
 	static DWORD sJoyHotkeyCount;
 
-	static void AllDestructAndExit(int exit_code);
+	static void AllDestruct();
 
 	#define HOTKEY_EL_BADLABEL           _T("1") // Set as strings so that SetFormat doesn't affect their appearance (for use with "If ErrorLevel in 5,6").
 	#define HOTKEY_EL_INVALID_KEYNAME    _T("2")
