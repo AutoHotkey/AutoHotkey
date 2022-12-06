@@ -41,14 +41,6 @@
       <Configuration>Release(mbcs)</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
-    <ProjectConfiguration Include="Release(minimal)|Win32">
-      <Configuration>Release(minimal)</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release(minimal)|x64">
-      <Configuration>Release(minimal)</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
     <ProjectConfiguration Include="Self-contained|Win32">
       <Configuration>Self-contained</Configuration>
       <Platform>Win32</Platform>
@@ -71,14 +63,6 @@
     </ProjectConfiguration>
     <ProjectConfiguration Include="Self-contained(mbcs)|x64">
       <Configuration>Self-contained(mbcs)</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Self-contained(minimal)|Win32">
-      <Configuration>Self-contained(minimal)</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Self-contained(minimal)|x64">
-      <Configuration>Self-contained(minimal)</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
@@ -188,32 +172,24 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|x64'" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|Win32'" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(debug)|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(debug)|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|x64'" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|Win32'" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|x64'" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|Win32'" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(minimal)|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(debug)|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(debug)|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|x64'" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|Win32'" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|x64'" />
   <!-- FILES -->
   <ItemGroup>
     <ClCompile Include="source\application.cpp" />
