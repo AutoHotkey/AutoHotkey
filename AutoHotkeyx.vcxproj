@@ -3,10 +3,8 @@
   <PropertyGroup>
     <ProjectGuid>{76EFDEE3-81CF-4ADA-94DC-EA5509FF6FFC}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-  </PropertyGroup>
-  <PropertyGroup>
-    <TargetName>AutoHotkey</TargetName>
     <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType Condition="$(Configuration.Contains('.dll'))">DynamicLibrary</ConfigurationType>
   </PropertyGroup>
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -25,6 +23,14 @@
       <Configuration>Debug(mbcs)</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug.dll|Win32">
+      <Configuration>Debug.dll</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug.dll|x64">
+      <Configuration>Debug.dll</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
       <Configuration>Release</Configuration>
       <Platform>Win32</Platform>
@@ -39,6 +45,14 @@
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release(mbcs)|x64">
       <Configuration>Release(mbcs)</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release.dll|Win32">
+      <Configuration>Release.dll</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release.dll|x64">
+      <Configuration>Release.dll</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Self-contained|Win32">
@@ -77,9 +91,10 @@
       <SubSystem>Windows</SubSystem>
       <AdditionalDependencies>wsock32.lib;winmm.lib;version.lib;comctl32.lib;psapi.lib;wininet.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <StackReserveSize>4194304</StackReserveSize>
-      <TerminalServerAware>false</TerminalServerAware>
+      <TerminalServerAware Condition="!$(ConfigDll)">false</TerminalServerAware>
       <DataExecutionPrevention>false</DataExecutionPrevention>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <ProgramDatabaseFile Condition="$(ConfigDll)">$(OutDir)\$(TargetName)_dll.pdb</ProgramDatabaseFile>
     </Link>
   </ItemDefinitionGroup>
   <!-- platform: win32 -->
@@ -126,6 +141,15 @@
     <Manifest>
       <AdditionalManifestFiles>source\resources\AutoHotkey.exe.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
     </Manifest>
+  </ItemDefinitionGroup>
+  <!-- AutoHotkey.dll -->
+  <ItemDefinitionGroup Condition="$(ConfigDll)">
+    <ClCompile>
+      <PreprocessorDefinitions>CONFIG_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>CONFIG_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <!-- self-contained: required settings -->
   <PropertyGroup Condition="$(ConfigSC)">
@@ -192,6 +216,9 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|x64'" />
   <!-- FILES -->
   <ItemGroup>
+    <ClCompile Include="source\ahklib.cpp">
+      <ExcludedFromBuild Condition="!$(ConfigDll)">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="source\application.cpp" />
     <ClCompile Include="source\AutoHotkey.cpp" />
     <ClCompile Include="source\clipboard.cpp" />

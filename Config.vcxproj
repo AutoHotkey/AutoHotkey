@@ -8,9 +8,11 @@
     <ConfigDebug>false</ConfigDebug>
     <ConfigSC>false</ConfigSC>
     <ConfigMinSize>false</ConfigMinSize>
+    <ConfigDll>false</ConfigDll>
     <ConfigRelease Condition="$(Configuration.Contains('Release'))">true</ConfigRelease>
     <ConfigDebug Condition="$(Configuration.Contains('ebug'))">true</ConfigDebug>
     <ConfigSC Condition="$(Configuration.Contains('Self-contained'))">true</ConfigSC>
+    <ConfigDll Condition="$(Configuration.Contains('.dll'))">true</ConfigDll>
     
     <!-- CharacterSet may be set on command-line:
       MSBuild AutoHotkeyx.sln /p:Configuration=Release;CharacterSet=MultiByte -->
