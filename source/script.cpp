@@ -420,7 +420,7 @@ Script::~Script() // Destructor.
 
 
 
-ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestart)
+ResultType Script::Init(LPTSTR aScriptFilename, bool aIsRestart)
 // Returns OK or FAIL.
 // Caller has provided an empty string for aScriptFilename if this is a compiled script.
 // Otherwise, aScriptFilename can be NULL if caller hasn't determined the filename of the script yet.

@@ -173,7 +173,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	global_init(*g);  // Set defaults.
 
 	// Set up the basics of the script:
-	if (g_script.Init(*g, script_filespec, restart_mode) != OK)
+	if (g_script.Init(script_filespec, restart_mode) != OK)
 		return CRITICAL_ERROR;
 
 	// Set g_default now, reflecting any changes made to "g" above, in case AutoExecSection(), below,
