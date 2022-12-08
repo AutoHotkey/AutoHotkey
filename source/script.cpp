@@ -308,6 +308,7 @@ Script::Script()
 		ScriptError(_T("DEBUG: Since there are now more than 256 Action Types, the ActionTypeType")
 			_T(" typedef must be changed."));
 #endif
+	InitializeCriticalSection(&g_CriticalRegExCache); // v1.0.45.04: Must be done early so that it's unconditional, so that DeleteCriticalSection() in the script destructor can also be unconditional.
 	OleInitialize(NULL);
 }
 
