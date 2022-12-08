@@ -179,16 +179,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// never returns, perhaps because it contains an infinite loop (intentional or not):
 	CopyMemory(&g_default, g, sizeof(global_struct));
 
-	// Could use CreateMutex() but that seems pointless because we have to discover the
-	// hWnd of the existing process so that we can close or restart it, so we would have
-	// to do this check anyway, which serves both purposes.  Alt method is this:
-	// Even if a 2nd instance is run with the /force switch and then a 3rd instance
-	// is run without it, that 3rd instance should still be blocked because the
-	// second created a 2nd handle to the mutex that won't be closed until the 2nd
-	// instance terminates, so it should work ok:
-	//CreateMutex(NULL, FALSE, script_filespec); // script_filespec seems a good choice for uniqueness.
-	//if (!g_ForceLaunch && !restart_mode && GetLastError() == ERROR_ALREADY_EXISTS)
-
 	UINT load_result = g_script.LoadFromFile(script_filespec);
 	if (load_result == LOADING_FAILED) // Error during load (was already displayed by the function call).
 		return CRITICAL_ERROR;  // Should return this value because PostQuitMessage() also uses it.
