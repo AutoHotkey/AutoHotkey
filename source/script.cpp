@@ -276,6 +276,13 @@ Script::Script()
 	else
 		mTrayMenu->mIncludeStandardItems = true;
 
+	if (Var *clipboard_var = FindOrAddVar(_T("Clipboard")))
+		// This is done here rather than upon variable creation speed up runtime/dynamic variable creation.
+		// Since the clipboard can be changed by activity outside the program, don't read-cache its contents.
+		// Since other applications and the user should see any changes the program makes to the clipboard,
+		// don't write-cache it either.
+		clipboard_var->DisableCache();
+
 #ifdef _DEBUG
 	if (ID_FILE_EXIT < ID_MAIN_FIRST) // Not a very thorough check.
 		ScriptError(_T("DEBUG: ID_FILE_EXIT is too large (conflicts with IDs reserved via ID_USER_FIRST)."));

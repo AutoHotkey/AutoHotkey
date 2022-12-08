@@ -294,14 +294,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	g_script.mIsReadyToExecute = true; // This is done only after the above to support error reporting in Hotkey.cpp.
 	g_HSSameLineAction = false; // `#Hotstring X` should not affect Hotstring().
 
-	Var *clipboard_var = g_script.FindOrAddVar(_T("Clipboard")); // Add it if it doesn't exist, in case the script accesses "Clipboard" via a dynamic variable.
-	if (clipboard_var)
-		// This is done here rather than upon variable creation speed up runtime/dynamic variable creation.
-		// Since the clipboard can be changed by activity outside the program, don't read-cache its contents.
-		// Since other applications and the user should see any changes the program makes to the clipboard,
-		// don't write-cache it either.
-		clipboard_var->DisableCache();
-
 	return MainExecuteScript();
 }
 
