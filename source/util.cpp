@@ -2982,21 +2982,23 @@ __declspec(noinline) // Prioritize code size for this.
 int VersionSatisfies(LPCTSTR v, LPCTSTR req, bool aThreeWayDefault)
 {
 	// Support prefixes <, >, <=, >=, =; default to >= unless aThreeWayDefault.
-	bool rmap[] = { *req == '<', *req != '<' || req[1] == '=', *req != '<' && *req != '=' };
+	bool rmap[] = { false, false, false };
 	LPCTSTR reqv = req;
-	if (*reqv == '<' || *reqv == '>') ++reqv;
-	if (*reqv == '=') ++reqv;
+	if (*reqv == '<') ++reqv, rmap[1-1] = true;
+	if (*reqv == '>') ++reqv, rmap[1+1] = true;
+	if (*reqv == '=') ++reqv, rmap[1+0] = true;
 	bool has_op = reqv != req;
 	// Support optional v prefix.
 	if (*v == 'v') ++v;
 	if (*reqv == 'v') ++reqv;
 	// Perform the comparison.
 	int result = CompareVersion(v, reqv);
-	if (!has_op && aThreeWayDefault)
-		return result;
-	result = rmap[result + 1];
-	// When no operator is specified, also require that the major version matches.
-	return result && !has_op && _ttoi(v) != _ttoi(reqv) ? false : result;
+	if (!has_op)
+	{
+		// When no operator is specified, also require that the major version matches.
+		return aThreeWayDefault ? result : result >= 0 && _ttoi(v) == _ttoi(reqv);
+	}
+	return rmap[result + 1];
 }
 
 
