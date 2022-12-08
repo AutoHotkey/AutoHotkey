@@ -416,6 +416,11 @@ Script::~Script() // Destructor.
 			mciSendString(_T("close ") SOUNDPLAY_ALIAS, NULL, 0, NULL);
 	}
 
+#ifndef AUTOHOTKEYSC
+	if (mIncludeLibraryFunctionsThenExit)
+		delete mIncludeLibraryFunctionsThenExit; // ~TextFile() ensures buffered writes are flushed to disk.
+#endif
+
 #ifdef ENABLE_KEY_HISTORY_FILE
 	KeyHistoryToFile();  // Close the KeyHistory file if it's open.
 #endif
@@ -1301,10 +1306,7 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 
 #ifndef AUTOHOTKEYSC
 	if (mIncludeLibraryFunctionsThenExit)
-	{
-		delete mIncludeLibraryFunctionsThenExit;
 		return 0; // Tell our caller to do a normal exit.
-	}
 #endif
 
 	// v1.0.35.11: Restore original working directory so that changes made to it by the above (via
