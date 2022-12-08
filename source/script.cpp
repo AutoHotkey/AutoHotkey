@@ -424,6 +424,12 @@ Script::~Script() // Destructor.
 			mciSendString(_T("close ") SOUNDPLAY_ALIAS, NULL, 0, NULL);
 	}
 
+#ifdef CONFIG_DLL
+	UnregisterClass(WINDOW_CLASS_MAIN, g_hInstance);
+	UnregisterClass(WINDOW_CLASS_SPLASH, g_hInstance);
+	UnregisterClass(WINDOW_CLASS_GUI, g_hInstance);
+#endif
+
 #ifndef AUTOHOTKEYSC
 	if (mIncludeLibraryFunctionsThenExit)
 		delete mIncludeLibraryFunctionsThenExit; // ~TextFile() ensures buffered writes are flushed to disk.
