@@ -3050,7 +3050,7 @@ public:
 
 	UserMenu *mTrayMenu; // Our tray menu, which should be destroyed upon exiting the program.
     
-	ResultType Init(LPTSTR aScriptFilename, bool aIsRestart);
+	ResultType Init(LPTSTR aScriptFilename);
 	ResultType CreateWindows();
 	void EnableClipboardListener(bool aEnable);
 	void EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags);

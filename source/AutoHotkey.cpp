@@ -49,9 +49,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	UpdateWorkingDir(); // Needed for the FileSelectFile() workaround.
 	g_WorkingDirOrig = SimpleHeap::Malloc(const_cast<LPTSTR>(g_WorkingDir.GetString())); // Needed by the Reload command.
 
-	// Set defaults, to be overridden by command line args we receive:
-	bool restart_mode = false;
-
 	TCHAR *script_filespec = NULL; // Set default as "unspecified/omitted".
 #ifndef AUTOHOTKEYSC
 	// Is this a compiled script?
@@ -80,7 +77,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// For example, if the user runs "CompiledScript.exe /find", we want /find to be considered
 		// an input parameter for the script rather than a switch:
 		if (!_tcsicmp(param, _T("/R")) || !_tcsicmp(param, _T("/restart")))
-			restart_mode = true;
+			g_script.mIsRestart = true;
 		else if (!_tcsicmp(param, _T("/F")) || !_tcsicmp(param, _T("/force")))
 			g_ForceLaunch = true;
 		else if (!_tcsnicmp(param, _T("/ErrorStdOut"), 12))
@@ -172,7 +169,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	global_init(*g);  // Set defaults.
 
 	// Set up the basics of the script:
-	if (g_script.Init(script_filespec, restart_mode) != OK)
+	if (g_script.Init(script_filespec) != OK)
 		return CRITICAL_ERROR;
 
 	// Set g_default now, reflecting any changes made to "g" above, in case AutoExecSection(), below,
@@ -193,7 +190,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 	HWND w_existing = NULL;
 	UserMessages reason_to_close_prior = (UserMessages)0;
-	if (g_AllowOnlyOneInstance && g_AllowOnlyOneInstance != SINGLE_INSTANCE_OFF && !restart_mode && !g_ForceLaunch)
+	if (g_AllowOnlyOneInstance && g_AllowOnlyOneInstance != SINGLE_INSTANCE_OFF && !g_script.mIsRestart && !g_ForceLaunch)
 	{
 		// Note: the title below must be constructed the same was as is done by our
 		// CreateWindows(), which is why it's standardized in g_script.mMainWindowTitle:
@@ -210,7 +207,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			reason_to_close_prior = AHK_EXIT_BY_SINGLEINSTANCE;
 		}
 	}
-	if (!reason_to_close_prior && restart_mode)
+	if (!reason_to_close_prior && g_script.mIsRestart)
 		if (w_existing = FindWindow(WINDOW_CLASS_MAIN, g_script.mMainWindowTitle))
 			reason_to_close_prior = AHK_EXIT_BY_RELOAD;
 	if (reason_to_close_prior)

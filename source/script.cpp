@@ -439,12 +439,11 @@ Script::~Script() // Destructor.
 
 
 
-ResultType Script::Init(LPTSTR aScriptFilename, bool aIsRestart)
+ResultType Script::Init(LPTSTR aScriptFilename)
 // Returns OK or FAIL.
 // Caller has provided an empty string for aScriptFilename if this is a compiled script.
 // Otherwise, aScriptFilename can be NULL if caller hasn't determined the filename of the script yet.
 {
-	mIsRestart = aIsRestart;
 	TCHAR buf[UorA(T_MAX_PATH, 2048)]; // Just to make sure we have plenty of room to do things with.
 	size_t buf_length;
 
