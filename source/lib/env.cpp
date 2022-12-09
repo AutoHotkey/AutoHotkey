@@ -155,7 +155,7 @@ bif_impl int MonitorGetPrimary()
 	// since there's no mention of this in the MS docs) it seems best to have this function in case that
 	// policy ever changes.
 	MonitorInfoPackage mip = {0};
-	EnumForMonitorGet(mip, COUNT_ALL_MONITORS);
+	EnumForMonitorGet(mip, 0);
 	return mip.count;
 }
 
