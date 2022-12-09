@@ -1420,11 +1420,14 @@ LPTSTR ComObject::Type()
 		return _T("ComObjRef"); // Has this[].
 	if ((mVarType == VT_DISPATCH || mVarType == VT_UNKNOWN) && mUnknown)
 	{
-		BSTR name;
-		ITypeInfo *ptinfo;
 		// Use COM class name if available.
-		if (  (ptinfo = GetClassTypeInfo(mUnknown))
-			&& SUCCEEDED(ptinfo->GetDocumentation(MEMBERID_NIL, &name, NULL, NULL, NULL))  )
+		BSTR name = nullptr;
+		if (ITypeInfo *ptinfo = GetClassTypeInfo(mUnknown))
+		{
+			ptinfo->GetDocumentation(MEMBERID_NIL, &name, NULL, NULL, NULL);
+			ptinfo->Release();
+		}
+		if (name)
 		{
 			static TCHAR sBuf[64]; // Seems generous enough.
 			tcslcpy(sBuf, CStringTCharFromWCharIfNeeded(name), _countof(sBuf));
