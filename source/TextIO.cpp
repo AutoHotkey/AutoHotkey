@@ -703,8 +703,7 @@ __int64 TextFile::_Tell() const
 __int64 TextFile::_Length() const
 {
 	LARGE_INTEGER size;
-	GetFileSizeEx(mFile, &size);
-	return size.QuadPart;
+	return GetFileSizeEx(mFile, &size) ? size.QuadPart : 0;
 }
 
 

@@ -2335,7 +2335,19 @@ end:
 	// interruption, indirectly) a large deref buffer, and that thread is waiting for something
 	// such as WinWait, that large deref buffer would never get freed.
 	if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)
-		SET_DEREF_TIMER(10000) // Reset the timer right before the deref buf is possibly about to become idle.
+	{
+		// SetTimer has a cost that adds up very quickly if ExpandArgs() is called in a tight loop
+		// (potentially thousands or millions of times per second).  There's no need for the timer
+		// to be precise, so don't reset it more often than twice every second.  (Even checking
+		// now != sLastTimerReset is sufficient.)
+		static DWORD sLastTimerReset = 0;
+		DWORD now = GetTickCount();
+		if (now - sLastTimerReset > 500 || !g_DerefTimerExists)
+		{
+			sLastTimerReset = now;
+			SET_DEREF_TIMER(10000) // Reset the timer right before the deref buf is possibly about to become idle.
+		}
+	}
 
 	return result_to_return;
 }

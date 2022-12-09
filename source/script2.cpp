@@ -1676,6 +1676,7 @@ bif_impl FResult FileSelect(optl<StrArg> aOptions, optl<StrArg> aWorkingDir, opt
 	if (options & 0x01)
 		flags |= FOS_FILEMUSTEXIST;
 
+
 	// Despite old documentation indicating it was due to an "OS quirk", previous versions were specifically
 	// designed to enable the Save button when OFN_OVERWRITEPROMPT is present but not OFN_CREATEPROMPT, since
 	// the former requires the Save dialog while the latter requires the Open dialog.  If both options are

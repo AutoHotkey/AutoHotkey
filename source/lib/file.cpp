@@ -77,6 +77,16 @@ bool FileCreateDir(LPCTSTR aDirSpec)
 
 static bool FileCreateDirRecursive(LPTSTR aDirSpec)
 {
+	// The following check also serves to support UNC paths like "\\server\share\path"
+	// by preventing the section below from recursing into "\\server\share" (or further)
+	// if the share exists.
+	DWORD attr = GetFileAttributes(aDirSpec);
+	if (attr != 0xFFFFFFFF)  // aDirSpec already exists.
+	{
+		SetLastError(ERROR_ALREADY_EXISTS);
+		return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0; // Indicate success if it already exists as a dir.
+	}
+	
 	// If it has a backslash, make sure all its parent directories exist before we attempt
 	// to create this directory:
 	LPTSTR last_backslash = _tcsrchr(aDirSpec, '\\');
