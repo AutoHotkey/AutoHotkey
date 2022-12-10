@@ -8747,6 +8747,18 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		min_params = 2;
 		max_params = 2;
 	}
+	else if (!_tcsicmp(func_name, _T("DecToBase")))
+	{
+		bif = BIF_DecToBase;
+		min_params = 2;
+		max_params = 3;
+	}
+	else if (!_tcsicmp(func_name, _T("BaseToDec")))
+	{
+		bif = BIF_BaseToDec;
+		min_params = 2;
+		max_params = 2;
+	}
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.
 

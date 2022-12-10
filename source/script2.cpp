@@ -18892,6 +18892,54 @@ BIF_DECL(BIF_VerCompare)
 
 
 
+BIF_DECL(BIF_DecToBase)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+	unsigned __int64 num = (unsigned __int64)ParamIndexToInt64(0);
+	int base = ParamIndexToInt(1);
+	int len_min = ParamIndexToOptionalInt(2, 1);
+	if (base < 2 || base > 36)
+		_f_throw(ERR_PARAM2_INVALID);
+	if (len_min < 0)
+		_f_throw(ERR_PARAM3_INVALID);
+
+	TCHAR buf[65];
+	_ui64tot(num, buf, base);
+	int len_buf = _tcslen(buf);
+	int len_out = len_min > len_buf ? len_min : len_buf;
+	LPTSTR output = tmalloc(len_out+1);
+
+	LPTSTR cp;
+	int i;
+	for (cp = output, i = 0; i < len_out-len_buf; ++i, ++cp)
+		*cp = '0'; // literal zero
+	tmemcpy(cp, buf, len_buf+1);
+	aResultToken.marker = output;
+	aResultToken.mem_to_free = output;
+	aResultToken.marker_length = len_out;
+}
+
+
+
+BIF_DECL(BIF_BaseToDec)
+{
+	TCHAR buf[MAX_NUMBER_SIZE];
+	LPTSTR str = ParamIndexToString(0, buf);
+	int base = ParamIndexToInt(1);
+	if (base < 2 || base > 36)
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		_f_throw(ERR_PARAM2_INVALID);
+	}
+
+	aResultToken.symbol = SYM_INTEGER;
+	aResultToken.value_int64 = (__int64)_tcstoui64(str, NULL, base);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
