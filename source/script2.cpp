@@ -3185,6 +3185,60 @@ void Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 
 
 
+BIF_DECL(BIF_BinCopyCompare)
+{
+	ExprTokenType **next_param = aParam;
+	IObject *buffer_obj;
+	bool is_buf[2] = { false, false };
+	BYTE* address[2];
+	size_t size[2] = { 0, 0 };
+	size_t size_read = (size_t)ParamIndexToOptionalInt64(2, 0);
+
+	for (int i = 0; i < 2; ++i, ++next_param)
+	{
+		if (TokenIsNumeric(**next_param))
+			address[i] = (BYTE*)TokenToInt64(**next_param);
+		else if (buffer_obj = TokenToObject(**next_param))
+		{
+			size_t ptr, buf_size;
+			GetBufferObjectPtr(aResultToken, buffer_obj, ptr, buf_size);
+			address[i] = aResultToken.Exited() ? 0 : (BYTE*)ptr;
+			size[i] = buf_size;
+			is_buf[i] = true;
+			if (ParamIndexIsOmitted(2))
+				size_read = buf_size;
+			else if (size_read > buf_size)
+				_f_throw_value(ERR_PARAM3_INVALID);
+		}
+		else
+			address[i] = 0;
+
+		if (address[i] < (BYTE*)65536)
+			_f_throw_param(i);
+	}
+	
+	// If params 1 and 2 are both buffers, and Size is omitted, they must have equal size.
+	// If params 1 and 2 are both integers, Size cannot be omitted.
+	if (ParamIndexIsOmitted(2) && is_buf[0] == is_buf[1])
+	{
+		if (!is_buf[0] || size[0] != size[1])
+			_f_throw_value(ERR_PARAM3_INVALID);
+	}
+
+	if (_f_callee_id == FID_BinCopy)
+	{
+		memmove(address[1], address[0], size_read);
+		_f_return_empty;
+	}
+	else // BinCompare.
+	{
+		__int64 result = memcmp(address[0], address[1], size_read);
+		_f_return_i(result == 0 ? 0 : result > 0 ? 1 : -1);
+	}
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
