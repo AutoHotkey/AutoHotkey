@@ -806,17 +806,8 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg)
 	case SYM_OPERAND:
 		if (aToken.buf)
 		{
-			__int64 val = *(__int64 *)aToken.buf;
-			if (val == (int)val)
-			{
-				aVar.vt = VT_I4;
-				aVar.lVal = (int)val;
-			}
-			else
-			{
-				aVar.vt = VT_R8;
-				aVar.dblVal = (double)val;
-			}
+			aVar.llVal = *(__int64 *)aToken.buf;
+			aVar.vt = (aVar.llVal == (int)aVar.llVal) ? VT_I4 : VT_I8;
 			break;
 		}
 	case SYM_STRING:
@@ -824,19 +815,8 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg)
 		aVar.bstrVal = SysAllocString(CStringWCharFromTCharIfNeeded(aToken.marker));
 		break;
 	case SYM_INTEGER:
-		{
-			__int64 val = aToken.value_int64;
-			if (val == (int)val)
-			{
-				aVar.vt = VT_I4;
-				aVar.lVal = (int)val;
-			}
-			else
-			{
-				aVar.vt = VT_R8;
-				aVar.dblVal = (double)val;
-			}
-		}
+		aVar.llVal = aToken.value_int64;
+		aVar.vt = (aVar.llVal == (int)aVar.llVal) ? VT_I4 : VT_I8;
 		break;
 	case SYM_FLOAT:
 		aVar.vt = VT_R8;
