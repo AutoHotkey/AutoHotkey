@@ -7131,11 +7131,8 @@ void Script::CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName)
 
 Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope)
 // Returns the address of the new variable or NULL on failure.
-// Caller must ensure that g->CurrentFunc!=NULL whenever aIsLocal!=0.
 // Caller must ensure that aVarName isn't NULL and that this isn't a duplicate variable name.
 // In addition, it has provided aInsertPos, which is the insertion point so that the list stays sorted.
-// Finally, aIsLocal has been provided to indicate which list, global or local, should receive this
-// new variable, as well as the type of local variable.  (See the declaration of VAR_LOCAL etc.)
 {
 	if (aVarNameLength > MAX_VAR_NAME_LENGTH)
 	{
@@ -7150,8 +7147,6 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 	if (*var_name && !Var::ValidateName(var_name))
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
-
-	bool aIsLocal = (aScope & VAR_LOCAL);
 
 	if ((aScope & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL // This is an implicit local.
 		&& g_Warn_LocalSameAsGlobal && !mIsReadyToExecute // Not enabled at runtime because of overlap with #Warn UseUnset, and dynamic assignments in assume-local mode are less likely to be intended global.
