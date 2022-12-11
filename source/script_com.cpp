@@ -1552,7 +1552,14 @@ IObject *GuiType::ControlGetActiveX(HWND aWnd)
 
 STDMETHODIMP IObjectComCompatible::QueryInterface(REFIID riid, void **ppv)
 {
-	if (riid == IID_IDispatch || riid == IID_IUnknown || riid == IID_IObjectComCompatible)
+	// Check our internal IID by address so that only our instance of the IID is a match.
+	// This prevents other in-process instances of AutoHotkey from identifying the object
+	// as one of theirs, which can be important since the interface is unofficial and not
+	// constant between versions.  Even for the same version, it isn't compatible unless
+	// both instances are compiled with the dynamically-linked CRT.
+	// Note that we would never receive a query for IID_IObjectComCompatible from an
+	// instance in another process (via COM proxy), because there's no proxy/stub dll.
+	if (riid == IID_IDispatch || riid == IID_IUnknown || &riid == &IID_IObjectComCompatible)
 	{
 		AddRef();
 		//*ppv = static_cast<IDispatch *>(this);
