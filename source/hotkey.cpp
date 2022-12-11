@@ -1398,10 +1398,9 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 					// to try to guess which key, left or right, should be used based on the
 					// location of the suffix key on the keyboard.
 					sntprintf(error_text, _countof(error_text), _T("The AltTab hotkey \"%s\" must specify which key (L or R)."), hotkey_name);
-					if (g_script.mIsReadyToExecute) // Dynamically registered via the Hotkey command.
-						g_script.ScriptError(error_text);
-					else
-						MsgBox(error_text);
+					if (!g_script.mIsReadyToExecute)
+						g_script.mCurrLine = NULL;
+					g_script.ScriptError(error_text);
 				}
 				return;  // Key is invalid so don't give it an ID.
 			}
@@ -1427,10 +1426,9 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 					{
 						sntprintf(error_text, _countof(error_text), _T("The AltTab hotkey \"%s\" must have exactly ")
 							_T("one modifier/prefix."), hotkey_name);
-						if (g_script.mIsReadyToExecute) // Dynamically registered via the Hotkey command.
-							g_script.ScriptError(error_text);
-						else
-							MsgBox(error_text);
+						if (!g_script.mIsReadyToExecute)
+							g_script.mCurrLine = NULL;
+						g_script.ScriptError(error_text);
 					}
 					return;  // Key is invalid so don't give it an ID.
 				}
