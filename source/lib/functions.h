@@ -106,7 +106,7 @@ md_func_v(FileExist, (In, String, Pattern), (Ret, String, RetVal))
 md_func(FileGetAttrib, (In_Opt, String, Path), (Ret, String, RetVal))
 md_func(FileGetShortcut, (In, String, LinkFile), (Out_Opt, String, Target), (Out_Opt, String, WorkingDir),
 	(Out_Opt, String, Args), (Out_Opt, String, Description), (Out_Opt, String, IconFile),
-	(Out_Opt, Variant, IconNum), (Out_Opt, Int32, RunState))
+	(Out_Opt, Variant, IconNum), (Out_Opt, Int32, RunState), (Out_Opt, String, ShortcutKey))
 md_func(FileGetSize, (In_Opt, String, Path), (In_Opt, String, Units), (Ret, Int64, RetVal))
 md_func(FileGetTime, (In_Opt, String, Path), (In_Opt, String, WhichTime), (Ret, String, RetVal))
 md_func(FileGetVersion, (In_Opt, String, Path), (Ret, String, RetVal))

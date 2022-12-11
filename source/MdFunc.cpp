@@ -12,7 +12,7 @@ struct MdFuncEntry
 	LPCTSTR name;
 	void *function;
 	MdType rettype;
-	MdType argtype[23];
+	MdType argtype[25];
 };
 
 

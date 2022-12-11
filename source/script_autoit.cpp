@@ -1167,7 +1167,7 @@ bif_impl FResult DirSelect(optl<StrArg> aRootDir, optl<int> aOptions, optl<StrAr
 
 
 bif_impl FResult FileGetShortcut(StrArg aShortcutFile, StrRet *aTarget, StrRet *aWorkingDir
-	, StrRet *aArgs, StrRet *aDesc, StrRet *aIcon, ResultToken *aIconNum, int *aRunState)
+	, StrRet *aArgs, StrRet *aDesc, StrRet *aIcon, ResultToken *aIconNum, int *aRunState, StrRet *aHotkey)
 // Credited to Holger <Holger.Kotsch at GMX de>.
 {
 	CoInitialize(NULL);
@@ -1230,6 +1230,23 @@ bif_impl FResult FileGetShortcut(StrArg aShortcutFile, StrRet *aTarget, StrRet *
 					// creating the shortcut in case it happens to work.  Of course, that applies only
 					// to FileCreateShortcut, not here.  But it's done here so that this command is
 					// compatible with that one.
+				}
+				if (aHotkey)
+				{
+					UCHAR buf_hk[2];
+					psl->GetHotkey((WORD*)buf_hk);
+					// buf[MAX_PATH+1] has sufficient capacity: 4 modifier chars + 128 key name chars + 1 null = 133.
+					TCHAR *cp = buf;
+					if (buf_hk[1] & HOTKEYF_CONTROL)
+						*cp++ = '^';
+					if (buf_hk[1] & HOTKEYF_EXT) // Shell Link (.LNK) standard says this should never be set.
+						*cp++ = '#';
+					if (buf_hk[1] & HOTKEYF_ALT)
+						*cp++ = '!';
+					if (buf_hk[1] & HOTKEYF_SHIFT)
+						*cp++ = '+';
+					VKtoKeyName((vk_type)buf_hk[0], cp, 128, false);
+					aHotkey->Copy(buf);
 				}
 			}
 			ppf->Release();
