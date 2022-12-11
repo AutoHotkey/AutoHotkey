@@ -1274,9 +1274,12 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 			SysFreeString(rgvarg[i].bstrVal);
 	}
 
+	g->LastError = hr;
 	if	(FAILED(hr))
 	{
 		ComError(hr, aName, &excepinfo);
+		if (g->ThrownToken)
+			return FAIL;
 	}
 	else if	(IS_INVOKE_SET)
 	{	// Allow chaining, e.g. obj2.prop := obj1.prop := val.
@@ -1290,8 +1293,6 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 	{
 		VariantToToken(varResult, aResultToken, false);
 	}
-
-	g->LastError = hr;
 	return	OK;
 }
 
