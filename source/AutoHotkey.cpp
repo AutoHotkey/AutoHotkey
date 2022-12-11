@@ -115,7 +115,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 #endif
 #ifdef CONFIG_DEBUGGER
 		// Allow a debug session to be initiated by command-line.
-		else if (!g_Debugger.IsConnected() && !_tcsnicmp(param, _T("/Debug"), 6) && (param[6] == '\0' || param[6] == '='))
+		else if (!_tcsnicmp(param, _T("/Debug"), 6) && (param[6] == '\0' || param[6] == '='))
 		{
 			if (param[6] == '=')
 			{

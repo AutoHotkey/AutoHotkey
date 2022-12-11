@@ -1,5 +1,5 @@
 temp/
-bin/
+bin*/
 ipch/
 .vs/
 *.suo

@@ -788,19 +788,8 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, TTVArgType *aVarIsArg)
 			*aVarIsArg = VariantIsAllocatedString;
 		break;
 	case SYM_INTEGER:
-		{
-			__int64 val = aToken.value_int64;
-			if (val == (int)val)
-			{
-				aVar.vt = VT_I4;
-				aVar.lVal = (int)val;
-			}
-			else
-			{
-				aVar.vt = VT_R8;
-				aVar.dblVal = (double)val;
-			}
-		}
+		aVar.llVal = aToken.value_int64;
+		aVar.vt = (aVar.llVal == (int)aVar.llVal) ? VT_I4 : VT_I8;
 		break;
 	case SYM_FLOAT:
 		aVar.vt = VT_R8;
@@ -1432,11 +1421,14 @@ LPTSTR ComObject::Type()
 {
 	if ((mVarType == VT_DISPATCH || mVarType == VT_UNKNOWN) && mUnknown)
 	{
-		BSTR name;
-		ITypeInfo *ptinfo;
 		// Use COM class name if available.
-		if (  (ptinfo = GetClassTypeInfo(mUnknown))
-			&& SUCCEEDED(ptinfo->GetDocumentation(MEMBERID_NIL, &name, NULL, NULL, NULL))  )
+		BSTR name = nullptr;
+		if (ITypeInfo *ptinfo = GetClassTypeInfo(mUnknown))
+		{
+			ptinfo->GetDocumentation(MEMBERID_NIL, &name, NULL, NULL, NULL);
+			ptinfo->Release();
+		}
+		if (name)
 		{
 			static TCHAR sBuf[64]; // Seems generous enough.
 			tcslcpy(sBuf, CStringTCharFromWCharIfNeeded(name), _countof(sBuf));
@@ -1570,7 +1562,14 @@ IObject *GuiType::ControlGetActiveX(HWND aWnd)
 
 STDMETHODIMP IObjectComCompatible::QueryInterface(REFIID riid, void **ppv)
 {
-	if (riid == IID_IDispatch || riid == IID_IUnknown || riid == IID_IObjectComCompatible)
+	// Check our internal IID by address so that only our instance of the IID is a match.
+	// This prevents other in-process instances of AutoHotkey from identifying the object
+	// as one of theirs, which can be important since the interface is unofficial and not
+	// constant between versions.  Even for the same version, it isn't compatible unless
+	// both instances are compiled with the dynamically-linked CRT.
+	// Note that we would never receive a query for IID_IObjectComCompatible from an
+	// instance in another process (via COM proxy), because there's no proxy/stub dll.
+	if (riid == IID_IDispatch || riid == IID_IUnknown || &riid == &IID_IObjectComCompatible)
 	{
 		AddRef();
 		//*ppv = static_cast<IDispatch *>(this);
