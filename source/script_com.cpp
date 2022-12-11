@@ -1198,6 +1198,13 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ExprTokenType &aResultToken, Expr
 		CStringWCharFromChar cnvbuf(aName);
 		LPOLESTR wname = (LPOLESTR)(LPCWSTR)cnvbuf;
 #endif
+		
+#ifdef CONFIG_DLL
+		// For fn.() and %fn%() where fn is a v2 object, skip GetIDsOfNames and use DISPID_VALUE.
+		if (IS_INVOKE_CALL && TokenIsEmptyString(*aParam[0]))
+			hr = S_OK, dispid = DISPID_VALUE;
+		else
+#endif
 		hr = mDispatch->GetIDsOfNames(IID_NULL, &wname, 1, LOCALE_USER_DEFAULT, &dispid);
 		if (hr == DISP_E_UNKNOWNNAME) // v1.1.18: Retry with IDispatchEx if supported, to allow creating new properties.
 		{
