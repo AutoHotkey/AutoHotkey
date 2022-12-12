@@ -466,15 +466,15 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	// It also provides more consistency.
 	aScriptFilename = buf;
 #else
-	TCHAR def_buf[513]; // Enough for max Documents path (256 chars, according to testing on 20H2), slash and max NTFS filename (255 chars).
 #ifdef _DEBUG
 	if (!aScriptFilename)
 		aScriptFilename = _T("Test\\Test.ahk");
 #endif
-	if (!aScriptFilename) // v1.0.46.08: Change in policy: store the default script in the My Documents directory rather than in Program Files.  It's more correct and solves issues that occur due to Vista's file-protection scheme.
+	if (!aScriptFilename)
 	{
-		// Since no script-file was specified on the command line, use the default name.
-		// For portability, first check if there's an <EXENAME>.ahk file in the current directory.
+		// Since no script-file was specified on the command line, use the default path,
+		// <EXEDIR>\<EXENAME>.ahk.  This is intended for portable copies of AutoHotkey.
+		// Users of a proper AutoHotkey installation should open .ahk files directly.
 		LPTSTR suffix, dot;
 		if (  (suffix = _tcsrchr(buf, '\\')) // Find name part of path.
 			&& (dot = _tcsrchr(suffix, '.')) // Find extension part of name.
@@ -486,33 +486,6 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 			return FAIL;
 
 		aScriptFilename = buf; // Use the entire path, including the exe's directory.
-		if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF) // File doesn't exist, so fall back to new method.
-		{
-			// The only known cause of failure for SHGetKnownFolderPath is having a path longer than
-			// 256 characters; i.e. by sabotaging the "...\User Shell Folders\Personal" registry value.
-			// It's very unlikely to happen naturally, so just permit _sntprintf to print "(null)".
-			PWSTR docs_path = GetDocumentsFolder();
-			auto len = _sntprintf(def_buf, _countof(def_buf), _T("%ws%s"), docs_path, suffix);
-			CoTaskMemFree(docs_path); // NULL is OK here too (but abnormal).
-			// def_buf allows for the maximum length docs_path (according to testing) and maximum length suffix
-			// (based on file system limitation of <= 255 characters per name, not path), but check overflow in
-			// case any of these limits ever change:
-			if (len < 0 || len >= _countof(def_buf))
-				return FAIL; // Probably impossible, and definitely abnormal, so for code size just silently exit.
-			aScriptFilename = def_buf;
-			if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF)
-			{
-				SetCurrentDirectory(mOurEXEDir);
-				if (GetFileAttributes(AHK_HELP_FILE) != 0xFFFFFFFF) // Avoids hh.exe showing an error message if the file doesn't exist.
-				{
-					if (ActionExec(_T("hh.exe"), _T("\"ms-its:") AHK_HELP_FILE _T("::/docs/Welcome.htm\""), nullptr, false, _T("Max")))
-						return FAIL; // Help file launched, so exit the program.
-				}
-				// Since above didn't return, the help file is missing or failed to launch,
-				// so continue on and let the missing script file be reported as an error.
-			}
-		}
-		//else since the file exists, everything is now set up right. (The file might be a directory, but that isn't checked due to rarity.)
 	}
 	if (*aScriptFilename == '*')
 	{
