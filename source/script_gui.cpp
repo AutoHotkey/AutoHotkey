@@ -9480,9 +9480,16 @@ WORD GuiType::TextToHotkey(LPTSTR aText)
 	// Note: NumpadEnter (not Enter) is extended, unlike Home/End/Pgup/PgDn/Arrows, which are
 	// NON-extended on the keypad.
 
-	BYTE vk = TextToVK(aText);
+	modLR_type mods = 0;
+	BYTE vk = TextToVK(aText, &mods);
 	if (!vk)
 		return 0;  // Indicate total failure because the key text is invalid.
+	if (mods & (MOD_LALT | MOD_RALT))
+		modifiers |= HOTKEYF_ALT;
+	if (mods & (MOD_LCONTROL | MOD_RCONTROL))
+		modifiers |= HOTKEYF_CONTROL;
+	if (mods & (MOD_LSHIFT | MOD_RSHIFT))
+		modifiers |= HOTKEYF_SHIFT;
 	// Find out if the HOTKEYF_EXT flag should be set.
 	sc_type sc = TextToSC(aText); // Better than vk_to_sc() since that has both an primary and secondary scan codes to choose from.
 	if (!sc) // Since not found above, default to the primary scan code.
