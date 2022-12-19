@@ -1252,7 +1252,7 @@ public:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
-	void SetThrownToken(global_struct &g, ResultToken *aToken);
+	ResultType SetThrownToken(global_struct &g, ResultToken *aToken, ResultType aErrorType = FAIL);
 
 	ResultType ValidateVarUsage(Var *aVar, int aUsage);
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
