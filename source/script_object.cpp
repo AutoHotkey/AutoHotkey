@@ -18,7 +18,7 @@
 
 ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 	, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal // For event handlers.
-	, int aExtraFlags) // For Object.__Delete().
+	, int aExtraFlags, bool aReturnBoolean)
 {
 	ResultToken result_token;
 	TCHAR result_buf[MAX_NUMBER_SIZE];
@@ -39,8 +39,11 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 	if (result != EARLY_EXIT && result != FAIL)
 	{
-		// Indicate to caller whether an integer value was returned (for MsgMonitor()).
-		result = TokenIsEmptyString(result_token) ? OK : EARLY_RETURN;
+		if (aReturnBoolean)
+			result = TokenToBOOL(result_token) ? CONDITION_TRUE : CONDITION_FALSE;
+		else
+			// Indicate to caller whether an integer value was returned (for MsgMonitor()).
+			result = TokenIsEmptyString(result_token) ? OK : EARLY_RETURN;
 	}
 	
 	if (aRetVal) // Always set this as some callers don't initialize it:
@@ -2727,10 +2730,10 @@ bool FreeVars::FullyReleased(ULONG aRefPendingRelease)
 }
 
 
-ResultType IObjectPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal) const
+ResultType IObjectPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, bool aReturnBoolean) const
 {
 	DEBUGGER_STACK_PUSH(aNewThreadDesc)
-	ResultType result = CallMethod(mObject, mObject, nullptr, aParamValue, aParamCount, aRetVal);
+	ResultType result = CallMethod(mObject, mObject, nullptr, aParamValue, aParamCount, nullptr, 0, aReturnBoolean);
 	DEBUGGER_STACK_POP()
 	return result;
 }

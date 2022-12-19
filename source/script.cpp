@@ -10514,7 +10514,6 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	// See MsgSleep() for comments about the following section.
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
 	InitNewThread(0, false, true, true);
-	ResultType result;
 
 	// Let HotIf default to the criterion currently being evaluated, in case Hotkey() is called.
 	g->HotCriterion = this;
@@ -10530,11 +10529,7 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 
 	// CALL THE CALLBACK
 	ExprTokenType param = aHotkeyName;
-	__int64 retval;
-	result = IObjectPtr(Callback)->ExecuteInNewThread(_T("#HotIf"), &param, 1, &retval);
-	if (result != FAIL)
-		result = retval ? CONDITION_TRUE : CONDITION_FALSE;
-	
+	auto result = IObjectPtr(Callback)->ExecuteInNewThread(_T("#HotIf"), &param, 1, true);
 
 	// The following allows the expression to set the Last Found Window for the
 	// hotkey function.

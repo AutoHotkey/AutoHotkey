@@ -329,7 +329,8 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 // Helper function for event handlers and __Delete:
 ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 	, ExprTokenType *aParamValue = NULL, int aParamCount = 0, __int64 *aRetVal = NULL // For event handlers.
-	, int aExtraFlags = 0); // For Object.__Delete().
+	, int aExtraFlags = 0 // For Object.__Delete().
+	, bool aReturnBoolean = false);
 
 
 struct DerefType; // Forward declarations for use below.

@@ -1318,7 +1318,7 @@ public:
 	IObjectPtr() : mObject(NULL) {}
 	IObjectPtr(IObject *object) : mObject(object) {}
 	ResultType ExecuteInNewThread(TCHAR *aNewThreadDesc
-		, ExprTokenType *aParamValue = NULL, int aParamCount = 0, __int64 *aRetVal = NULL) const;
+		, ExprTokenType *aParamValue = NULL, int aParamCount = 0, bool aReturnBoolean = false) const;
 	const IObjectPtr* operator-> () { return this; } // Act like a pointer.
 	operator void *() const { return mObject; } // For comparisons and boolean eval.
 
