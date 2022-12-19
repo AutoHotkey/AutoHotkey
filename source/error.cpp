@@ -991,7 +991,7 @@ FResult FParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType)
 
 
 
-ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FResult aResult)
+ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FResult aResult, int aFirstParam)
 {
 	if (aResult & FR_OUR_FLAG)
 	{
@@ -1008,7 +1008,7 @@ ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], in
 			ASSERT(!code);
 			return aResultToken.SetExitResult(FAIL);
 		case FR_FACILITY_ARG:
-			return aResultToken.ParamError(code, code < aParamCount ? aParam[code] : nullptr);
+			return aResultToken.ParamError(code, code + aFirstParam < aParamCount ? aParam[code + aFirstParam] : nullptr);
 		case FACILITY_WIN32:
 			if (!code)
 				code = GetLastError();

@@ -416,7 +416,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	case MdType::FResult:
 		if (FAILED(res))
 		{
-			FResultToError(aResultToken, aParam, aParamCount, res);
+			FResultToError(aResultToken, aParam, aParamCount, res, first_param_index);
 			aborted = true;
 		}
 		else

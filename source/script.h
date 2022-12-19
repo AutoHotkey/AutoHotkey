@@ -3319,7 +3319,7 @@ FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 FResult FTypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
 FResult FParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType = nullptr);
 
-ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FResult aResult);
+ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FResult aResult, int aFirstParam);
 
 void PauseCurrentThread();
 void ToggleSuspendState();
