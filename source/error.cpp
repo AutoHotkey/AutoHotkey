@@ -248,7 +248,7 @@ ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultTy
 #ifdef CONFIG_DEBUGGER
 		|| g_Debugger.BreakOnExceptionIsEnabled()
 #endif
-		|| aPrototype && aPrototype->HasOwnProps()) && aErrorType != WARN)
+		|| aPrototype) && aErrorType != WARN)
 		return ThrowRuntimeException(aErrorText, aExtraInfo, aLine, aErrorType, aPrototype);
 
 	return ShowError(aErrorText, aErrorType, aExtraInfo, aLine);
