@@ -1,10 +1,8 @@
-# AutoHotkey_L #
+# AutoHotkey #
 
-AutoHotkey is a free, open source macro-creation and automation software utility that allows users to automate repetitive tasks. It is driven by a custom scripting language that is aimed specifically at providing keyboard shortcuts, otherwise known as hotkeys.
+AutoHotkey is a free, open source macro-creation and automation software utility that allows users to automate repetitive tasks. It is driven by a custom scripting language that has special provision for defining keyboard shortcuts, otherwise known as hotkeys.
 
-AutoHotkey_L started as a fork of AutoHotkey but has been the main branch for some time.
-
-https://autohotkey.com/
+https://www.autohotkey.com/
 
 
 ## How to Compile ##
@@ -51,11 +49,3 @@ AutoHotkeyx.vcxproj includes the following Platforms:
   - **x64**: for Windows x64.
 
 AutoHotkey supports Windows XP with or without service packs and Windows 2000 via an asm patch (win2kcompat.asm).  Support may be removed if maintaining it becomes non-trivial.  Older versions are not supported.
-
-## AutoHotkey v2 Beta ##
-
-https://autohotkey.com/v2/
-
-[v2 Branch](https://github.com/Lexikos/AutoHotkey_L/tree/alpha)
-
-

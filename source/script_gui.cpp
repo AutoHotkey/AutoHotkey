@@ -9510,7 +9510,7 @@ bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR 
 
 
 WORD GuiType::TextToHotkey(LPCTSTR aText)
-// Returns a WORD (not a DWORD -- MSDN is wrong about that) compatible with the HKM_SETHOTKEY message:
+// Returns a WORD compatible with the HKM_SETHOTKEY message:
 // LOBYTE is the virtual key.
 // HIBYTE is a set of modifiers:
 // HOTKEYF_ALT ALT key
@@ -9518,18 +9518,20 @@ WORD GuiType::TextToHotkey(LPCTSTR aText)
 // HOTKEYF_SHIFT SHIFT key
 // HOTKEYF_EXT Extended key
 {
+	if (!*aText)
+		return 0;
+
 	BYTE modifiers = 0; // Set default.
-	for (bool done = false; *aText; ++aText)
+	for (; aText[1]; ++aText) // For each character except the last.
 	{
 		switch (*aText)
 		{
-		case '!': modifiers |= HOTKEYF_ALT; break;
-		case '^': modifiers |= HOTKEYF_CONTROL; break;
-		case '+': modifiers |= HOTKEYF_SHIFT; break;
-		default: done = true;  // Some other character type, so it marks the end of the modifiers.
+		case '!': modifiers |= HOTKEYF_ALT; continue;
+		case '^': modifiers |= HOTKEYF_CONTROL; continue;
+		case '+': modifiers |= HOTKEYF_SHIFT; continue;
+		//default: // Some other character type, so it marks the end of the modifiers.
 		}
-		if (done) // This must be checked prior here otherwise the loop's ++aText will increment one too many.
-			break;
+		break;
 	}
 
 	// For translating the virtual key below, the following notes apply:
@@ -9560,9 +9562,16 @@ WORD GuiType::TextToHotkey(LPCTSTR aText)
 	// Note: NumpadEnter (not Enter) is extended, unlike Home/End/Pgup/PgDn/Arrows, which are
 	// NON-extended on the keypad.
 
-	BYTE vk = TextToVK(aText);
-    if (!vk)
-		return 0;  // Indicate total failure because a hotkey control can't contain just modifiers without a VK.
+	modLR_type mods = 0;
+	BYTE vk = TextToVK(aText, &mods);
+	if (!vk)
+		return 0;  // Indicate total failure because the key text is invalid.
+	if (mods & (MOD_LALT | MOD_RALT))
+		modifiers |= HOTKEYF_ALT;
+	if (mods & (MOD_LCONTROL | MOD_RCONTROL))
+		modifiers |= HOTKEYF_CONTROL;
+	if (mods & (MOD_LSHIFT | MOD_RSHIFT))
+		modifiers |= HOTKEYF_SHIFT;
 	// Find out if the HOTKEYF_EXT flag should be set.
 	sc_type sc = TextToSC(aText); // Better than vk_to_sc() since that has both an primary and secondary scan codes to choose from.
 	if (!sc) // Since not found above, default to the primary scan code.
