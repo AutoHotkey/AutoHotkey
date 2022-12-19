@@ -4,7 +4,7 @@
 //
 // Copyright (C)1999-2006:
 //		- Jonathan Bennett <jon@hiddensoft.com>
-//		- Others listed at http://www.autoitscript.com/autoit3/docs/credits.htm
+//		- Others listed at https://www.autoitscript.com/autoit3/docs/credits.htm
 //      - Chris Mallett (support@autohotkey.com): various enhancements and
 //        adaptation of this file's functions to interface with AutoHotkey.
 //
