@@ -2279,6 +2279,7 @@ struct GuiControlType : public Object
 	static ObjectMemberMd sMembersList[]; // Tab, ListBox, ComboBox, DDL
 	static ObjectMemberMd sMembersTab[];
 	static ObjectMemberMd sMembersDate[];
+	static ObjectMemberMd sMemberEdit[];
 	static ObjectMemberMd sMembersLV[];
 	static ObjectMemberMd sMembersTV[];
 	static ObjectMemberMd sMembersSB[];
@@ -2339,7 +2340,9 @@ struct GuiControlType : public Object
 	FResult SB_SetIcon(StrArg aFilename, optl<int> aIconNumber, optl<UINT> aPartNumber, UINT_PTR &aRetVal);
 	FResult SB_SetParts(VariantParams &aParam, UINT& aRetVal);
 	FResult SB_SetText(StrArg aNewText, optl<UINT> aPartNumber, optl<UINT> aStyle);
-	
+
+	FResult Edit_CueText(StrArg aCueText, optl<BOOL> aExact);
+
 	FResult Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact);
 	
 	FResult TV_AddModify(bool aAdd, UINT_PTR aItemID, UINT_PTR aParentItemID, optl<StrArg> aOptions, optl<StrArg> aName, UINT_PTR &aRetVal);
