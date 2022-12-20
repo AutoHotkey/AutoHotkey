@@ -626,7 +626,7 @@ ObjectMemberMd GuiControlType::sMembersSB[] =
 	md_member_x(GuiControlType, SetText, SB_SetText, CALL, (In, String, NewText), (In_Opt, UInt32, PartNumber), (In_Opt, UInt32, Style))
 };
 
-ObjectMemberMd GuiControlType::sMemberEdit[] =
+ObjectMemberMd GuiControlType::sMembersEdit[] =
 {
 	md_member_x(GuiControlType, CueText, Edit_CueText, CALL, (In, String, CueText), (In_Opt, Bool32, ExactMatch))
 };
@@ -670,7 +670,7 @@ void GuiControlType::DefineControlClasses()
 		case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
 		case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
 		case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
-		case GUI_CONTROL_EDIT: more_items = sMemberEdit; how_many = _countof(sMemberEdit); break;
+		case GUI_CONTROL_EDIT: more_items = sMembersEdit; how_many = _countof(sMembersEdit); break;
 		}
 		TCHAR buf[32];
 		_sntprintf(buf, 32, _T("Gui.%s"), sTypeNames[i]);

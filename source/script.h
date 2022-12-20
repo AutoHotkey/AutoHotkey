@@ -2279,10 +2279,10 @@ struct GuiControlType : public Object
 	static ObjectMemberMd sMembersList[]; // Tab, ListBox, ComboBox, DDL
 	static ObjectMemberMd sMembersTab[];
 	static ObjectMemberMd sMembersDate[];
-	static ObjectMemberMd sMemberEdit[];
 	static ObjectMemberMd sMembersLV[];
 	static ObjectMemberMd sMembersTV[];
 	static ObjectMemberMd sMembersSB[];
+	static ObjectMemberMd sMembersEdit[];
 
 	static Object *sPrototype, *sPrototypeList;
 	static Object *sPrototypes[GUI_CONTROL_TYPE_COUNT];
