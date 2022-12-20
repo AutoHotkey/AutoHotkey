@@ -2282,6 +2282,7 @@ struct GuiControlType : public Object
 	static ObjectMemberMd sMembersLV[];
 	static ObjectMemberMd sMembersTV[];
 	static ObjectMemberMd sMembersSB[];
+	static ObjectMemberMd sMembersCB[];
 
 	static Object *sPrototype, *sPrototypeList;
 	static Object *sPrototypes[GUI_CONTROL_TYPE_COUNT];
@@ -2339,7 +2340,9 @@ struct GuiControlType : public Object
 	FResult SB_SetIcon(StrArg aFilename, optl<int> aIconNumber, optl<UINT> aPartNumber, UINT_PTR &aRetVal);
 	FResult SB_SetParts(VariantParams &aParam, UINT& aRetVal);
 	FResult SB_SetText(StrArg aNewText, optl<UINT> aPartNumber, optl<UINT> aStyle);
-	
+
+	FResult CB_CueText(StrArg aCueText);
+
 	FResult Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact);
 	
 	FResult TV_AddModify(bool aAdd, UINT_PTR aItemID, UINT_PTR aParentItemID, optl<StrArg> aOptions, optl<StrArg> aName, UINT_PTR &aRetVal);

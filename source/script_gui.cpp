@@ -626,6 +626,11 @@ ObjectMemberMd GuiControlType::sMembersSB[] =
 	md_member_x(GuiControlType, SetText, SB_SetText, CALL, (In, String, NewText), (In_Opt, UInt32, PartNumber), (In_Opt, UInt32, Style))
 };
 
+ObjectMemberMd GuiControlType::sMembersCB[] =
+{
+	md_member_x(GuiControlType, CueText, CB_CueText, CALL, (In, String, CueText))
+};
+
 #undef FUN1
 #undef FUNn
 
@@ -658,8 +663,8 @@ void GuiControlType::DefineControlClasses()
 		switch (i)
 		{
 		case GUI_CONTROL_TAB: more_items = sMembersTab; how_many = _countof(sMembersTab); // Fall through:
+		case GUI_CONTROL_COMBOBOX: more_items = sMembersCB; how_many = _countof(sMembersCB);
 		case GUI_CONTROL_DROPDOWNLIST:
-		case GUI_CONTROL_COMBOBOX:
 		case GUI_CONTROL_LISTBOX: base_proto = sPrototypeList; base_class = list_class; break;
 		case GUI_CONTROL_DATETIME: more_items = sMembersDate; how_many = _countof(sMembersDate); break;
 		case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
@@ -891,6 +896,12 @@ FResult GuiControlType::set_Visible(BOOL aValue)
 	CTRL_THROW_IF_DESTROYED;
 	gui->ControlSetVisible(*this, aValue);
 	return OK;
+}
+
+
+FResult GuiControlType::CB_CueText(StrArg aCueText)
+{
+	return SendMessage(hwnd, CB_SETCUEBANNER, 0, (LPARAM)aCueText) ? OK : FR_E_FAILED;
 }
 
 
