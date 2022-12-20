@@ -626,6 +626,11 @@ ObjectMemberMd GuiControlType::sMembersSB[] =
 	md_member_x(GuiControlType, SetText, SB_SetText, CALL, (In, String, NewText), (In_Opt, UInt32, PartNumber), (In_Opt, UInt32, Style))
 };
 
+ObjectMemberMd GuiControlType::sMembersEdit[] =
+{
+	md_member_x(GuiControlType, CueText, Edit_CueText, CALL, (In, String, CueText), (In_Opt, Bool32, ExactMatch))
+};
+
 #undef FUN1
 #undef FUNn
 
@@ -665,6 +670,7 @@ void GuiControlType::DefineControlClasses()
 		case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
 		case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
 		case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
+		case GUI_CONTROL_EDIT: more_items = sMembersEdit; how_many = _countof(sMembersEdit); break;
 		}
 		TCHAR buf[32];
 		_sntprintf(buf, 32, _T("Gui.%s"), sTypeNames[i]);
@@ -891,6 +897,18 @@ FResult GuiControlType::set_Visible(BOOL aValue)
 	CTRL_THROW_IF_DESTROYED;
 	gui->ControlSetVisible(*this, aValue);
 	return OK;
+}
+
+
+FResult GuiControlType::Edit_CueText(StrArg aCueText, optl<BOOL> aExact)
+{
+	LONG style = GetWindowLong(hwnd, GWL_STYLE);
+	if (!(style & ES_MULTILINE)) // cue banner cannot be set on multiline edit controls
+	{
+		BOOL whole_match = aExact.value_or(FALSE);
+		return SendMessage(hwnd, EM_SETCUEBANNER, whole_match, (LPARAM)aCueText) ? OK : FR_E_FAILED;
+	}
+	return NULL;
 }
 
 
