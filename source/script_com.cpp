@@ -1619,7 +1619,7 @@ STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszName
 		sDispNameMax = new_max;
 	}
 
-	LPTSTR name_copy = _tcsdup(name);
+	LPTSTR name_copy = SimpleHeap::Malloc(name);
 	if (!name_copy)
 		return E_OUTOFMEMORY;
 
