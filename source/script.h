@@ -1498,7 +1498,7 @@ public:
 
 	virtual bool IsBuiltIn() = 0; // FIXME: Should not need to rely on this.
 	virtual bool ArgIsOutputVar(int aArg) = 0;
-	virtual bool ArgIsOptional(int aArg) { return aArg > mMinParams; }
+	virtual bool ArgIsOptional(int aArg) { return aArg >= mMinParams; }
 
 	// bool result indicates whether aResultToken contains a value (i.e. false for FAIL/EARLY_EXIT).
 	virtual bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
