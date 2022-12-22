@@ -287,6 +287,7 @@ md_func(TrayTip, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, Strin
 md_func(WinActivate, MD_WINTITLE_ARGS)
 md_func(WinActivateBottom, MD_WINTITLE_ARGS)
 md_func(WinClose, (In_Opt, Variant, WinTitle), (In_Opt, String, WinText), (In_Opt, Float64, WaitTime), (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText))
+md_func(WinGetAlwaysOnTop, MD_WINTITLE_ARGS, (Ret, Bool32, RetVal))
 md_func(WinGetClass, MD_WINTITLE_ARGS, (Ret, String, Class))
 md_func(WinGetClientPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int32, Width), (Out_Opt, Int32, Height), MD_WINTITLE_ARGS)
 md_func(WinGetControls, MD_WINTITLE_ARGS, (Ret, Object, ClassNNArray))

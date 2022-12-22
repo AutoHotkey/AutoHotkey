@@ -1538,6 +1538,16 @@ bif_impl FResult WinSetAlwaysOnTop(optl<int> aValue, WINTITLE_PARAMETERS_DECL)
 
 
 
+bif_impl FResult WinGetAlwaysOnTop(WINTITLE_PARAMETERS_DECL, BOOL &aRetVal)
+{
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	aRetVal = (GetWindowLong(target_window, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+	return OK;
+}
+
+
+
 bif_impl FResult WinRedraw(WINTITLE_PARAMETERS_DECL)
 {
 	HWND target_window;
