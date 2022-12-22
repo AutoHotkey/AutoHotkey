@@ -242,6 +242,7 @@ ObjectMemberMd GuiType::sMembers[] =
 	md_member(GuiType, Minimize, CALL, md_arg_none),
 	md_member(GuiType, Move, CALL, (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Width), (In_Opt, Int32, Height)),
 	md_member(GuiType, OnEvent, CALL, (In, String, EventName), (In, Variant, Callback), (In_Opt, Int32, AddRemove)),
+	md_member(GuiType, OnMessage, CALL, (In, UInt32, Number), (In, Variant, Callback), (In_Opt, Int32, AddRemove)),
 	md_member(GuiType, Opt, CALL, (In, String, Options)),
 	md_member(GuiType, Restore, CALL, md_arg_none),
 	md_member(GuiType, SetFont, CALL, (In_Opt, String, Options), (In_Opt, String, FontName)),
@@ -2422,6 +2423,14 @@ FResult GuiType::OnEvent(StrArg aEventName, ExprTokenType &aCallback, optl<int> 
 }
 
 
+FResult GuiType::OnMessage(UINT aNumber, ExprTokenType &aCallback, optl<int> aAddRemove)
+{
+	GUI_MUST_HAVE_HWND;
+	
+	return OnEvent(nullptr, aNumber, GUI_EVENTKIND_MESSAGE, aCallback, aAddRemove);
+}
+
+
 FResult GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	, ExprTokenType &aCallback, optl<int> aAddRemove)
 {
@@ -2473,6 +2482,7 @@ FResult GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 			int param_count = 2;
 			switch (aEventKind)
 			{
+			case GUI_EVENTKIND_MESSAGE:		param_count = 4; break;
 			case GUI_EVENTKIND_COMMAND:		param_count = 1; break;
 			case GUI_EVENTKIND_EVENT:
 				switch (aEvent)
@@ -8229,13 +8239,29 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	bool text_color_was_changed;
 	TCHAR buf[1024];
 
+	pgui = GuiType::FindGui(hWnd);
+	if (!pgui) // This avoids numerous checks below.
+		return DefDlgProc(hWnd, iMsg, wParam, lParam);
+
+	if (pgui->mEvents.IsMonitoring(iMsg, GUI_EVENTKIND_MESSAGE))
+	{
+		ExprTokenType param[] = { pgui, (__int64)wParam, (__int64)(DWORD_PTR)lParam, (__int64)iMsg };
+		InitNewThread(0, false, true);
+		INT_PTR retval;
+		auto result = pgui->mEvents.Call(param, 4, iMsg, GUI_EVENTKIND_MESSAGE, pgui, &retval);
+		ResumeUnderlyingThread();
+		if (result == EARLY_RETURN)
+			return retval;
+	}
+
 	switch (iMsg)
 	{
-	// case WM_CREATE: --> Do nothing extra because DefDlgProc() appears to be sufficient.
+	//case WM_CREATE:
+		// The DefDlgProc() call above is sufficient.
+		// This case wouldn't be executed because FindGui() won't work until after CreateWindowEx() has returned.
+		// If it ever becomes necessary, the GuiType pointer could be passed as lpParam of CreateWindowEx().
 
 	case WM_SIZE: // Listed first for performance.
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break; // Let default proc handle it.
 		pgui->mIsMinimized = wParam == SIZE_MINIMIZED; // See "case WM_SETFOCUS" for comments.
 		if (pgui->mStatusBarHwnd)
 			// Send the msg even if the bar is hidden because the OS typically knows not to do extra drawing work for
@@ -8265,8 +8291,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 	case WM_GETMINMAXINFO: // Added for v1.0.44.13.
 	{
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break; // Let default proc handle it.
 		MINMAXINFO &mmi = *(LPMINMAXINFO)lParam;
 		if (pgui->mMinWidth >= 0) // This check covers both COORD_UNSPECIFIED and COORD_CENTERED.
 			mmi.ptMinTrackSize.x = pgui->mMinWidth;
@@ -8295,9 +8319,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 	case WM_COMMAND:
 	{
-		// First find which of the GUI windows is receiving this event:
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break; // No window (might be impossible since this function is for GUI windows, but seems best to let DefDlgProc handle it).
 		int id = LOWORD(wParam);
 		// For maintainability, this is checked first because "code" (the HIWORD) is sometimes or always 0,
 		// which falsely indicates that the message is from a menu:
@@ -8356,8 +8377,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	case WM_SYSCOMMAND:
 		if (wParam == SC_CLOSE)
 		{
-			if (   !(pgui = GuiType::FindGui(hWnd))   )
-				break; // Let DefDlgProc() handle it.
 			pgui->Close();
 			return 0;
 		}
@@ -8365,9 +8384,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 	case WM_NOTIFY:
 	{
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break; // Let DefDlgProc() handle it.
-
 		NMHDR &nmhdr = *(LPNMHDR)lParam;
 		if (!nmhdr.idFrom)
 		{
@@ -8767,14 +8783,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 	case WM_VSCROLL: // These two should only be received for sliders and up-downs.
 	case WM_HSCROLL:
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break; // Let default proc handle it.
 		pgui->Event(GUI_HWND_TO_INDEX((HWND)lParam), LOWORD(wParam), GUI_EVENT_NONE, HIWORD(wParam));
 		return 0; // "If an application processes this message, it should return zero."
 	
 	//case WM_ERASEBKGND:
-	//	if (   !(pgui = GuiType::FindGui(hWnd))   )
-	//		break; // Let DefDlgProc() handle it.
 	//	if (!pgui->mBackgroundBrushWin) // Let default proc handle it.
 	//		break;
 	//	// Can't use SetBkColor(), need an real brush to fill it.
@@ -8785,8 +8797,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	// The below seems to be the equivalent of the above (but MSDN indicates it will only work
 	// if there is no WM_ERASEBKGND handler).  It might perform a little better.
 	case WM_CTLCOLORDLG:
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break; // Let DefDlgProc() handle it.
 		if (!pgui->mBackgroundBrushWin) // Let default proc handle it.
 			break;
 		SetBkColor((HDC)wParam, pgui->mBackgroundColorWin);
@@ -8797,8 +8807,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	// Therefore, this section is commented out since it has no effect (it might be useful
 	// if a control's class window-proc is ever overridden with a new proc):
 	//case WM_CTLCOLORSCROLLBAR:
-	//	if (   !(pgui = GuiType::FindGui(hWnd))   )
-	//		break;
 	//	if (pgui->mBackgroundBrushWin)
 	//	{
 	//		// Since we're processing this msg rather than passing it on to the default proc, must set
@@ -8822,8 +8830,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// types of buttons used so far.  This has been confirmed: Even when a theme is in effect,
 		// checkboxes, radios, and groupboxes do not receive WM_CTLCOLORBTN, but they do receive
 		// WM_CTLCOLORSTATIC.
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break;
 		if (   !(pcontrol = pgui->FindControl((HWND)lParam))   )
 			break;
 		if (text_color_was_changed = (pcontrol->type != GUI_CONTROL_PIC && pcontrol->union_color != CLR_DEFAULT))
@@ -8880,8 +8886,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	{
 		// WM_DRAWITEM msg is received by GUI windows that contain a tab control with custom tab
 		// colors.  The TCS_OWNERDRAWFIXED style is what causes this message to be received.
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break;
 		LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
 		// Otherwise, it might be a tab control with custom tab colors:
 		control_index = (GuiIndexType)GUI_ID_TO_INDEX(lpdis->CtlID); // Convert from ID to array index. Relies on unsigned to flag as out-of-bounds.
@@ -8939,7 +8943,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// if the dialog box is activated."
 		// "If the window is being activated and is not minimized, the DefWindowProc function sets the
 		// keyboard focus to the window."
-		if (   (pgui = GuiType::FindGui(hWnd)) && pgui->mIsMinimized   )
+		if (pgui->mIsMinimized)
 			return 0;
 		// The simple check above solves a problem caused by bad OS behaviour that I couldn't find any
 		// mention of in all my searching, and that took hours to debug; so I'll be verbose:
@@ -8999,7 +9003,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		break;
 
 	case WM_CONTEXTMENU:
-		if (pgui = GuiType::FindGui(hWnd))
 		{
 			HWND clicked_hwnd = (HWND)wParam;
 			bool from_keyboard; // Whether Context Menu was generated from keyboard (AppsKey or Shift-F10).
@@ -9041,8 +9044,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 	case WM_DROPFILES:
 	{
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break; // Let DefDlgProc() handle it.
 		HDROP hdrop = (HDROP)wParam;
 		if (pgui->mHdrop || !pgui->IsMonitoring(GUI_EVENT_DROPFILES))
 		{
@@ -9113,8 +9114,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		return 0;
 
 	case WM_CLOSE: // For now, take the same action as SC_CLOSE.
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break; // Let DefDlgProc() handle it.
 		pgui->Close();
 		return 0;
 
@@ -9127,12 +9126,11 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// be impossible for a window to be destroyed without the object "knowing about it" and
 		// updating itself (then destroying itself) accordingly.  The object methods always
 		// destroy (recursively) any windows it owns, so once again it "knows about it".
-		if (pgui = GuiType::FindGui(hWnd)) // Assign.
-			if (!pgui->mDestroyWindowHasBeenCalled)
-			{
-				pgui->mDestroyWindowHasBeenCalled = true; // Tell it not to call DestroyWindow(), just clean up everything else.
-				pgui->Destroy();
-			}
+		if (!pgui->mDestroyWindowHasBeenCalled)
+		{
+			pgui->mDestroyWindowHasBeenCalled = true; // Tell it not to call DestroyWindow(), just clean up everything else.
+			pgui->Destroy();
+		}
 		// Above: if mDestroyWindowHasBeenCalled==true, we were called by Destroy(), so don't call Destroy() again recursively.
 		// And in any case, pass it on to DefDlgProc() in case it does any extra cleanup:
 		break;
@@ -9159,7 +9157,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		break;
 
 	} // switch()
-
+	
 	// This will handle anything not already fully handled and returned from above:
 	return DefDlgProc(hWnd, iMsg, wParam, lParam);
 }

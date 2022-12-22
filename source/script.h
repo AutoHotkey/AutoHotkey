@@ -2517,6 +2517,7 @@ public:
 	FResult Move(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int> aHeight);
 	
 	FResult OnEvent(StrArg aEventName, ExprTokenType &aCallback, optl<int> aAddRemove);
+	FResult OnMessage(UINT aNumber, ExprTokenType &aCallback, optl<int> aAddRemove);
 	FResult Opt(StrArg aOptions);
 	FResult SetFont(optl<StrArg> aOptions, optl<StrArg> aFontName);
 	FResult Submit(optl<BOOL> aHideIt, IObject *&aRetVal);
