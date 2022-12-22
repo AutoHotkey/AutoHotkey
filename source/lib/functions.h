@@ -292,6 +292,7 @@ md_func(WinGetClientPos, (Out_Opt, Int32, X), (Out_Opt, Int32, Y), (Out_Opt, Int
 md_func(WinGetControls, MD_WINTITLE_ARGS, (Ret, Object, ClassNNArray))
 md_func(WinGetControlsHwnd, MD_WINTITLE_ARGS, (Ret, Object, HwndArray))
 md_func(WinGetCount, MD_WINTITLE_ARGS, (Ret, Int32, Count))
+md_func(WinGetEnabled, MD_WINTITLE_ARGS, (Ret, Bool32, Enabled))
 md_func(WinGetExStyle, MD_WINTITLE_ARGS, (Ret, UInt32, ExStyle))
 md_func(WinGetID, MD_WINTITLE_ARGS, (Ret, UInt32, Hwnd))
 md_func(WinGetIDLast, MD_WINTITLE_ARGS, (Ret, UInt32, Hwnd))

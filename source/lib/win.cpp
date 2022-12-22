@@ -880,6 +880,17 @@ bif_impl FResult WinSetEnabled(int aValue, WINTITLE_PARAMETERS_DECL)
 
 
 
+bif_impl FResult WinGetEnabled(WINTITLE_PARAMETERS_DECL, BOOL &aRetVal)
+{
+	// Merging this with ControlGetEnabled increased code size slightly.
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	aRetVal = IsWindowEnabled(target_window);
+	return OK;
+}
+
+
+
 bif_impl FResult ControlSetEnabled(int aValue, CONTROL_PARAMETERS_DECL)
 {
 	return WinSetEnabled(aValue, &CONTROL_PARAMETERS);
