@@ -1054,9 +1054,9 @@ void Script::ExitIfNotPersistent(ExitReasons aExitReason)
 
 
 
-bif_impl void Edit()
+bif_impl void Edit(optl<StrArg> aFileName)
 {
-	g_script.Edit();
+	g_script.Edit(aFileName.value_or_null());
 }
 
 ResultType Script::Edit(LPCTSTR aFileName)
