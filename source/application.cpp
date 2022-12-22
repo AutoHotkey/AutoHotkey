@@ -1010,9 +1010,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			{
 #define EVT_ARG_ADD(_value) gui_event_args[gui_event_arg_count++].SetValue(_value)
 
-				if (event_is_control_generated || pgui->mEventSink != pgui)
-					// Set first argument
-					EVT_ARG_ADD(event_is_control_generated ? (IObject*)pcontrol : (IObject*)pgui);
+				// The following check isn't used because a Gui with an event sink can also have events handled
+				// by unrelated function objects.  Instead, MsgMonitorList::Call adjusts parameters as needed:
+				//if (event_is_control_generated || pgui->mEventSink != pgui)
+				EVT_ARG_ADD(event_is_control_generated ? (IObject*)pcontrol : (IObject*)pgui);
 
 				switch(gui_action)
 				{
