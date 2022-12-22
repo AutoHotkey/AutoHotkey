@@ -240,10 +240,6 @@ struct PlaybackEvent
 	};
 };
 LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
-//#define JOURNAL_RECORD_MODE  // Uncomment this line to debug/analyze via a crude journal record feature in place of SendPlay.
-#ifdef JOURNAL_RECORD_MODE
-	LRESULT CALLBACK RecordProc(int aCode, WPARAM wParam, LPARAM lParam);
-#endif
 
 
 // Below uses a pseudo-random value.  It's best that this be constant so that if multiple instances

@@ -1535,61 +1535,6 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam)
 
 
 
-#ifdef JOURNAL_RECORD_MODE
-LRESULT CALLBACK RecordProc(int aCode, WPARAM wParam, LPARAM lParam)
-{
-	switch (aCode)
-	{
-	case HC_ACTION:
-	{
-		EVENTMSG &event = *(PEVENTMSG)lParam;
-		PlaybackEvent &dest_event = sEventPB[sEventCount];
-		dest_event.message = event.message;
-		if (event.message >= WM_MOUSEFIRST && event.message <= WM_MOUSELAST) // Mouse event, including wheel.
-		{
-			if (event.message != WM_MOUSEMOVE)
-			{
-				// WHEEL: No info comes in about which direction the wheel was turned (nor by how many notches).
-				// In addition, it appears impossible to specify such info when playing back the event.
-				// Therefore, playback usually produces downward wheel movement (but upward in some apps like
-				// Visual Studio).
-				dest_event.x = event.paramL;
-				dest_event.y = event.paramH;
-				++sEventCount;
-			}
-		}
-		else // Keyboard event.
-		{
-			dest_event.vk = event.paramL & 0x00FF;
-			dest_event.sc = (event.paramL & 0xFF00) >> 8;
-			if (event.paramH & 0x8000) // Extended key.
-				dest_event.sc |= 0x100;
-			if (dest_event.vk == VK_CANCEL) // Ctrl+Break.
-			{
-				UnhookWindowsHookEx(g_PlaybackHook);
-				g_PlaybackHook = NULL; // Signal the installer of the hook that it's gone now.
-				// Obsolete method, pre-v1.0.44:
-				//PostMessage(g_hWnd, WM_CANCELJOURNAL, 0, 0); // v1.0.44: Post it to g_hWnd vs. NULL so that it isn't lost when script is displaying a MsgBox or other dialog.
-			}
-			++sEventCount;
-		}
-		break;
-	}
-
-	//case HC_SYSMODALON:  // A system-modal dialog box is being displayed. Until the dialog box is destroyed, the hook procedure must stop playing back messages.
-	//case HC_SYSMODALOFF: // A system-modal dialog box has been destroyed. The hook procedure must resume playing back the messages.
-	//	break;
-	}
-
-	// Unlike the playback hook, it seems more correct to call CallNextHookEx() unconditionally so that
-	// any other journal record hooks can also record the event.  But MSDN is quite vague about this.
-	return CallNextHookEx(g_PlaybackHook, aCode, wParam, lParam);
-	// Return value is ignored, except possibly when aCode < 0 (MSDN is unclear).
-}
-#endif
-
-
-
 void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWindow
 	, bool aDoKeyDelay, DWORD aExtraInfo)
 // aSC or aVK (but not both), can be zero to cause the default to be used.
@@ -2824,19 +2769,6 @@ void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend)
 	// until after the playback is done.  Preliminary testing shows that the hook's disguise of Alt/Win
 	// still function properly for Win/Alt hotkeys that use the playback method.
 	sCurrentEvent = 0; // Reset for use by the hook below.  Should be done BEFORE the hook is installed in the next line.
-#ifdef JOURNAL_RECORD_MODE
-// To record and analyze events via the above:
-// - Uncomment the line that defines this in the header file.
-// - Put breakpoint after the hook removes itself (a few lines below).  Don't try to put breakpoint in RECORD hook
-//   itself because it tends to freeze keyboard input (must press Ctrl-Alt-Del or Ctrl-Esc to unfreeze).
-// - Have the script send a keystroke (best to use non-character keystroke such as SendPlay {Shift}).
-// - It is now recording, so press the desired keys.
-// - Press Ctrl+Break, Ctrl-Esc, or Ctrl-Alt-Del to stop recording (which should then hit breakpoint below).
-// - Study contents of the sEventPB array, which contains the keystrokes just recorded.
-	sEventCount = 0; // Used by RecordProc().
-	if (   !(g_PlaybackHook = SetWindowsHookEx(WH_JOURNALRECORD, RecordProc, g_hInstance, 0))   )
-		return;
-#else
 	if (   !(g_PlaybackHook = SetWindowsHookEx(WH_JOURNALPLAYBACK, PlaybackProc, g_hInstance, 0))   )
 		return;
 	// During playback, have the keybd hook (if it's installed) block presses of the Windows key.
@@ -2845,7 +2777,6 @@ void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend)
 	// It should be okay to set this after the playback hook is installed because playback shouldn't
 	// actually begin until we have our thread do its first MsgSleep later below.
 	g_BlockWinKeys = true;
-#endif
 
 	// Otherwise, hook is installed, so:
 	// Wait for the hook to remove itself because the script should not be allowed to continue
