@@ -998,13 +998,15 @@ void ComError(HRESULT hr, ResultToken &aResultToken, LPTSTR name, EXCEPINFO* pei
 			msg_buf[--msg_size] = '\0';
 		if (msg_buf[msg_size-1] == '\r')
 			msg_buf[--msg_size] = '\0';
-		// Add a trailing \n if we'll be adding more lines below.
-		if (pei)
-			msg_buf[msg_size++] = '\n';
 	}
 	size += msg_size;
 	if (pei)
-		_sntprintf(buf + size, _countof(buf) - size, _T("%ws\nSource:\t%ws"), pei->bstrDescription, pei->bstrSource);
+	{
+		if (pei->bstrDescription)
+			size += _sntprintf(buf + size, _countof(buf) - size, _T("\n%ws"), pei->bstrDescription);
+		if (pei->bstrSource)
+			size += _sntprintf(buf + size, _countof(buf) - size, _T("\nSource:\t%ws"), pei->bstrSource);
+	}
 
 	if (pei)
 	{
