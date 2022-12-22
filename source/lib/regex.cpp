@@ -686,11 +686,22 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	// Get the replacement text (if any) from the incoming parameters.  If it was omitted, treat it as "".
 	TCHAR repl_buf[MAX_NUMBER_SIZE];
 	LPTSTR replacement = _T("");
+	ResultToken result_token;
+	ExprTokenType matchobj_token, *params;
+	IObject *callback_obj = nullptr;
+	result_token.mem_to_free = nullptr;
 	if (!ParamIndexIsOmitted(2))
 	{
-		if (ParamIndexToObject(2))
-			_f_throw_param(2, _T("String"));
-		replacement = ParamIndexToOptionalString(2, repl_buf);
+		if (callback_obj = ParamIndexToObject(2))
+		{
+			if (!ValidateFunctor(callback_obj, 1, aResultToken))
+				return;
+			params = &matchobj_token;
+			matchobj_token.symbol = SYM_OBJECT;
+			result_token.InitResult(repl_buf);
+		}
+		else
+			replacement = ParamIndexToOptionalString(2, repl_buf);
 	}
 
 	// In PCRE, lengths and such are confined to ints, so there's little reason for using unsigned for anything.
@@ -878,6 +889,41 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			}
 			else // i.e. it's the first iteration, so begin calculating the size required.
 				new_result_length = (int)result_length + haystack_portion_length; // Init length to the part of haystack before the match (it must be copied over as literal text).
+
+			// Calculate the actual replacement string through the callback function
+			if (callback_obj)
+			{
+				if (second_iteration)
+				{
+					tmemcpy(dest, replacement, result_token.marker_length);
+					result_length += result_token.marker_length;
+					free(result_token.mem_to_free);
+					result_token.mem_to_free = nullptr;
+				}
+				else
+				{
+					if (!RegExCreateMatchArray(aHaystack, aRE, aExtra, aOffset, static_cast<RegExCalloutData *>(aExtra->callout_data)->pattern_count, captured_pattern_count, matchobj_token.object))
+						goto out_of_mem;
+					result_token.SetValue(_T(""));
+					callback_obj->Invoke(result_token, IT_CALL, nullptr, ExprTokenType{ callback_obj }, &params, 1);
+					matchobj_token.object->Release();
+					if (result_token.symbol == SYM_OBJECT)
+					{
+						auto obj = result_token.object;
+						result_token.SetValue(_T(""));
+						ObjectToString(result_token, ExprTokenType{ obj }, obj);
+						obj->Release();
+					}
+					if (result_token.Exited())
+					{
+						aResultToken.SetExitResult(result_token.Result());
+						goto abort;
+					}
+					replacement = TokenToString(result_token, repl_buf, &result_token.marker_length);
+					new_result_length += (int)result_token.marker_length;
+				}
+				continue;
+			}
 
 			// DOLLAR SIGN ($) is the only method supported because it simplifies the code, improves performance,
 			// and avoids the need to escape anything other than $ (which simplifies the syntax).
@@ -1067,6 +1113,7 @@ abort:
 	}
 	// Now fall through to below so that count is set even for out-of-memory error.
 set_count_and_return:
+	free(result_token.mem_to_free);
 	if (output_var_count)
 		output_var_count->Assign(replacement_count); // v1.0.47.05: Must be done last in case output_var_count shares the same memory with haystack, needle, or replacement.
 }
