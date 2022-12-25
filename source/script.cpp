@@ -3925,6 +3925,11 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 	Label *the_new_label = new Label(new_name); // Pass it the dynamic memory area we created.
 	if (the_new_label == NULL)
 		return ScriptError(ERR_OUTOFMEM);
+#ifdef CONFIG_DLL
+	++mLabelCount;
+	the_new_label->mLineNumber = mCombinedLineNumber;
+	the_new_label->mFileIndex = mCurrFileIndex;
+#endif
 	the_new_label->mPrevLabel = mLastLabel;  // Whether NULL or not.
 	if (mFirstLabel == NULL)
 		mFirstLabel = the_new_label;
@@ -7234,7 +7239,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// After this point, mGlobalVar is used to prevent dynamic variable references from
 			// resolving to globals which aren't declared in this function (though in v1, this is
 			// only done in force-local functions, added in v1.1.27).
+#ifdef CONFIG_DLL
+			if (func.mGlobalVarCount)
+#else
 			if (func.mGlobalVarCount && (func.mDefaultVarType & VAR_FORCE_LOCAL))
+#endif
 			{
 				// Now that there can be no more "global" declarations, copy the list into persistent memory.
 				Var **global_vars;
@@ -7418,6 +7427,11 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	int param_count = 0;
 	TCHAR buf[LINE_SIZE], *target;
 	bool param_must_have_default = false;
+
+#ifdef CONFIG_DLL
+	func.mLineNumber = mCombinedLineNumber;
+	func.mFileIndex = mCurrFileIndex;
+#endif
 
 	if (mClassObjectCount)
 	{

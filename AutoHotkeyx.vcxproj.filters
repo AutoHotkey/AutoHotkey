@@ -204,6 +204,9 @@
     <ClInclude Include="source\input_object.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\DispObject.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="source\resources\icon_filetype.ico">
@@ -249,5 +252,10 @@
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="debug.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="source\ahklib.idl">
+      <Filter>Source Files</Filter>
+    </Midl>
   </ItemGroup>
 </Project>

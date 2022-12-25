@@ -2106,6 +2106,10 @@ public:
 	LPTSTR mName;
 	Line *mJumpToLine;
 	Label *mPrevLabel, *mNextLabel;  // Prev & Next items in linked list.
+#ifdef CONFIG_DLL
+	LineNumberType mLineNumber;
+	FileIndexType mFileIndex;
+#endif
 
 	bool IsExemptFromSuspend()
 	{
@@ -2269,6 +2273,10 @@ public:
 	Var **mGlobalVar; // Array of global declarations.
 	int mVarCount, mVarCountMax, mLazyVarCount, mGlobalVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
+#ifdef CONFIG_DLL
+	LineNumberType mLineNumber;
+	FileIndexType mFileIndex;
+#endif
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
@@ -2374,6 +2382,9 @@ public:
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
+#ifdef CONFIG_DLL
+		, mLineNumber(0), mFileIndex(0)
+#endif
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -2925,10 +2936,22 @@ private:
 #ifdef CONFIG_DEBUGGER
 	friend class Debugger;
 #endif
+#ifdef CONFIG_DLL
+	friend class AutoHotkeyLib;
+	friend class FuncCollection;
+	friend class VarCollection;
+	friend class LabelCollection;
+	friend class EnumFuncs;
+	friend class EnumVars;
+	friend class EnumLabels;
+#endif
 
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	Line *mFirstStaticLine, *mLastStaticLine; // The first and last static var initializer.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
+#ifdef CONFIG_DLL
+	int mLabelCount;
+#endif
 	Func **mFunc;  // Binary-searchable array of functions.
 	int mFuncCount, mFuncCountMax;
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
