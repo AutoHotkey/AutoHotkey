@@ -1429,15 +1429,36 @@ LPTSTR ComObject::Type()
 }
 
 
-int ComEnum::Next(Var *aOutput, Var *aOutputType)
+ComEnum::ComEnum(IEnumVARIANT *enm)
+	: penum(enm)
 {
-	VARIANT varResult = {0};
-	if (penum->Next(1, &varResult, NULL) == S_OK)
+	IServiceProvider *sp;
+	if (SUCCEEDED(enm->QueryInterface<IServiceProvider>(&sp)))
 	{
-		if (aOutputType)
-			aOutputType->Assign((__int64)varResult.vt);
-		if (aOutput)
-			AssignVariant(*aOutput, varResult, false);
+		IUnknown *unk;
+		if (SUCCEEDED(sp->QueryService<IUnknown>(IID_IObjectComCompatible, &unk)))
+		{
+			cheat = true;
+			unk->Release();
+		}
+		sp->Release();
+	}
+}
+
+
+int ComEnum::Next(Var *aVar0, Var *aVar1)
+{
+	VARIANT var[2] = {0};
+	if (penum->Next(1 + (cheat && aVar1), var, NULL) == S_OK)
+	{
+		AssignVariant(*aVar0, var[0], false);
+		if (aVar1)
+		{
+			if (cheat && aVar1)
+				AssignVariant(*aVar1, var[1], false);
+			else
+				aVar1->Assign((__int64)var[0].vt);
+		}
 		return true;
 	}
 	return	false;
@@ -1503,6 +1524,124 @@ int ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
 		return true;
 	}
 	return false;
+}
+
+
+STDMETHODIMP EnumComCompat::QueryInterface(REFIID riid, void **ppvObject)
+{
+	if (riid == IID_IUnknown || riid == IID_IEnumVARIANT)
+		*ppvObject = static_cast<IEnumVARIANT*>(this);
+	else if (riid == IID_IServiceProvider)
+		*ppvObject = static_cast<IServiceProvider*>(this);
+	else
+		return E_NOTIMPL;
+	AddRef();
+	return S_OK;
+}
+
+STDMETHODIMP EnumComCompat::QueryService(REFGUID guidService, REFIID riid, void **ppvObject)
+{
+	// This is our secret handshake for enabling AutoHotkey enumeration behaviour.
+	// Unlike calls to QueryInterface for this IID (due to the lack of registration etc.),
+	// calls to this method should pass through the process/thread apartment boundary.
+	if (guidService == IID_IObjectComCompatible && riid == IID_IUnknown)
+	{
+		*ppvObject = static_cast<IEnumVARIANT*>(this);
+		AddRef();
+		mCheat = true;
+		return S_OK;
+	}
+	*ppvObject = nullptr;
+	return E_NOTIMPL;
+}
+
+STDMETHODIMP_(ULONG) EnumComCompat::AddRef()
+{
+	return ++mRefCount;
+}
+
+STDMETHODIMP_(ULONG) EnumComCompat::Release()
+{
+	if (mRefCount)
+		return --mRefCount;
+	delete this;
+	return 0;
+}
+
+STDMETHODIMP EnumComCompat::Next(ULONG celt, /*out*/ VARIANT *rgVar, /*out*/ ULONG *pCeltFetched)
+{
+	if (!celt)
+		return E_INVALIDARG;
+
+	TCHAR result_token_buf[MAX_NUMBER_SIZE];
+	
+	ExprTokenType result_token;
+	result_token.buf = result_token_buf;
+	result_token.marker = _T("");
+	result_token.symbol = SYM_STRING;
+	result_token.mem_to_free = NULL;
+	
+	ExprTokenType this_token;
+	this_token.SetValue(mEnum);
+
+	Var var1;
+	Var var2;
+	ExprTokenType pt[3], *pp[] = { pt, pt + 1, pt + 2 };
+	pt[0].SetValue(_T("Next"));
+	pt[1].symbol = SYM_VAR, pt[1].var = &var1;
+	pt[2].symbol = SYM_VAR, pt[2].var = &var2;
+	int pc = min(1 + celt, 2U + mCheat);
+
+	switch (mEnum->Invoke(result_token, this_token, IT_CALL, pp, pc))
+	{
+	default:
+		if (TokenToBOOL(result_token))
+		{
+			ExprTokenType value;
+			var1.ToTokenSkipAddRef(value);
+			TokenToVariant(value, rgVar[0], FALSE);
+			if (pc > 2)
+			{
+				var2.ToTokenSkipAddRef(value);
+				TokenToVariant(value, rgVar[1], FALSE);
+			}
+			if (pCeltFetched)
+				*pCeltFetched = pc - 1;
+			break;
+		}
+		// else fall through.
+	case INVOKE_NOT_HANDLED:
+	case EARLY_EXIT:
+	case FAIL:
+		if (pCeltFetched)
+			*pCeltFetched = 0;
+		celt = -1;
+		break;
+	}
+
+	if (result_token.mem_to_free)
+		free(result_token.mem_to_free);
+	if (result_token.symbol == SYM_OBJECT)
+		result_token.object->Release();
+	var1.Free();
+	var2.Free();
+
+	return celt + 1 == pc ? S_OK : S_FALSE;
+}
+
+STDMETHODIMP EnumComCompat::Skip(ULONG celt)
+{
+	return E_NOTIMPL;
+}
+
+STDMETHODIMP EnumComCompat::Reset()
+{
+	return E_NOTIMPL;
+}
+
+STDMETHODIMP EnumComCompat::Clone(/*out*/ IEnumVARIANT **ppEnum)
+{
+	return E_NOTIMPL;
 }
 
 
@@ -1675,6 +1814,14 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		if (flags == IT_CALL && (wFlags & DISPATCH_PROPERTYGET))
 			flags |= IF_CALL_FUNC_ONLY;
 	}
+	else if (dispIdMember == DISPID_NEWENUM && (wFlags & (DISPATCH_METHOD | DISPATCH_PROPERTYGET)))
+	{
+		param_token[0].SetValue(_T("_NewEnum"));
+		param[0] = &param_token[0];
+		++param_count;
+		flags |= IF_NEWENUM;
+		wFlags = (wFlags & ~DISPATCH_PROPERTYGET) | DISPATCH_METHOD;
+	}
 	else
 	{
 		if (dispIdMember != DISPID_VALUE)
@@ -1764,7 +1911,15 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 			}
 		default:
 			result_to_return = S_OK;
-			if (pVarResult)
+			if (!pVarResult)
+				break;
+			if (dispIdMember == DISPID_NEWENUM && result_token.symbol == SYM_OBJECT)
+			{
+				pVarResult->vt = VT_UNKNOWN;
+				pVarResult->punkVal = static_cast<IEnumVARIANT*>(new EnumComCompat(result_token.object));
+				result_token.symbol = SYM_INTEGER; // Skip Release().
+			}
+			else
 				TokenToVariant(result_token, *pVarResult, FALSE);
 		}
 		break;

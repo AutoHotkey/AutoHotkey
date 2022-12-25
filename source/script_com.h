@@ -99,14 +99,12 @@ public:
 class ComEnum : public EnumBase
 {
 	IEnumVARIANT *penum;
+	bool cheat;
 
 public:
 	int Next(Var *aOutput, Var *aOutputType);
 
-	ComEnum(IEnumVARIANT *enm)
-		: penum(enm)
-	{
-	}
+	ComEnum(IEnumVARIANT *enm);
 	~ComEnum()
 	{
 		penum->Release();
@@ -132,6 +130,30 @@ public:
 	int Next(Var *aOutput, Var *aOutputType);
 	~ComArrayEnum();
 	IObject_Type_Impl("ComObjArray.Enumerator")
+};
+
+
+// Adapts an AutoHotkey enumerator object to the IEnumVARIANT COM interface.
+class EnumComCompat : public IEnumVARIANT, public IServiceProvider
+{
+	IObject *mEnum;
+	int mRefCount;
+	bool mCheat;
+
+public:
+	EnumComCompat(IObject *enumObj) : mEnum(enumObj), mRefCount(1), mCheat(false) {}
+	~EnumComCompat() { mEnum->Release(); }
+
+	STDMETHODIMP QueryInterface(REFIID riid, void **ppvObject);
+	STDMETHODIMP_(ULONG) AddRef();
+	STDMETHODIMP_(ULONG) Release();
+
+	STDMETHODIMP Next(ULONG celt, /*out*/ VARIANT *rgVar, /*out*/ ULONG *pCeltFetched);
+	STDMETHODIMP Skip(ULONG celt);
+	STDMETHODIMP Reset();
+	STDMETHODIMP Clone(/*out*/ IEnumVARIANT **ppEnum);
+
+	STDMETHODIMP QueryService(REFGUID guidService, REFIID riid, void **ppvObject);
 };
 
 

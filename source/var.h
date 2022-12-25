@@ -855,6 +855,9 @@ public:
 		}
 	}
 
+	Var() : mType(VAR_NORMAL), mCharContents(sEmptyString), mByteCapacity(0), mByteLength(0)
+		, mHowAllocated(ALLOC_MALLOC), mAttrib(VAR_ATTRIB_UNINITIALIZED), mScope(0), mName(_T("")) {}
+
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
