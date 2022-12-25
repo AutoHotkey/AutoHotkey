@@ -666,8 +666,15 @@ void VariantToToken(VARIANT &aVar, ExprTokenType &aToken, bool aRetainVar = true
 		if (!aRetainVar)
 			VariantClear(&aVar);
 		break;
-	case VT_I4:
 	case VT_ERROR:
+		if (aVar.scode == DISP_E_PARAMNOTFOUND)
+		{
+			aToken.symbol = SYM_MISSING;
+			aToken.marker = _T("");
+			break;
+		}
+		//else fall through:
+	case VT_I4:
 		aToken.symbol = SYM_INTEGER;
 		aToken.value_int64 = aVar.lVal;
 		break;
