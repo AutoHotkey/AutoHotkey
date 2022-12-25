@@ -985,15 +985,7 @@ ResultType Script::AutoExecSection()
 	// here in case the auto-execute section changed it:
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
-	// BEFORE DOING THE BELOW, "g" and "g_default" should be set up properly in case there's an OnExit
-	// routine (even non-persistent scripts can have one).
-	// If no hotkeys are in effect, the user hasn't requested a hook to be activated, and the script
-	// doesn't contain the #Persistent directive we're done unless there is an OnExit subroutine and it
-	// doesn't do "ExitApp":
-	if (!IS_PERSISTENT) // Resolve macro again in case any of its components changed since the last time.
-		g_script.ExitApp(ExecUntil_result == FAIL ? EXIT_ERROR : EXIT_EXIT);
-
-	return OK;
+	return ExecUntil_result;
 }
 
 
@@ -12845,7 +12837,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// the program itself to terminate.  Otherwise, it causes us to return from all blocks
 			// and Gosubs (i.e. all the way out of the current subroutine, which was usually triggered
 			// by a hotkey):
+#ifndef CONFIG_DLL
 			if (IS_PERSISTENT)
+#endif
 				return EARLY_EXIT;  // It's "early" because only the very end of the script is the "normal" exit.
 				// EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
 			// Otherwise, FALL THROUGH TO BELOW:

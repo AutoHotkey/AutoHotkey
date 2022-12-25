@@ -28,7 +28,7 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg);
 
 void EarlyAppInit();
 ResultType InitForExecution();
-int MainExecuteScript();
+int MainExecuteScript(bool aMsgSleep = true);
 
 
 AHKAPI(int) Main(int argc, LPTSTR argv[])
@@ -621,7 +621,7 @@ public:
 	{
 		if (!g_script.mIsReadyToExecute)
 			return E_FAIL;
-		*aExitCode = MainExecuteScript();
+		*aExitCode = MainExecuteScript(false);
 		return S_OK;
 	}
 

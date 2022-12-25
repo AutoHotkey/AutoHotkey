@@ -31,7 +31,7 @@ GNU General Public License for more details.
 ResultType InitForExecution();
 ResultType ParseCmdLineArgs(LPTSTR &script_filespec);
 ResultType CheckPriorInstance();
-int MainExecuteScript();
+int MainExecuteScript(bool aMsgSleep = true);
 ResultType SetLegacyArgVars(LPTSTR *aArg, int aArgCount);
 
 
@@ -312,7 +312,7 @@ ResultType InitForExecution()
 }
 
 
-int MainExecuteScript()
+int MainExecuteScript(bool aMsgSleep)
 {
 #ifdef CONFIG_DEBUGGER
 	// Initiate debug session now if applicable.
@@ -331,18 +331,30 @@ int MainExecuteScript()
 	__try
 #endif
 	{
-		// Run the auto-execute part at the top of the script (this call might never return):
-		if (!g_script.AutoExecSection()) // Can't run script at all. Due to rarity, just abort.
-			return CRITICAL_ERROR;
+		// Run the auto-execute part at the top of the script:
+		auto exec_result = g_script.AutoExecSection();
 		// REMEMBER: The call above will never return if one of the following happens:
 		// 1) The AutoExec section never finishes (e.g. infinite loop).
 		// 2) The AutoExec function uses the Exit or ExitApp command to terminate the script.
-		// 3) The script isn't persistent and its last line is reached (in which case an ExitApp is implicit).
+		// 3) The script isn't persistent and its last line is reached (in which case an Exit is implicit).
+		// However, #ifdef CONFIG_DLL, the call will return after Exit is used (but not explicit ExitApp).
 
-		// Call it in this special mode to kick off the main event loop.
-		// Be sure to pass something >0 for the first param or it will
-		// return (and we never want this to return):
-		MsgSleep(SLEEP_INTERVAL, WAIT_FOR_MESSAGES);
+#ifdef CONFIG_DLL
+		if (!aMsgSleep)
+			return exec_result ? 0 : CRITICAL_ERROR;
+#endif
+		if (IS_PERSISTENT)
+		{
+			// Call it in this special mode to kick off the main event loop.
+			// Be sure to pass something >0 for the first param or it will
+			// return (and we never want this to return):
+			MsgSleep(SLEEP_INTERVAL, WAIT_FOR_MESSAGES);
+		}
+		else
+		{
+			// The script isn't persistent, so call OnExit handlers and terminate.
+			g_script.ExitApp(exec_result == FAIL ? EXIT_ERROR : EXIT_EXIT);
+		}
 	}
 #ifndef _DEBUG
 	__except (EXCEPTION_EXECUTE_HANDLER)
@@ -364,7 +376,7 @@ int MainExecuteScript()
 		return ecode;
 	}
 #endif 
-	return 0; // Never executed; avoids compiler warning.
+	return 0;
 }
 
 
