@@ -32,7 +32,7 @@ AutoHotkeyx.vcxproj contains several combinations of build configurations.  The 
 Secondary configurations are:
 
   - **(mbcs)**: ANSI (multi-byte character set). Configurations without this suffix are Unicode.
-  - **(minimal)**: Alternative project settings for producing a smaller binary, possibly with lower performance and added dependencies.
+  - **.dll**: Builds an experimental dll for use hosting the interpreter, such as to enable the use of v1 libraries in a v2 script. See [README-LIB.md](README-LIB.md).
 
 
 ## Platforms ##
