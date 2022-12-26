@@ -1174,7 +1174,7 @@ bif_impl FResult ToolTip(optl<StrArg> aText, optl<int> aX, optl<int> aY, optl<in
 
 	TOOLINFO ti = { 0 };
 	ti.cbSize = sizeof(ti);
-	ti.uFlags = TTF_TRACK;
+	ti.uFlags = TTF_TRACK | TTF_ABSOLUTE;
 	ti.lpszText = const_cast<LPTSTR>(tip_text);
 	// ti.hwnd is the window to which notification messages are sent.  Set this to allow customization.
 	ti.hwnd = g_hWnd;
