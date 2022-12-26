@@ -1856,9 +1856,19 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	for (UINT i = 1; i <= cArgs; ++i)
 	{
 		VARIANTARG *pvar = &pDispParams->rgvarg[cArgs-i];
-		while (pvar->vt == (VT_BYREF | VT_VARIANT))
-			pvar = pvar->pvarVal;
-		VariantToToken(*pvar, param_token[i]);
+		// ByRef support here is based on v2 (a97ee22d), but limited to VARIANT for backward-compatibility
+		// (as previous versions only "dereferenced" VT_BYREF|VT_VARIANT, not other ByRef combinations).
+		if (pvar->vt == (VT_BYREF | VT_VARIANT))
+		{
+			// Allocate and pass a temporary Var to transparently support ByRef.
+			param_token[i].symbol = SYM_VAR;
+			param_token[i].var = new (_alloca(sizeof(Var))) Var();
+			AssignVariant(*param_token[i].var, *pvar->pvarVal);
+		}
+		else
+		{
+			VariantToToken(*pvar, param_token[i]);
+		}
 		param[i] = &param_token[i];
 	}
 	
@@ -1941,12 +1951,26 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 
 	for (UINT i = 1; i <= cArgs; ++i)
 	{
-		// Release objects (some or all of which may have been created by VariantToToken()):
-		if (param_token[i].symbol == SYM_OBJECT)
-			param_token[i].object->Release();
-		// Free any temporary memory used to hold strings; see VariantToToken().
-		else if (param_token[i].symbol == SYM_STRING && param_token[i].mem_to_free)
-			free(param_token[i].mem_to_free);
+		if (param_token[i].symbol == SYM_VAR) // Temp var for VT_BYREF.
+		{
+			auto &varg = pDispParams->rgvarg[cArgs-i];
+			ExprTokenType value;
+			param_token[i].var->ToTokenSkipAddRef(value);
+			ASSERT(varg.vt == (VT_BYREF | VT_VARIANT)); // v1 only: vt is always VT_BYREF|VT_VARIANT.
+			//TokenToVarType(value, varg.vt & ~VT_BYREF, varg.pvRecord);
+			VariantClear(varg.pvarVal);
+			TokenToVariant(value, *varg.pvarVal, FALSE);
+			param_token[i].var->Free();
+		}
+		else
+		{
+			// Release objects (some or all of which may have been created by VariantToToken()):
+			if (param_token[i].symbol == SYM_OBJECT)
+				param_token[i].object->Release();
+			// Free any temporary memory used to hold strings; see VariantToToken().
+			else if (param_token[i].symbol == SYM_STRING && param_token[i].mem_to_free)
+				free(param_token[i].mem_to_free);
+		}
 	}
 
 	return result_to_return;

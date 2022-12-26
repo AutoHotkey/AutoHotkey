@@ -859,8 +859,10 @@ public:
 		, mHowAllocated(ALLOC_MALLOC), mAttrib(VAR_ATTRIB_UNINITIALIZED), mScope(0), mName(_T("")) {}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new(size_t aBytes, void *p) {return p;}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
+	void operator delete(void *aPtr, void *) {}
 	void operator delete[](void *aPtr) {}
 
 
