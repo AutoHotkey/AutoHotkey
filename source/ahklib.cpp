@@ -24,6 +24,9 @@ freely, without restriction.
 #define AHKAPI(_rettype_) extern "C" __declspec(dllexport) _rettype_ __stdcall
 
 
+IDispatch *lib_ProblemCallback = nullptr;
+
+
 void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg);
 
 void EarlyAppInit();
@@ -626,6 +629,18 @@ public:
 	}
 
 
+	STDMETHODIMP OnProblem(IDispatch *callback)
+	{
+		auto prev = lib_ProblemCallback;
+		if (callback)
+			callback->AddRef();
+		lib_ProblemCallback = callback;
+		if (prev)
+			prev->Release();
+		return S_OK;
+	}
+
+
 	STDMETHODIMP get_Script(IDispatch **ppScript)
 	{
 		if (!mScript)
@@ -662,6 +677,39 @@ public:
 		return S_OK;
 	}
 };
+
+
+bool LibNotifyProblem(ExprTokenType &aProblem)
+{
+	if (!lib_ProblemCallback)
+		return false;
+	VARIANTARG arg;
+	TokenToVariant(aProblem, arg, TRUE);
+	DISPPARAMS prm = { &arg, nullptr, 1, 0 };
+	VARIANT result;
+	auto hr = lib_ProblemCallback->Invoke(DISPID_VALUE, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &prm, &result, nullptr, nullptr);
+	if (arg.vt == VT_BSTR)
+		SysFreeString(arg.bstrVal);
+	return SUCCEEDED(hr);
+}
+
+
+bool LibNotifyProblem(LPCTSTR aMessage, LPCTSTR aExtra, LPCTSTR aWhat, Line *aLine)
+{
+	if (!lib_ProblemCallback)
+		return false;
+	static Line sLine(0, 0, ACT_THROW, nullptr, 0);
+	if (!aLine)
+	{
+		sLine.mFileIndex = g_script.mCurrFileIndex;
+		sLine.mLineNumber = g_script.mCombinedLineNumber;
+		aLine = &sLine;
+	}
+	auto obj = aLine->CreateRuntimeException(aMessage, aWhat, aExtra);
+	auto result = LibNotifyProblem(ExprTokenType(obj));
+	obj->Release();
+	return result;
+}
 
 
 AHKAPI(HRESULT) Host(IDispatch **ppLib)

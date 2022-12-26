@@ -16721,6 +16721,11 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		|| g_script.mOnError.Count()) // OnError also needs an exception object.
 		&& (aErrorType == FAIL || aErrorType == EARLY_EXIT)) // FAIL is most common, but EARLY_EXIT is used by ComError(). WARN and CRITICAL_ERROR are excluded.
 		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
+	
+#ifdef CONFIG_DLL
+	if (LibNotifyProblem(aErrorText, aExtraInfo, _T("Error"), this))
+		return aErrorType;
+#endif
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute && aErrorType != WARN) // i.e. runtime errors are always displayed via dialog.
 	{
@@ -16820,6 +16825,11 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 		aErrorText = _T("Unk"); // Placeholder since it shouldn't be NULL.
 	if (!aExtraInfo) // In case the caller explicitly called it with NULL.
 		aExtraInfo = _T("");
+	
+#ifdef CONFIG_DLL
+	if (LibNotifyProblem(aErrorText, aExtraInfo, _T("Error"), nullptr))
+		return FAIL;
+#endif
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
 	{
@@ -16916,6 +16926,11 @@ ResultType Script::UnhandledException(Line* aLine)
 			return FAIL;
 	}
 
+#ifdef CONFIG_DLL
+	if (LibNotifyProblem(*g.ThrownToken))
+		return FAIL;
+#endif
+
 	if (Object *ex = dynamic_cast<Object *>(TokenToObject(*g.ThrownToken)))
 	{
 		// For simplicity and safety, we call into the Object directly rather than via Invoke().
@@ -16983,12 +16998,17 @@ void Script::FreeExceptionToken(ExprTokenType*& aToken)
 
 void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo, Line *line)
 {
-	if (warnMode == WARNMODE_OFF)
-		return;
-
 	if (!line) line = mCurrLine;
 	int fileIndex = line ? line->mFileIndex : mCurrFileIndex;
 	FileIndexType lineNumber = line ? line->mLineNumber : mCombinedLineNumber;
+
+#ifdef CONFIG_DLL
+	if (LibNotifyProblem(aWarningText, aExtraInfo, _T("Warn"), line))
+		return;
+#endif
+
+	if (warnMode == WARNMODE_OFF)
+		return;
 
 	TCHAR buf[MSGBOX_TEXT_SIZE], *cp = buf;
 	int buf_space_remaining = (int)_countof(buf);

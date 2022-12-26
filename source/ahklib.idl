@@ -8,6 +8,7 @@ library ComLib {
 		HRESULT Main([in] BSTR CmdLine, [out, retval] int* ExitCode);
 		HRESULT LoadFile([in] BSTR FileName);
 		HRESULT Execute([out, retval] int* ExitCode);
+		HRESULT OnProblem([in] IDispatch* Callback);
 		[propget] HRESULT Script([out, retval] IDispatch** Value);
 		[propget] HRESULT Funcs([out, retval] IDispatch** Value);
 		[propget] HRESULT Vars([out, retval] IDispatch** Value);

@@ -2944,6 +2944,7 @@ private:
 	friend class EnumFuncs;
 	friend class EnumVars;
 	friend class EnumLabels;
+	friend bool LibNotifyProblem(LPCTSTR, LPCTSTR, LPCTSTR, Line *);
 #endif
 
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
@@ -3473,6 +3474,11 @@ bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, bool aUseBoolForUpDown);
 bool FileCreateDir(LPCTSTR aDirSpec);
 LPTSTR GetExitReasonString(ExitReasons aExitReason);
+
+#ifdef CONFIG_DLL
+bool LibNotifyProblem(ExprTokenType &aProblem);
+bool LibNotifyProblem(LPCTSTR aMessage, LPCTSTR aExtra, LPCTSTR aWhat, Line *aLine);
+#endif
 
 #endif
 
