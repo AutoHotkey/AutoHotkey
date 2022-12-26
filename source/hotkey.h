@@ -209,7 +209,7 @@ public:
 	static bool sJoystickHasHotkeys[MAX_JOYSTICKS];
 	static DWORD sJoyHotkeyCount;
 
-	static void AllDestructAndExit(int exit_code);
+	static void AllDestruct();
 
 	static FResult IfExpr(IObject *aExprObj);
 	static FResult IfExpr(LPCTSTR aExpr);

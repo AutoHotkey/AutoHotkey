@@ -1291,6 +1291,10 @@ public:
 	LPTSTR mName;
 	Line *mJumpToLine;
 	Label *mPrevLabel, *mNextLabel;  // Prev & Next items in linked list.
+#ifdef CONFIG_DLL
+	LineNumberType mLineNumber;
+	FileIndexType mFileIndex;
+#endif
 
 	Label(LPTSTR aLabelName)
 		: mName(aLabelName) // Caller gave us a pointer to dynamic memory for this.
@@ -1495,6 +1499,11 @@ public:
 	int mParamCount = 0; // The function's maximum number of parameters.  For UDFs, also the number of items in the mParam array.
 	int mMinParams = 0;  // The number of mandatory parameters (populated for both UDFs and built-in's).
 	bool mIsVariadic = false; // Whether to allow mParamCount to be exceeded.
+
+#ifdef CONFIG_DLL
+	LineNumberType mLineNumber = 0;
+	FileIndexType mFileIndex = 0;
+#endif
 
 	virtual bool IsBuiltIn() = 0; // FIXME: Should not need to rely on this.
 	virtual bool ArgIsOutputVar(int aArg) = 0;
@@ -2778,9 +2787,22 @@ private:
 #ifdef CONFIG_DEBUGGER
 	friend class Debugger;
 #endif
+#ifdef CONFIG_DLL
+	friend class AutoHotkeyLib;
+	friend class FuncCollection;
+	friend class VarCollection;
+	friend class LabelCollection;
+	friend class EnumFuncs;
+	friend class EnumVars;
+	friend class EnumLabels;
+	friend bool LibNotifyProblem(LPCTSTR, LPCTSTR, Line *, bool);
+#endif
 
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
+#ifdef CONFIG_DLL
+	int mLabelCount;
+#endif
 	FuncList mFuncs;
 	
 	UserFunc *mLastHotFunc;		// For hotkey/hotstring functions
@@ -2928,7 +2950,7 @@ public:
 
 	UserMenu *mTrayMenu; // Our tray menu, which should be destroyed upon exiting the program.
     
-	ResultType Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestart);
+	ResultType Init(LPTSTR aScriptFilename);
 	ResultType CreateWindows();
 	void EnableClipboardListener(bool aEnable);
 	void AllowMainWindow(bool aAllow);
@@ -3373,6 +3395,11 @@ void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, s
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
 void ObjectToString(ResultToken & aResultToken, ExprTokenType & aThisToken, IObject * aObject);
 
+
+#ifdef CONFIG_DLL
+bool LibNotifyProblem(ExprTokenType &aProblem);
+bool LibNotifyProblem(LPCTSTR aMessage, LPCTSTR aExtra, Line *aLine, bool aWarn = false);
+#endif
 
 #endif
 
