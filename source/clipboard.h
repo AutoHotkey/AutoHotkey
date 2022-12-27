@@ -65,23 +65,6 @@ public:
 	ResultType Commit(UINT aFormat = CF_NATIVETEXT);
 	ResultType AbortWrite(LPTSTR aErrorMessage = _T(""));
 	ResultType Close(LPTSTR aErrorMessage = NULL);
-	LPTSTR Contents()
-	{
-		if (mClipMemNewLocked)
-			// Its set up for being written to, which takes precedence over the fact
-			// that it may be open for read also, so return the write-buffer:
-			return mClipMemNewLocked;
-		if (!IsClipboardFormatAvailable(CF_NATIVETEXT))
-			// We check for both CF_TEXT and CF_HDROP in case it's possible for
-			// the clipboard to contain both formats simultaneously.  In this case,
-			// just do this for now, to remind the caller that in these cases, it should
-			// call Get(buf), providing the target buf so that we have some memory to
-			// transcribe the (potentially huge) list of files into:
-			return IsClipboardFormatAvailable(CF_HDROP) ? _T("<<>>") : _T("");
-		else
-			// Some callers may rely upon receiving empty string rather than NULL on failure:
-			return (Get() == CLIPBOARD_FAILURE) ? _T("") : mClipMemNowLocked;
-	}
 
 	Clipboard() // Constructor
 		: mIsOpen(false)  // Assumes our app doesn't already have it open.
