@@ -139,6 +139,8 @@ bif_impl FResult SetControlDelay(int aDelay, int &aRetVal)
 BIV_DECL_R(BIV_Clipboard)
 {
 	auto length = g_clip.Get();
+	if (length == CLIPBOARD_FAILURE)
+		_f_return_FAIL;
 	if (TokenSetResult(aResultToken, nullptr, length))
 	{
 		aResultToken.marker_length = g_clip.Get(aResultToken.marker);
