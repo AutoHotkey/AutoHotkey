@@ -343,31 +343,34 @@ void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
 	}
 	else
 		aDynaParam.passed_by_address = false;
-
-	if (false) {} // To simplify the macro below.  It should have no effect on the compiled code.
-#define TEST_TYPE(t, n)  else if (!_tcsicmp(buf, _T(t)))  aDynaParam.type = (n);
-	TEST_TYPE("Int",	DLL_ARG_INT) // The few most common types are kept up top for performance.
-	TEST_TYPE("Str",	DLL_ARG_STR)
-#ifdef _WIN64
-	TEST_TYPE("Ptr",	DLL_ARG_INT64) // Ptr vs IntPtr to simplify recognition of the pointer suffix, to avoid any possible confusion with IntP, and because it is easier to type.
-#else
-	TEST_TYPE("Ptr",	DLL_ARG_INT)
-#endif
-	TEST_TYPE("Short",	DLL_ARG_SHORT)
-	TEST_TYPE("Char",	DLL_ARG_CHAR)
-	TEST_TYPE("Int64",	DLL_ARG_INT64)
-	TEST_TYPE("Float",	DLL_ARG_FLOAT)
-	TEST_TYPE("Double",	DLL_ARG_DOUBLE)
-	TEST_TYPE("AStr",	DLL_ARG_ASTR)
-	TEST_TYPE("WStr",	DLL_ARG_WSTR)
-#undef TEST_TYPE
-	else // It's non-blank but an unknown type.
+	// Using a switch benchmarks better than the old approach, which was an if-else-if ladder
+	// of string comparisons.  The old approach appeared to penalize Int64 vs. Int, perhaps due
+	// to position in the ladder.
+	switch (ctolower(*buf))
 	{
-		aDynaParam.type = DLL_ARG_INVALID; 
-		return;
+	case 'i':
+		// This method currently benchmarks better than _tcsnicmp, especially for Int64.
+		if (ctolower(buf[1]) == 'n' && ctolower(buf[2]) == 't')
+		{
+			if (!buf[3])
+				aDynaParam.type = DLL_ARG_INT;
+			else if (buf[3] == '6' && buf[4] == '4' && !buf[5])
+				aDynaParam.type = DLL_ARG_INT64;
+			else
+				break;
+			return;
+		}
+		break;
+	case 'p': if (!_tcsicmp(buf, _T("Ptr")))	aDynaParam.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64); return;
+	case 's': if (!_tcsicmp(buf, _T("Str")))	aDynaParam.type = DLL_ARG_STR; return;
+	case 'd': if (!_tcsicmp(buf, _T("Double")))	aDynaParam.type = DLL_ARG_DOUBLE; return;
+	case 'f': if (!_tcsicmp(buf, _T("Float")))	aDynaParam.type = DLL_ARG_FLOAT; return;
+	case 'a': if (!_tcsicmp(buf, _T("AStr")))	aDynaParam.type = DLL_ARG_ASTR; return;
+	case 'w': if (!_tcsicmp(buf, _T("WStr")))	aDynaParam.type = DLL_ARG_WSTR; return;
+	case 'c': if (!_tcsicmp(buf, _T("Char")))	aDynaParam.type = DLL_ARG_CHAR; return;
 	}
-	return; // Since above didn't "return", the type is explicitly valid
-	
+	// Since above didn't "return", the type is invalid.
+	aDynaParam.type = DLL_ARG_INVALID; 
 }
 
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
