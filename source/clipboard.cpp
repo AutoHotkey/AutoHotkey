@@ -61,8 +61,7 @@ size_t Clipboard::Get(LPTSTR aBuf)
 		{
 			// Since this should be very rare, a shorter message is now used.  Formerly, it was
 			// "Could not open clipboard for reading after many timed attempts. Another program is probably holding it open."
-			Close(CANT_OPEN_CLIPBOARD_READ);
-			return CLIPBOARD_FAILURE;
+			return Close(CANT_OPEN_CLIPBOARD_READ) ? 0 : CLIPBOARD_FAILURE;
 		}
 		if (   !(mClipMemNow = GetClipboardDataTimeout(clipboard_contains_text ? CF_NATIVETEXT : CF_HDROP))   )
 		{
@@ -97,8 +96,7 @@ size_t Clipboard::Get(LPTSTR aBuf)
 		// never been reported by anyone.  Therefore, GlobalSize() is currently not called.
 		if (   !(mClipMemNowLocked = (LPTSTR)GlobalLock(mClipMemNow))   )
 		{
-			Close(_T("GlobalLock"));  // Short error message since so rare.
-			return CLIPBOARD_FAILURE;
+			return Close(_T("GlobalLock")) ? 0 : CLIPBOARD_FAILURE;  // Short error message since so rare.
 		}
 		// Otherwise: Update length after every successful new open&lock:
 		// Determine the length (size - 1) of the buffer than would be
@@ -208,7 +206,7 @@ LPTSTR Clipboard::PrepareForWrite(size_t aAllocSize)
 	if (   !(mClipMemNewLocked = (LPTSTR)GlobalLock(mClipMemNew))   )
 	{
 		mClipMemNew = GlobalFree(mClipMemNew);  // This keeps mClipMemNew in sync with its state.
-		g_script.ScriptError(ERR_INTERNAL_CALL);  // Generic error message since so rare.
+		g_script.RuntimeError(ERR_INTERNAL_CALL, _T(""), FAIL);  // Generic error message since so rare.
 		return NULL;
 	}
 	mCapacity = (UINT)aAllocSize; // Keep mCapacity in sync with the state of mClipMemNewLocked.
@@ -293,7 +291,7 @@ ResultType Clipboard::AbortWrite(LPTSTR aErrorMessage)
 	if (mClipMemNew)
 		mClipMemNew = GlobalFree(mClipMemNew);
 	// Caller needs us to always return FAIL:
-	return *aErrorMessage ? g_script.ScriptError(aErrorMessage) : FAIL;
+	return *aErrorMessage ? g_script.RuntimeError(aErrorMessage) : FAIL;
 }
 
 
@@ -330,7 +328,7 @@ ResultType Clipboard::Close(LPTSTR aErrorMessage)
 	//	mClipMemNew = GlobalFree(mClipMemNew);
 	if (aErrorMessage && *aErrorMessage)
 		// Caller needs us to always return FAIL if an error was displayed:
-		return g_script.ScriptError(aErrorMessage);
+		return g_script.RuntimeError(aErrorMessage);
 
 	// Seems best not to reset mLength.  But it will quickly become out of date once
 	// the clipboard has been closed and other apps can use it.

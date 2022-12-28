@@ -685,19 +685,13 @@ ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR 
 
 
 
-ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, ResultType aErrorType)
+ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 // Even though this is a Script method, including it here since it shares
 // a common theme with the other error-displaying functions:
 {
-	if (mCurrLine)
-		// If a line is available, do LineError instead since it's more specific.
-		// If an error occurs before the script is ready to run, assume it's always critical
-		// in the sense that the program will exit rather than run the script.
-		// Update: It's okay to return FAIL in this case.  CRITICAL_ERROR should
-		// be avoided whenever OK and FAIL are sufficient by themselves, because
-		// otherwise, callers can't use the NOT operator to detect if a function
-		// failed (since FAIL is value zero, but CRITICAL_ERROR is non-zero):
-		return mCurrLine->LineError(aErrorText, FAIL, aExtraInfo);
+	if (mCurrLine && g_script.mIsReadyToExecute)
+		// If a line is available, do RuntimeError instead for exceptions and line context.
+		return RuntimeError(aErrorText, aExtraInfo, FAIL, mCurrLine);
 	// Otherwise: The fact that mCurrLine is NULL means that the line currently being loaded
 	// has not yet been successfully added to the linked list.  Such errors will always result
 	// in the program exiting.

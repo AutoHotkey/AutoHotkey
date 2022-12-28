@@ -1702,9 +1702,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 				*name_end = '\0';
 			}
 			else
-				c = 0;
-			//else there won't be a next iteration.
-			key_type = IsNumeric(name); // SYM_INTEGER or SYM_STRING.
+				c = 0; // Indicate there won't be a next iteration.
 		}
 		else
 		{

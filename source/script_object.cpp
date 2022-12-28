@@ -1345,13 +1345,13 @@ void Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 
 void Object::OwnProps(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
+	_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 0)
 		, static_cast<IndexEnumerator::Callback>(&Object::GetEnumProp)));
 }
 
 void Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
+	_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 0)
 		, static_cast<IndexEnumerator::Callback>(&Map::GetEnumItem)));
 }
 
@@ -2088,7 +2088,7 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 		_o_throw_oom;
 
 	case M___Enum:
-		_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
+		_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 0)
 			, static_cast<IndexEnumerator::Callback>(&Array::GetEnumItem)));
 	}
 }
@@ -2164,7 +2164,7 @@ bool EnumBase::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 
 ResultType IndexEnumerator::Next(Var *var0, Var *var1)
 {
-	return (mObject->*mGetItem)(++mIndex, var0, var1, mParamCount);
+	return (mObject->*mGetItem)(++mIndex, var0, var1, mParamCount ? mParamCount : var1 ? 2 : 1);
 }
 
 
@@ -2251,7 +2251,7 @@ ResultType RegExMatchObject::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal, int
 		return CONDITION_FALSE;
 	// In single-var mode, return the subpattern values.
 	// Otherwise, return the subpattern names first and values second.
-	if (aVarCount < 2)
+	if (aVarCount == 1)
 	{
 		aVal = aKey;
 		aKey = nullptr;

@@ -10,3 +10,6 @@
 #define CONTROL_PARAMETERS_DECL ExprTokenType &aControlSpec, WINTITLE_PARAMETERS_DECL
 #define CONTROL_PARAMETERS_DECL_OPT ExprTokenType *aControlSpec, WINTITLE_PARAMETERS_DECL
 #define CONTROL_PARAMETERS aControlSpec, WINTITLE_PARAMETERS
+
+#define DEBUGGER_COMMAND(cmd)	int cmd(char **aArgV, int aArgCount, char *aTransactionId)
+#define BOOL_OPTION(OPT)

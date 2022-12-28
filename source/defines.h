@@ -1005,7 +1005,8 @@ inline void global_set_defaults(ScriptThreadSettings &g)
 	g.TitleFindFast = true; // Since it's so much faster in many cases.
 	g.DetectHiddenWindows = false;  // Same as AutoIt2 but unlike AutoIt3; seems like a more intuitive default.
 	g.DetectHiddenText = true;  // Unlike AutoIt, which defaults to false.  This setting performs better.
-	#define DEFAULT_PEEK_FREQUENCY 5
+	#define DEFAULT_PEEK_FREQUENCY 5 // Default peek frequency for an interruptible/non-critical thread.
+	#define UNINTERRUPTIBLE_PEEK_FREQUENCY 16 // Used during a thread's uninterruptible period to ensure it has a chance to call Critical() before MsgSleep() is called.
 	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in Critical().
 	g.AllowTimers = true;
 	g.ThreadIsCritical = false;

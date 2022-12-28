@@ -3406,7 +3406,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				if (!error_was_shown && (file_was_found || ignore_load_failure))
 					return CONDITION_TRUE;
 				*parameter_end = '>'; // Restore '>' for display to the user.
-				return error_was_shown ? FAIL : ScriptError(_T("Function library not found."), aBuf);
+				return error_was_shown ? FAIL : ScriptError(_T("Script library not found."), aBuf);
 			}
 			//else invalid syntax; treat it as a regular #include which will almost certainly fail.
 		}
@@ -9494,7 +9494,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			// checked on demand by callers of IsInterruptible().
 			if (g.UninterruptedLineCount > g_script.mUninterruptedLineCountMax // See above.
 				&& g_script.mUninterruptedLineCountMax > -1)
+			{
 				g.AllowThreadToBeInterrupted = true;
+				g.PeekFrequency = DEFAULT_PEEK_FREQUENCY;
+			}
 		}
 
 		// At this point, a pause may have been triggered either by the above MsgSleep()

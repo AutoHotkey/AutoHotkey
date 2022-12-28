@@ -177,7 +177,7 @@ ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2
 	if (aIndex >= mControlCount) // Use >= vs. == in case the Gui was destroyed.
 		return CONDITION_FALSE;
 	GuiControlType* ctrl = mControl[aIndex];
-	if (aVarCount < 2) // `for x in myGui` or `[myGui*]`
+	if (aVarCount == 1) // `for x in myGui` or `[myGui*]`
 	{
 		aOutputVar2 = aOutputVar1; // Return the more useful value in single-var mode: the control object.
 		aOutputVar1 = nullptr;
@@ -193,7 +193,7 @@ ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2
 FResult GuiType::__Enum(optl<int> aVarCount, IObject *&aRetVal)
 {
 	GUI_MUST_HAVE_HWND;
-	aRetVal = new IndexEnumerator(this, aVarCount.value_or(1)
+	aRetVal = new IndexEnumerator(this, aVarCount.value_or(0)
 		, static_cast<IndexEnumerator::Callback>(&GuiType::GetEnumItem));
 	return OK;
 }
@@ -8227,7 +8227,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	// true but the message it sent us results in a recursive call to us (such as when the user resizes a
 	// window by dragging its borders: that apparently starts a loop in DefDlgProc that calls this
 	// function recursively).  This fixes OnMessage(0x24, "WM_GETMINMAXINFO") and probably others.
-	// Known limitation: If the above launched a thread but the thread didn't cause it turn return,
+	// Known limitation: If the above launched a thread but the thread didn't cause it to return,
 	// and iMsg is something like AHK_GUI_ACTION that will be reposted via PostMessage(), the monitor
 	// will be launched again when MsgSleep is called in conjunction with the repost. Given the rarity
 	// and the minimal consequences of this, no extra code (such as passing a new parameter to MsgSleep)

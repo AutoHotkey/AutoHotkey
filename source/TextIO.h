@@ -178,9 +178,6 @@ protected:
 		return true;
 	}
 
-	template<typename TCHR>
-	DWORD WriteTranslateCRLF(TCHR *aBuf, DWORD aBufLen); // Used by TextStream::Write(LPCSTR,DWORD).
-
 	// Functions for populating the read buffer.
 	DWORD Read(DWORD aReadSize = TEXT_IO_BLOCK)
 	{
