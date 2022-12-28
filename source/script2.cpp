@@ -2563,7 +2563,7 @@ bif_impl void Critical(optl<StrArg> aSetting, int &aRetVal)
 	// DON'T GO TOO HIGH because this setting reduces response time for ALL messages, even those that
 	// don't launch script threads (especially painting/drawing and other screen-update events).
 	// Some hardware has a tickcount granularity of 15 instead of 10, so this covers more variations.
-	DWORD peek_frequency_when_critical_is_on = 16; // Set default.  See below.
+	DWORD peek_frequency_when_critical_is_on = UNINTERRUPTIBLE_PEEK_FREQUENCY; // Set default.  See below.
 	// v1.0.48: Below supports "Critical 0" as meaning "Off" to improve compatibility with A_IsCritical.
 	// In fact, for performance, only the following are no recognized as turning on Critical:
 	//     - "On"

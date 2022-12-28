@@ -9475,7 +9475,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			// checked on demand by callers of IsInterruptible().
 			if (g.UninterruptedLineCount > g_script.mUninterruptedLineCountMax // See above.
 				&& g_script.mUninterruptedLineCountMax > -1)
+			{
 				g.AllowThreadToBeInterrupted = true;
+				g.PeekFrequency = DEFAULT_PEEK_FREQUENCY;
+			}
 		}
 
 		// At this point, a pause may have been triggered either by the above MsgSleep()
