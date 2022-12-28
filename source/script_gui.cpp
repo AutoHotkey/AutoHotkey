@@ -177,7 +177,7 @@ ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2
 	if (aIndex >= mControlCount) // Use >= vs. == in case the Gui was destroyed.
 		return CONDITION_FALSE;
 	GuiControlType* ctrl = mControl[aIndex];
-	if (aVarCount < 2) // `for x in myGui` or `[myGui*]`
+	if (aVarCount == 1) // `for x in myGui` or `[myGui*]`
 	{
 		aOutputVar2 = aOutputVar1; // Return the more useful value in single-var mode: the control object.
 		aOutputVar1 = nullptr;
@@ -193,7 +193,7 @@ ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2
 FResult GuiType::__Enum(optl<int> aVarCount, IObject *&aRetVal)
 {
 	GUI_MUST_HAVE_HWND;
-	aRetVal = new IndexEnumerator(this, aVarCount.value_or(1)
+	aRetVal = new IndexEnumerator(this, aVarCount.value_or(0)
 		, static_cast<IndexEnumerator::Callback>(&GuiType::GetEnumItem));
 	return OK;
 }
