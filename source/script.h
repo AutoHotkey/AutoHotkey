@@ -2600,9 +2600,6 @@ public:
 	static LPTSTR sEventNames[];
 	static LPTSTR ConvertEvent(GuiEventType evt);
 	static GuiEventType ConvertEvent(LPCTSTR evt);
-	// Currently this returns true for all events if we're using an event sink,
-	// because checking for the presence of a method in the event sink could be
-	// unreliable (but maybe placing some limitations would solve that?).
 	BOOL IsMonitoring(GuiEventType aEvent) { return mEvents.IsMonitoring(aEvent); }
 
 	ResultType GetEnumItem(UINT &aIndex, Var *, Var *, int);

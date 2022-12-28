@@ -8217,7 +8217,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	// true but the message it sent us results in a recursive call to us (such as when the user resizes a
 	// window by dragging its borders: that apparently starts a loop in DefDlgProc that calls this
 	// function recursively).  This fixes OnMessage(0x24, "WM_GETMINMAXINFO") and probably others.
-	// Known limitation: If the above launched a thread but the thread didn't cause it turn return,
+	// Known limitation: If the above launched a thread but the thread didn't cause it to return,
 	// and iMsg is something like AHK_GUI_ACTION that will be reposted via PostMessage(), the monitor
 	// will be launched again when MsgSleep is called in conjunction with the repost. Given the rarity
 	// and the minimal consequences of this, no extra code (such as passing a new parameter to MsgSleep)
