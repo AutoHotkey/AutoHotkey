@@ -319,7 +319,6 @@ static inline int DPIUnscale(int x)
 
 #define INPUTBOX_DEFAULT INT_MIN
 ResultType InputBoxParseOptions(LPCTSTR aOptions, InputBoxType &aInputBox);
-ResultType InputBox(Var *aOutputVar, LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions, LPTSTR aDefault);
 INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
@@ -1336,8 +1335,7 @@ public:
 class IObjectRef : public IObjectPtr
 {
 private:
-	IObjectRef(const IObjectRef &); // Disable default copy constructor.
-	IObjectRef & operator = (const IObjectRef &); // ...and copy assignment.
+	IObjectRef & operator = (const IObjectRef &) = delete; // Disable default copy assignment.
 
 public:
 	IObjectRef() : IObjectPtr() {}
@@ -2605,7 +2603,6 @@ public:
 	ResultType GetEnumItem(UINT &aIndex, Var *, Var *, int);
 
 	static IObject* CreateDropArray(HDROP hDrop);
-	void SetMenu(ResultToken &aResultToken, ExprTokenType &aParam);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTSTR aText, GuiControlType*& apControl, Array *aObj = NULL);
 	void MethodGetPos(int *aX, int *aY, int *aWidth, int *aHeight, RECT &aRect, HWND aOrigin);
@@ -3071,8 +3068,6 @@ public:
 	ResultType PreparseVarRefs();
 	void CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName);
 
-	ResultType ThrowIfTrue(bool aError);
-	ResultType ThrowIntIfNonzero(int aErrorValue);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType, Object *aPrototype = nullptr);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	ResultType Win32Error(DWORD aError = GetLastError(), ResultType aErrorType = FAIL_OR_OK);
@@ -3228,7 +3223,6 @@ BIF_DECL(BIF_ATan);
 BIF_DECL(BIF_Exp);
 BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_MinMax);
-BIF_DECL(BIF_Hotkey);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 BIF_DECL(BIF_VerCompare);
@@ -3287,7 +3281,6 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aIsImpureNumeric);
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
 SymbolType TypeOfToken(ExprTokenType &aToken);
-SymbolType TypeOfToken(ExprTokenType &aToken, SymbolType &aIsNum);
 __int64 TokenToInt64(ExprTokenType &aToken);
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE);
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL, size_t *aLength = NULL);
