@@ -35,6 +35,8 @@ template<typename T> class optl
 {
 	const T *_value;
 public:
+	optl(const T &&v) : _value {&v} {}
+	optl(const T &v) : _value {&v} {}
 	optl(T &v) : _value {&v} {}
 	optl(nullptr_t) : _value {nullptr} {}
 	bool has_value() { return _value != nullptr; }
