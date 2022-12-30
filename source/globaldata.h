@@ -108,7 +108,9 @@ extern HWND g_HotExprLFW;
 extern HotkeyCriterion *g_FirstHotExpr, *g_LastHotExpr;
 
 extern int g_ScreenDPI;
-extern MenuTypeType g_MenuIsVisible;
+extern bool g_MenuIsVisible;
+extern HMENU g_MenuIsTempModeless;
+extern bool g_MenuIsTempTopmost;
 extern int g_nMessageBoxes;
 extern int g_nFileDialogs;
 extern int g_nFolderDialogs;

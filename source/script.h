@@ -2032,7 +2032,7 @@ public:
 	FResult Rename(StrArg aItemName, optl<StrArg> aNewName);
 	FResult SetColor(ExprTokenType *aColor, optl<BOOL> aApplyToSubmenus);
 	FResult SetIcon(StrArg aItemName, StrArg aIconFile, optl<int> aIconNumber, optl<int> aIconWidth);
-	FResult Show(optl<int> aX, optl<int> aY);
+	FResult Show(optl<int> aX, optl<int> aY, optl<BOOL> aWait);
 	FResult ToggleCheck(StrArg aItemName);
 	FResult ToggleEnable(StrArg aItemName);
 	FResult Uncheck(StrArg aItemName);
@@ -2060,7 +2060,7 @@ public:
 	void ApplyColor(bool aApplyToSubmenus);
 	ResultType AppendStandardItems();
 	ResultType EnableStandardOpenItem(bool aEnable);
-	ResultType Display(bool aForceToForeground = true, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED);
+	ResultType Display(int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED, optl<BOOL> aWait = false);
 	FResult GetItem(LPCTSTR aNameOrPos, UserMenuItem *&aItem);
 	FResult ItemNotFoundError(LPCTSTR aItem);
 	UserMenuItem *FindItem(LPCTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);

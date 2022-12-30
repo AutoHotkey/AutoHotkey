@@ -38,7 +38,7 @@ ObjectMemberMd UserMenu::sMembers[] =
 	md_member(UserMenu, Rename, CALL, (In, String, Item), (In_Opt, String, NewName)),
 	md_member(UserMenu, SetColor, CALL, (In_Opt, Variant, Color), (In_Opt, Bool32, ApplyToSubmenus)),
 	md_member(UserMenu, SetIcon, CALL, (In, String, Item), (In, String, File), (In_Opt, Int32, Number), (In_Opt, Int32, Width)),
-	md_member(UserMenu, Show, CALL, (In_Opt, Int32, X), (In_Opt, Int32, Y)),
+	md_member(UserMenu, Show, CALL, (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Bool32, Wait)),
 	md_member(UserMenu, ToggleCheck, CALL, (In, String, Item)),
 	md_member(UserMenu, ToggleEnable, CALL, (In, String, Item)),
 	md_member(UserMenu, Uncheck, CALL, (In, String, Item)),
@@ -202,9 +202,9 @@ FResult UserMenu::SetIcon(StrArg aItemName, StrArg aIconFile, optl<int> aIconNum
 
 
 
-FResult UserMenu::Show(optl<int> aX, optl<int> aY)
+FResult UserMenu::Show(optl<int> aX, optl<int> aY, optl<BOOL> aWait)
 {
-	return Display(true, aX.value_or(COORD_UNSPECIFIED), aY.value_or(COORD_UNSPECIFIED)) ? OK : FR_FAIL;
+	return Display(aX.value_or(COORD_UNSPECIFIED), aY.value_or(COORD_UNSPECIFIED), aWait) ? OK : FR_FAIL;
 }
 
 
@@ -1148,7 +1148,7 @@ void UserMenu::DestroyHandle()
 
 
 
-ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
+ResultType UserMenu::Display(int aX, int aY, optl<BOOL> aWait)
 // aForceToForeground defaults to true because when a menu is displayed spontaneously rather than
 // in response to the user right-clicking the tray icon, I believe that the OS will revert to its
 // behavior of "resisting" a window that tries to "steal focus".  I believe this resistance does
@@ -1223,37 +1223,63 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 			// menu is displayed after the script launches.  0 is not enough sleep time, but 10 is:
 			SLEEP_WITHOUT_INTERRUPTION(10);
 			SetForegroundWindow(g_hWnd);  // 2nd time always seems to work for this particular window.
-			// OLDER NOTES:
-			// Always bring main window to foreground right before TrackPopupMenu(), even if window is hidden.
-			// UPDATE: This is a problem because SetForegroundWindowEx() will restore the window if it's hidden,
-			// but restoring also shows the window if it's hidden.  Could re-hide it... but the question here
-			// is can a minimized window be the foreground window?  If not, how to explain why
-			// SetForegroundWindow() always seems to work for the purpose of displaying the tray menu?
-			//if (aForceToForeground)
-			//{
-			//	// Seems best to avoid using the script's current setting of #WinActivateForce.  Instead, always
-			//	// try the gentle approach first since it is unlikely that displaying a menu will cause the
-			//	// "flashing task bar button" problem?
-			//	bool original_setting = g_WinActivateForce;
-			//	g_WinActivateForce = false;
-			//	SetForegroundWindowEx(g_hWnd);
-			//	g_WinActivateForce = original_setting;
-			//}
-			//else
-			//...
 		}
 	}
-	// Apparently, the HWND parameter of TrackPopupMenuEx() can be g_hWnd even if one of the script's
-	// other (non-main) windows is foreground. The menu still seems to operate correctly.
-	g_MenuIsVisible = MENU_TYPE_POPUP; // It seems this is also set by WM_ENTERMENULOOP because apparently, TrackPopupMenuEx generates WM_ENTERMENULOOP. So it's done here just for added safety in case WM_ENTERMENULOOP isn't ALWAYS generated.
+	if (g_MenuIsTempModeless)
+	{
+		// First end the previous menu, whose thread was interrupted to display this menu.
+		// This is necessary to ensure the menu/window style changes made below are reverted.
+		EndMenu();
+		MsgSleep(-1);
+	}
+	MENUINFO mi;
+	mi.cbSize = sizeof(mi);
+	mi.fMask = MIM_STYLE;
+	mi.dwStyle = 0;
+	GetMenuInfo(mMenu, &mi);
+	bool temp_topmost = false;
+	// Temporarily make the menu modeless to allow new threads to launch without preventing the menu from
+	// accepting user input.  If it was already modeless, don't wait for it to close before returning.
+	bool temp_modeless = !(mi.dwStyle & MNS_MODELESS);
+	if (temp_modeless)
+	{
+		mi.dwStyle |= MNS_MODELESS;
+		SetMenuInfo(mMenu, &mi);
+		// Use this to keep track of whether a modeless menu is active.  Modeless menus correctly cancel
+		// when losing focus to another window in the same app, but not when losing focus to another app,
+		// so we handle that explicitly in "case WM_ACTIVATEAPP:".
+		g_MenuIsTempModeless = mMenu;
+		// Modeless menus appear to always place themselves in the z-order according to whether the owner
+		// window is topmost, which makes sense except that this places them behind the tray or overflow
+		// area, inconsistent with modal menus.  To work around that, make g_hWnd temporarily topmost.
+		// Making the menu window topmost in WM_INITMENUPOPUP is insufficient because each time a submenu
+		// is shown, the menu windows are reordered, and WM_INITMENUPOPUP for the submenu is received
+		// before its window is created.  Making g_hWnd topmost shouldn't be too disruptive because
+		// SetForegroundWindow() already brought it to the front if it was visible.
+		temp_topmost = this == g_script.mTrayMenu && change_fore
+			&& !(GetWindowLong(g_hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST);
+		if (temp_topmost)
+			SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+	}
+	g_MenuIsTempTopmost = temp_topmost;
 	TrackPopupMenuEx(mMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y, g_hWnd, NULL);
-	g_MenuIsVisible = MENU_TYPE_NONE;
-	// MSDN recommends this to prevent menu from closing on 2nd click.  MSDN also says that it's only
-	// necessary to do this "for a notification icon". So to to avoid unnecessary launches of MsgSleep(),
-	// its done only for the tray menu in v1.0.35.12:
-	if (this == g_script.mTrayMenu)
-		PostMessage(g_hWnd, WM_NULL, 0, 0);
-	else // Seems best to avoid the following for the tray menu since it doesn't seem work and might produce side-effects in some cases.
+	if (mi.dwStyle & MNS_MODELESS)
+	{
+		// Default to waiting if the menu was modal upon entry to this function, else not waiting.
+		// If we're not waiting, must not restore the foreground window yet since the menu is almost
+		// certainly still visible.
+		if (!aWait.value_or(temp_modeless))
+			return OK; // The other actions below are unlikely to apply in this case.
+		// We made it modeless, so wait until the menu closes before returning.
+		while (g_MenuIsTempModeless == mMenu)
+			MsgSleep(INTERVAL_UNSPECIFIED);
+	}
+	// Seems best to avoid the following for the tray menu since it doesn't seem to work and might
+	// produce side-effects in some cases.  The check might currently be unnecessary when the tray
+	// menu is shown by internal code because !aWait would have caused return above, but it might
+	// be helpful for cases where the script shows the tray menu manually, such as if it intercepts
+	// right click by handling the AHK_NOTIFYICON message.
+	if (this != g_script.mTrayMenu)
 	{
 		if (change_fore && fore_win && GetForegroundWindow() == g_hWnd)
 		{
@@ -1279,7 +1305,7 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 	// MsgSleep() will launch the selected menu item's subroutine.  This fix is needed because of a change
 	// in v1.0.38.04, namely the line "g_script.mLastPeekTime = tick_now;" in IsCycleComplete().
 	// The root problem here is that it would not be intuitive to allow the command after
-	// "Menu, MyMenu, Show" should to run before the menu item's subroutine launches as a new thread.
+	// "Menu, MyMenu, Show" to run before the menu item's subroutine launches as a new thread.
 	// 
 	// You could argue that selecting a menu item should immediately execute the selected menu item's
 	// callback rather than queuing it up as a new thread.  However, even if that is a better method,

@@ -183,7 +183,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// by the old open-tray-on-mouse-down method:
 			//MButton::Send {RButton down}
 			//MButton up::Send {RButton up}
-			g_script.mTrayMenu->Display(false);
+			g_script.mTrayMenu->Display();
 			return 0;
 		} // Inner switch()
 		break;
@@ -460,11 +460,55 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case WM_ENTERMENULOOP:
 		CheckMenuItem(GetMenu(g_hWnd), ID_FILE_PAUSE, g->IsPaused ? MF_CHECKED : MF_UNCHECKED); // This is the menu bar in the main window; the tray menu's checkmark is updated only when the tray menu is actually displayed.
-		if (!g_MenuIsVisible) // See comments in similar code in GuiWindowProc().
-			g_MenuIsVisible = MENU_TYPE_BAR;
+		g_MenuIsVisible = true; // See comments in similar code in GuiWindowProc().
 		break;
 	case WM_EXITMENULOOP:
-		g_MenuIsVisible = MENU_TYPE_NONE; // See comments in similar code in GuiWindowProc().
+		g_MenuIsVisible = false; // See comments in similar code in GuiWindowProc().
+		break;
+	case WM_INITMENUPOPUP:
+		InitMenuPopup((HMENU)wParam);
+		break;
+	case WM_UNINITMENUPOPUP:
+		UninitMenuPopup((HMENU)wParam);
+		break;
+	case WM_ACTIVATEAPP:
+		// Modeless menus correctly cancel when losing focus to another window within the same process,
+		// but not when losing focus to another app, so we handle that here if we made the menu modeless.
+		// Don't do it if the script made the menu modeless since in that case the script might want it
+		// to remain open.  It appears that WM_ACTIVATEAPP is sent to all top-level windows, so there's
+		// no need to handle this in GuiWindowProc().
+		if (!wParam && g_MenuIsTempModeless)
+			EndMenu();
+		break;
+	case WM_MENUSELECT:
+		// The following is a workaround for left click failing to activate a menu item in a modeless
+		// menu if the mouse was moved quickly from the main menu into a submenu (reproduced on Windows
+		// 7 and 11).  Strangely, double-click still activates the item.  Moving the selection restores
+		// normal behaviour, so the workaround just deselects the item and allows it to be reselected.
+		// Care must be taken to avoid a loop, because deselecting the item causes the parent menu to
+		// be reselected, which causes WM_MENUSELECT to be sent.
+		if (g_MenuIsTempModeless)
+		{
+			static HMENU sLastSelectedMenu = NULL; // Limits unnecessarily application of the workaround.
+			static bool sRecursiveCall = false; // Prevents looping due to MN_SELECTITEM causing WM_MENUSELECT.
+			if (sLastSelectedMenu != (HMENU)lParam && !sRecursiveCall)
+			{
+				sLastSelectedMenu = (HMENU)lParam; // Before SendMessage() below.
+				constexpr auto MF_WANTED = MF_MOUSESELECT | MF_HILITE; // Item selected by mouse.
+				constexpr auto MF_UNWANTED = MF_GRAYED | MF_DISABLED | MF_POPUP; // Items not needing the workaround.
+				HWND fore_win;
+				if (   (HMENU)lParam != g_MenuIsTempModeless // Only submenus need the workaround.
+					&& (HIWORD(wParam) & (MF_WANTED | MF_UNWANTED)) == MF_WANTED
+					&& (fore_win = GetForegroundWindow())
+					&& SendMessage(fore_win, MN_GETHMENU, 0, 0) == lParam   )
+				{
+					constexpr auto Mn_SELECTITEM = 0x01E5; // Undocumented message?
+					sRecursiveCall = true;
+					SendMessage(fore_win, Mn_SELECTITEM, -1, 0);
+					sRecursiveCall = false;
+				}
+			}
+		}
 		break;
 
 #ifdef CONFIG_DEBUGGER

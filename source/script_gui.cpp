@@ -9136,26 +9136,38 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		break;
 
 	// For WM_ENTERMENULOOP/WM_EXITMENULOOP, there is similar code in MainWindowProc(), so maintain them together.
-	// WM_ENTERMENULOOP: One of the MENU BAR menus has been displayed, and then we know the user is still in
-	// the menu bar, even moving to different menus and/or menu items, until WM_EXITMENULOOP is received.
-	// Note: It seems that when window's menu bar is being displayed/navigated by the user, our thread
-	// is tied up in a message loop other than our own.  In other words, it's very similar to the
-	// TrackPopupMenuEx() call used to handle the tray menu, which is why g_MenuIsVisible can be used
-	// for both types of menus to indicate to MainWindowProc() that timed subroutines should not be
-	// checked or allowed to launch during such times.  Also, "break" is used rather than "return 0"
-	// to let DefWindowProc()/DefaultDlgProc() take whatever action it needs to do for these.
-	// UPDATE: The value of g_MenuIsVisible is checked before changing it because it might already be
-	// set to MENU_TYPE_POPUP (apparently, TrackPopupMenuEx sometimes/always generates WM_ENTERMENULOOP).
-	// BAR vs. POPUP currently doesn't matter (as long as its non-zero); thus, the above is done for
-	// maintainability.
+	// g_MenuIsVisible is tracked for the purpose of preventing thread interruptions while the program
+	// is in a modal menu loop, since the menu would become unresponsive until the interruption returns.
+	// WM_ENTERMENULOOP is received both when entering a modal menu loop (due to a menu bar or popup menu)
+	// and when a modeless menu is being displayed (in which case there's actually no menu loop).
+	// WM_INITMENUPOPUP is handled to verify which situation this is, so that new threads can launch
+	// while a modeless menu is being displayed.  We use this combination of messages rather than just
+	// the INIT messages because some scripts already suppress WM_ENTERMENULOOP to allow new threads.
+	// "break" is used rather than "return 0" to let DefWindowProc()/DefDlgProc() take whatever action
+	// it needs to do for these.
 	case WM_ENTERMENULOOP:
-		if (!g_MenuIsVisible) // See comments above.
-			g_MenuIsVisible = MENU_TYPE_BAR;
+		g_MenuIsVisible = true;
 		break;
 	case WM_EXITMENULOOP:
-		g_MenuIsVisible = MENU_TYPE_NONE; // See comments above.
+		g_MenuIsVisible = false; // See comments above.
 		break;
-
+	case WM_INITMENUPOPUP:
+		InitMenuPopup((HMENU)wParam);
+		break;
+	case WM_UNINITMENUPOPUP:
+		// This currently isn't needed in GuiWindowProc() because notifications for temp-modeless
+		// menus are always sent to g_hWnd, but it is kept here for symmetry/maintainability:
+		UninitMenuPopup((HMENU)wParam);
+		break;
+	case WM_NCACTIVATE:
+		if (!wParam && g_MenuIsTempModeless)
+		{
+			// The documentation is quite ambiguous, but it appears the return value of WM_NCACTIVATE
+			// affects whether the actual change of foreground window goes ahead, whereas the appearance
+			// of the nonclient area is controlled by whether or not DefDlgProc() is called.
+			return TRUE; // Allow change of foreground window, but appear to remain active.
+		}
+		break;
 	} // switch()
 	
 	// This will handle anything not already fully handled and returned from above:

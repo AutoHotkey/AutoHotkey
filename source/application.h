@@ -88,4 +88,8 @@ VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime
 VOID CALLBACK InputTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 VOID CALLBACK RefreshInterruptibility(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 
+void InitMenuPopup(HMENU aMenu);
+void UninitMenuPopup(HMENU aMenu);
+bool MenuIsModeless(HMENU aMenu);
+
 #endif

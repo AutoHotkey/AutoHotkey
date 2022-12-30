@@ -2066,3 +2066,50 @@ VOID CALLBACK RefreshInterruptibility(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DW
 {
 	IsInterruptible(); // Search on RefreshInterruptibility for comments.
 }
+
+
+
+void InitMenuPopup(HMENU aMenu)
+{
+	if (MenuIsModeless(aMenu))
+	{
+		// Modeless menus don't interfere with things in the same way as modal menus.
+		g_MenuIsVisible = false;
+	}
+}
+
+
+
+void UninitMenuPopup(HMENU aMenu)
+{
+	if (g_MenuIsTempModeless == aMenu)
+	{
+		g_MenuIsTempModeless = NULL;
+		// Restore the menu's previous style so that next time the menu is shown, we can identify it
+		// as one that we need to make temporarily modeless (i.e. not one the script has made modeless),
+		// and also in case the script calls TrackPopupMenuEx directly and expects it to wait.
+		MENUINFO mi;
+		mi.cbSize = sizeof(mi);
+		mi.fMask = MIM_STYLE;
+		if (GetMenuInfo(aMenu, &mi))
+		{
+			mi.dwStyle &= ~MNS_MODELESS;
+			SetMenuInfo(aMenu, &mi);
+		}
+		// Revert g_hWnd to non-topmost if appropriate.
+		if (g_MenuIsTempTopmost)
+			SetWindowPos(g_hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+	}
+}
+
+
+
+bool MenuIsModeless(HMENU aMenu)
+{
+	MENUINFO mi;
+	mi.cbSize = sizeof(mi);
+	mi.fMask = MIM_STYLE;
+	mi.dwStyle = 0;
+	GetMenuInfo(aMenu, &mi);
+	return (mi.dwStyle & MNS_MODELESS);
+}
