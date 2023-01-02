@@ -1,0 +1,58 @@
+import "oaidl.idl";
+import "ocidl.idl";
+
+[uuid(BF08F948-5CFB-490D-9750-8C23E08183E0)]
+library ComLib {
+	[object, uuid(27151110-4186-487A-AFC8-EB5A0D8F684A), dual]
+	interface IAutoHotkeyLib : IDispatch {
+		HRESULT Main([in] BSTR CmdLine, [out, retval] int* ExitCode);
+		HRESULT LoadFile([in] BSTR FileName);
+		HRESULT Execute([out, retval] int* ExitCode);
+		HRESULT OnProblem([in] IDispatch* Callback);
+		[propget] HRESULT Script([out, retval] IDispatch** Value);
+		[propget] HRESULT Funcs([out, retval] IDispatch** Value);
+		[propget] HRESULT Vars([out, retval] IDispatch** Value);
+		[propget] HRESULT Labels([out, retval] IDispatch** Value);
+		[propget] HRESULT Files([out, retval] SAFEARRAY(BSTR)* Value);
+	}
+	[object, uuid(DA16C631-D15A-44E6-A113-9601CC1310AA), dual]
+	interface IDispCollection : IDispatch {
+		[id(DISPID_VALUE), propget] HRESULT Item([in] VARIANT* Index, [out, retval] VARIANT* Value);
+		[propget] HRESULT Count([out, retval] int* Value);
+		[id(DISPID_NEWENUM)] HRESULT _NewEnum([out, retval] IEnumVARIANT** Enum);
+	};
+	[object, uuid(BAE19F06-2AD0-48F3-BD63-796029479953), dual]
+	interface IDescribeVar : IDispatch {
+		[propget] BSTR Name();
+		[propget] BOOL IsReadOnly();
+		[propget] BOOL IsVirtual();
+		[propget] BOOL IsDeclared();
+		[propget] BOOL IsSuperGlobal();
+	};
+	[object, uuid(53C5E58D-DB47-47A3-8C41-6456D0B7E8B9), dual]
+	interface IDescribeLabel : IDispatch {
+		[propget] BSTR Name();
+		[propget] BSTR File();
+		[propget] UINT Line();
+	};
+	[object, uuid(A6C6F0BE-D527-4B5A-9F24-567C283A0C7B), dual]
+	interface IDescribeParam : IDispatch {
+		[propget] BSTR Name();
+		[propget] BOOL IsByRef();
+		[propget] BOOL IsOptional();
+		[propget] BOOL IsRest();
+		[propget] HRESULT Default([out, retval] VARIANT* Value);
+	};
+	[object, uuid(63FBF386-F43B-4B4E-8E73-20B8D9CCA4B1), dual]
+	interface IDescribeFunc : IDescribeLabel {
+		[propget] UINT EndLine();
+		[propget] BOOL IsBuiltIn();
+		[propget] BOOL IsVariadic();
+		[propget] int MinParams();
+		[propget] int MaxParams();
+		[propget] HRESULT Params([out, retval] IDispatch** Value);
+		[propget] HRESULT Vars([out, retval] IDispatch** Value);
+		[propget] HRESULT Globals([out, retval] IDispatch** Value);
+		[propget] BSTR DefaultVarType();
+	};
+}

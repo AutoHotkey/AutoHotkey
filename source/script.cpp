@@ -364,6 +364,7 @@ Script::Script()
 		if (_tcsicmp(g_BIV_A[i-1].name, g_BIV_A[i].name) >= 0)
 			ScriptError(_T("DEBUG: g_BIV_A out of order."), g_BIV_A[i].name);
 #endif
+	InitializeCriticalSection(&g_CriticalRegExCache); // v1.0.45.04: Must be done early so that it's unconditional, so that DeleteCriticalSection() in the script destructor can also be unconditional.
 	OleInitialize(NULL);
 }
 
@@ -371,11 +372,20 @@ Script::Script()
 
 Script::~Script() // Destructor.
 {
-	// MSDN: "Before terminating, an application must call the UnhookWindowsHookEx function to free
-	// system resources associated with the hook."
-	AddRemoveHooks(0); // Remove all hooks.
+	Hotkey::AllDestruct(); // Unregister hooks and hotkeys.
+
 	if (mNIC.hWnd) // Tray icon is installed.
 		Shell_NotifyIcon(NIM_DELETE, &mNIC); // Remove it.
+
+	if (mOnClipboardChange.Count()) // Remove from viewer chain.
+		EnableClipboardListener(false);
+
+	// DestroyWindow() will cause MainWindowProc() to immediately receive and process the
+	// WM_DESTROY msg, which should in turn result in any child windows being destroyed
+	// and other cleanup being done:
+	g_DestroyWindowCalled = true;
+	DestroyWindow(g_hWnd);
+
 
 	int i;
 	// It is safer/easier to destroy the GUI windows prior to the menus (especially the menu bars).
@@ -411,9 +421,6 @@ Script::~Script() // Destructor.
 		if (g_hWndToolTip[i] && IsWindow(g_hWndToolTip[i]))
 			DestroyWindow(g_hWndToolTip[i]);
 
-	if (mOnClipboardChange.Count()) // Remove from viewer chain.
-		EnableClipboardListener(false);
-
 	// Close any open sound item to prevent hang-on-exit in certain operating systems or conditions.
 	// If there's any chance that a sound was played and not closed out, or that it is still playing,
 	// this check is done.  Otherwise, the check is avoided since it might be a high overhead call,
@@ -426,18 +433,22 @@ Script::~Script() // Destructor.
 			mciSendString(_T("close ") SOUNDPLAY_ALIAS, NULL, 0, NULL);
 	}
 
+#ifdef CONFIG_DLL
+	UnregisterClass(WINDOW_CLASS_MAIN, g_hInstance);
+	UnregisterClass(WINDOW_CLASS_GUI, g_hInstance);
+#endif
+
 	DeleteCriticalSection(&g_CriticalRegExCache); // g_CriticalRegExCache is used elsewhere for thread-safety.
 	OleUninitialize();
 }
 
 
 
-ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestart)
+ResultType Script::Init(LPTSTR aScriptFilename)
 // Returns OK or FAIL.
 // Caller has provided an empty string for aScriptFilename if this is a compiled script.
 // Otherwise, aScriptFilename can be NULL if caller hasn't determined the filename of the script yet.
 {
-	mIsRestart = aIsRestart;
 	TCHAR buf[UorA(T_MAX_PATH, 2048)]; // Just to make sure we have plenty of room to do things with.
 	size_t buf_length;
 
@@ -989,13 +1000,7 @@ ResultType Script::AutoExecSection()
 	// interruptible.  This avoids having to treat the first g-item as special in various places.
 	global_maximize_interruptibility(*g); // See below.
 
-	// BEFORE DOING THE BELOW, "g" and "g_default" should be set up properly in case there's an OnExit
-	// function (even non-persistent scripts can have one).
-	// See Script::IsPersistent() for a list of conditions that cause the program to continue running.
-	if (!g_script.IsPersistent())
-		g_script.ExitApp(ExecUntil_result == FAIL ? EXIT_ERROR : EXIT_EXIT);
-
-	return OK;
+	return ExecUntil_result;
 }
 
 
@@ -1054,9 +1059,9 @@ void Script::ExitIfNotPersistent(ExitReasons aExitReason)
 
 
 
-bif_impl void Edit()
+bif_impl void Edit(optl<StrArg> aFileName)
 {
-	g_script.Edit();
+	g_script.Edit(aFileName.value_or_null());
 }
 
 ResultType Script::Edit(LPCTSTR aFileName)
@@ -1295,16 +1300,18 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 	g_Debugger.Exit(aExitReason);
 #endif
 
-	// We call DestroyWindow() because MainWindowProc() has left that up to us.
-	// DestroyWindow() will cause MainWindowProc() to immediately receive and process the
-	// WM_DESTROY msg, which should in turn result in any child windows being destroyed
-	// and other cleanup being done:
-	if (IsWindow(g_hWnd)) // Adds peace of mind in case WM_DESTROY was already received in some unusual way.
-	{
-		g_DestroyWindowCalled = true;
-		DestroyWindow(g_hWnd);
-	}
-	Hotkey::AllDestructAndExit(aExitCode);
+	// PostQuitMessage() might be needed to prevent hang-on-exit.  Once this is done, no message boxes or
+	// other dialogs can be displayed.  MSDN: "The exit value returned to the system must be the wParam
+	// parameter of the WM_QUIT message."  In our case, PostQuitMessage() should announce the same exit code
+	// that we will eventually call exit() with:
+	PostQuitMessage(aExitCode);
+
+	// I know this isn't the preferred way to exit the program.  However, due to unusual
+	// conditions such as the script having MsgBoxes or other dialogs displayed on the screen
+	// at the time the user exits (in which case our main event loop would be "buried" underneath
+	// the event loops of the dialogs themselves), this is the only reliable way I've found to exit
+	// so far.
+	exit(aExitCode); // exit() is insignificant in code size.  It does more than ExitProcess(), but perhaps nothing more that this application actually requires.
 }
 
 
@@ -1338,6 +1345,8 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 	// Load the main script file.  This will also load any files it includes with #Include.
 	if (!LoadIncludedFile(mKind == ScriptKindStdIn ? _T("*") : aFileSpec, false, false))
 		return LOADING_FAILED;
+		
+	g_SuspendExempt = false; // #SuspendExempt should not affect Hotkey()/Hotstring().
 
 #ifdef ENABLE_DLLCALL
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
@@ -3988,6 +3997,11 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 	}
 	LPTSTR new_name = SimpleHeap::Alloc(aLabelName);
 	Label *the_new_label = new Label(new_name); // Pass it the dynamic memory area we created.
+#ifdef CONFIG_DLL
+	++mLabelCount;
+	the_new_label->mLineNumber = mCombinedLineNumber;
+	the_new_label->mFileIndex = mCurrFileIndex;
+#endif
 	the_new_label->mPrevLabel = last_label;  // Whether NULL or not.
 	if (first_label == NULL)
 		first_label = the_new_label;
@@ -5655,6 +5669,11 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 	TCHAR buf[LINE_SIZE];
 	bool param_must_have_default = false;
 	bool at_least_one_default_expr = false;
+
+#ifdef CONFIG_DLL
+	func.mLineNumber = mCombinedLineNumber;
+	func.mFileIndex = mCurrFileIndex;
+#endif
 
 	func.mIsFuncExpression = aIsInExpression;
 
@@ -10287,6 +10306,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			// This is the next CASE after one that matched, so we're done.
 			return OK;
 
+#ifndef CONFIG_DLL
+#endif
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute) // This is the ACT_BLOCK_BEGIN that starts a function's body.
 			{

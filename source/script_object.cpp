@@ -2803,7 +2803,12 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 		// Set last found window (as documented).
 		g->hWndLastUsed = aGui->mHwnd;
 		
-		result = CallMethod(func, func, method_name, aParamValue, aParamCount, &retval);
+		// If we're about to call a method of the Gui itself, don't pass the Gui as the first parameter
+		// since it will be in `this`.  Doing this here rather than when the parameters are built ensures
+		// that message monitor functions (not methods) still receive the expected Gui parameter.
+		int skip_arg = func == aGui && mon.is_method && aParamValue->symbol == SYM_OBJECT && aParamValue->object == aGui;
+
+		result = CallMethod(func, func, method_name, aParamValue + skip_arg, aParamCount - skip_arg, &retval);
 		if (result == FAIL) // Callback encountered an error.
 			break;
 		if (result == EARLY_RETURN) // Callback returned a non-empty value.

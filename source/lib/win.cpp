@@ -880,6 +880,17 @@ bif_impl FResult WinSetEnabled(int aValue, WINTITLE_PARAMETERS_DECL)
 
 
 
+bif_impl FResult WinGetEnabled(WINTITLE_PARAMETERS_DECL, BOOL &aRetVal)
+{
+	// Merging this with ControlGetEnabled increased code size slightly.
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	aRetVal = IsWindowEnabled(target_window);
+	return OK;
+}
+
+
+
 bif_impl FResult ControlSetEnabled(int aValue, CONTROL_PARAMETERS_DECL)
 {
 	return WinSetEnabled(aValue, &CONTROL_PARAMETERS);
@@ -1523,6 +1534,16 @@ bif_impl FResult WinSetAlwaysOnTop(optl<int> aValue, WINTITLE_PARAMETERS_DECL)
 	// topmost_or_not (HWND_TOPMOST/HWND_NOTOPMOST), which might always avoid activating the
 	// window.
 	return SetWindowPos(target_window, topmost_or_not, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) ? OK : FR_E_WIN32;
+}
+
+
+
+bif_impl FResult WinGetAlwaysOnTop(WINTITLE_PARAMETERS_DECL, BOOL &aRetVal)
+{
+	HWND target_window;
+	DETERMINE_TARGET_WINDOW;
+	aRetVal = (GetWindowLong(target_window, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+	return OK;
 }
 
 

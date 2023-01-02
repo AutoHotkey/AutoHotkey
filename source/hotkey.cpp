@@ -495,46 +495,15 @@ void Hotkey::MaybeUninstallHook()
 
 
 
-void Hotkey::AllDestructAndExit(int aExitCode)
+void Hotkey::AllDestruct()
 {
-	// PostQuitMessage() might be needed to prevent hang-on-exit.  Once this is done, no message boxes or
-	// other dialogs can be displayed.  MSDN: "The exit value returned to the system must be the wParam
-	// parameter of the WM_QUIT message."  In our case, PostQuitMessage() should announce the same exit code
-	// that we will eventually call exit() with:
-	PostQuitMessage(aExitCode);
-
+	// MSDN: "Before terminating, an application must call the UnhookWindowsHookEx function to free
+	// system resources associated with the hook."
 	AddRemoveHooks(0); // Remove all hooks. By contrast, registered hotkeys are unregistered below.
 	if (g_PlaybackHook) // Would be unusual for this to be installed during exit, but should be checked for completeness.
 		UnhookWindowsHookEx(g_PlaybackHook);
 	for (int i = 0; i < sHotkeyCount; ++i)
 		delete shk[i]; // Unregisters before destroying.
-
-	// Do this only at the last possible moment prior to exit() because otherwise
-	// it may free memory that is still in use by objects that depend on it.
-	// This is actually kinda wrong because when exit() is called, the destructors
-	// of static, global, and main-scope objects will be called.  If any of these
-	// destructors try to reference memory freed() by DeleteAll(), there could
-	// be trouble.
-	// It's here mostly for traditional reasons.  I'm 99.99999 percent sure that there would be no
-	// penalty whatsoever to omitting this, since any modern OS will reclaim all
-	// memory dynamically allocated upon program termination.  Indeed, omitting
-	// deletes and free()'s for simple objects will often improve the reliability
-	// and performance since the OS is far more efficient at reclaiming the memory
-	// than us doing it manually (which involves a potentially large number of deletes
-	// due to all the objects and sub-objects to be destructed in a typical C++ program).
-	// UPDATE: In light of the first paragraph above, it seems best not to do this at all,
-	// instead letting all implicitly-called destructors run prior to program termination,
-	// at which time the OS will reclaim all remaining memory:
-	//SimpleHeap::DeleteAll();
-
-	// I know this isn't the preferred way to exit the program.  However, due to unusual
-	// conditions such as the script having MsgBoxes or other dialogs displayed on the screen
-	// at the time the user exits (in which case our main event loop would be "buried" underneath
-	// the event loops of the dialogs themselves), this is the only reliable way I've found to exit
-	// so far.  The caller has already called PostQuitMessage(), which might not help but it doesn't hurt:
-	exit(aExitCode); // exit() is insignificant in code size.  It does more than ExitProcess(), but perhaps nothing more that this application actually requires.
-	// By contrast to _exit(), exit() flushes all file buffers before terminating the process. It also
-	// calls any functions registered via atexit or _onexit.
 }
 
 

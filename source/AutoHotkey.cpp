@@ -28,15 +28,15 @@ GNU General Public License for more details.
 // hook functions.
 
 
-int MainExecuteScript();
+ResultType InitForExecution();
+ResultType ParseCmdLineArgs(LPTSTR &script_filespec);
+ResultType CheckPriorInstance();
+int MainExecuteScript(bool aMsgSleep = true);
 
 
-int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
+// Performs any initialization that should be done before LoadFromFile().
+void EarlyAppInit()
 {
-	// Init any globals not in "struct g" that need it:
-	g_hInstance = hInstance;
-	InitializeCriticalSection(&g_CriticalRegExCache); // v1.0.45.04: Must be done early so that it's unconditional, so that DeleteCriticalSection() in the script destructor can also be unconditional.
-
 	// v1.1.22+: This is done unconditionally, on startup, so that any attempts to read a drive
 	// that has no media (and possibly other errors) won't cause the system to display an error
 	// dialog that the script can't suppress.  This is known to affect floppy drives and some
@@ -46,13 +46,55 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// reverted afterward, so it affected all subsequent commands.
 	SetErrorMode(SEM_FAILCRITICALERRORS);
 
-	UpdateWorkingDir(); // Needed for the FileSelect() workaround.
-	g_WorkingDirOrig = SimpleHeap::Alloc(g_WorkingDir.GetString()); // Needed by the Reload command.
+	// g_WorkingDir is used by various functions but might currently only be used at runtime.
+	// g_WorkingDirOrig needs to be initialized before Script::Init() is called.
+	UpdateWorkingDir();
+	g_WorkingDirOrig = SimpleHeap::Alloc(g_WorkingDir.GetString());
 
-	// Set defaults, to be overridden by command line args we receive:
-	bool restart_mode = false;
+	// Initialize early since g is used in many places, including some at load-time.
+	global_init(*g);
+	
+	// Initialize the object model here, prior to any use of Objects (or Array below).
+	// Doing this here rather than in a static initializer in script_object.cpp avoids
+	// issues of static initialization order.  At this point all static members such as
+	// sMembers arrays have been initialized (normally they are constant initialized
+	// anyway, but in debug mode the arrays using cast_into_voidp() are not).
+	Object::CreateRootPrototypes();
+}
 
-	TCHAR *script_filespec = NULL; // Set default as "unspecified/omitted".
+
+int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
+{
+	g_hInstance = hInstance;
+
+	EarlyAppInit();
+
+	LPTSTR script_filespec; // Script path as originally specified, or NULL if omitted/defaulted.
+	if (!ParseCmdLineArgs(script_filespec))
+		return CRITICAL_ERROR;
+
+	UINT load_result = g_script.LoadFromFile(script_filespec);
+	if (load_result == LOADING_FAILED) // Error during load (was already displayed by the function call).
+		return CRITICAL_ERROR;  // Should return this value because PostQuitMessage() also uses it.
+	if (!load_result) // LoadFromFile() relies upon us to do this check.  No script was loaded or we're in /iLib mode, so nothing more to do.
+		return 0;
+
+	switch (CheckPriorInstance())
+	{
+	case EARLY_EXIT: return 0;
+	case FAIL: return CRITICAL_ERROR;
+	}
+
+	if (!InitForExecution())
+		return CRITICAL_ERROR;
+
+	return MainExecuteScript();
+}
+
+
+ResultType ParseCmdLineArgs(LPTSTR &script_filespec)
+{
+	script_filespec = NULL; // Set default as "unspecified/omitted".
 #ifndef AUTOHOTKEYSC
 	// Is this a compiled script?
 	if (FindResource(NULL, SCRIPT_RESOURCE_NAME, RT_RCDATA))
@@ -77,7 +119,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// For example, if the user runs "CompiledScript.exe /find", we want /find to be considered
 		// an input parameter for the script rather than a switch:
 		if (!_tcsicmp(param, _T("/restart")))
-			restart_mode = true;
+			g_script.mIsRestart = true;
 		else if (!_tcsicmp(param, _T("/force")))
 			g_ForceLaunch = true;
 #ifndef AUTOHOTKEYSC // i.e. the following switch is recognized only by AutoHotkey.exe (especially since recognizing new switches in compiled scripts can break them, unlike AutoHotkey.exe).
@@ -92,7 +134,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			++i; // Consume the next parameter too, because it's associated with this one.
 			if (i >= __argc // Missing the expected filename parameter.
 				|| g_script.mCmdLineInclude) // Only one is supported, so abort if there's more.
-				return CRITICAL_ERROR;
+				return FAIL;
 			g_script.mCmdLineInclude = __targv[i];
 		}
 		else if (!_tcsicmp(param, _T("/validate")))
@@ -102,7 +144,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		{
 			++i; // Consume the next parameter too, because it's associated with this one.
 			if (i >= __argc) // Missing the expected filename parameter.
-				return CRITICAL_ERROR;
+				return FAIL;
 			// The original purpose of /iLib has gone away with the removal of auto-includes,
 			// but some scripts (like Ahk2Exe) use it to validate the syntax of script files.
 			g_script.mValidateThenExit = true;
@@ -152,13 +194,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		}
 	}
 	
-	// Initialize the object model here, prior to any use of Objects (or Array below).
-	// Doing this here rather than in a static initializer in script_object.cpp avoids
-	// issues of static initialization order.  At this point all static members such as
-	// sMembers arrays have been initialized (normally they are constant initialized
-	// anyway, but in debug mode the arrays using cast_into_voidp() are not).
-	Object::CreateRootPrototypes();
-
 	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_GLOBAL))
 	{
 		// Store the remaining args in an array and assign it to "Args".
@@ -166,54 +201,37 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// and A_Args.MaxIndex() don't cause an error.
 		auto args = Array::FromArgV(__targv + i, __argc - i);
 		if (!args)
-			return CRITICAL_ERROR;  // Realistically should never happen.
+			return FAIL;  // Realistically should never happen.
 		var->AssignSkipAddRef(args);
 	}
 	else
-		return CRITICAL_ERROR;
-
-	global_init(*g);  // Set defaults.
+		return FAIL;
 
 	// Set up the basics of the script:
-	if (g_script.Init(*g, script_filespec, restart_mode) != OK)
-		return CRITICAL_ERROR;
+	return g_script.Init(script_filespec);
+}
 
-	// Could use CreateMutex() but that seems pointless because we have to discover the
-	// hWnd of the existing process so that we can close or restart it, so we would have
-	// to do this check anyway, which serves both purposes.  Alt method is this:
-	// Even if a 2nd instance is run with the /force switch and then a 3rd instance
-	// is run without it, that 3rd instance should still be blocked because the
-	// second created a 2nd handle to the mutex that won't be closed until the 2nd
-	// instance terminates, so it should work ok:
-	//CreateMutex(NULL, FALSE, script_filespec); // script_filespec seems a good choice for uniqueness.
-	//if (!g_ForceLaunch && !restart_mode && GetLastError() == ERROR_ALREADY_EXISTS)
 
-	UINT load_result = g_script.LoadFromFile(script_filespec);
-	if (load_result == LOADING_FAILED) // Error during load (was already displayed by the function call).
-		return CRITICAL_ERROR;  // Should return this value because PostQuitMessage() also uses it.
-	if (!load_result) // LoadFromFile() relies upon us to do this check.  No script was loaded or we're in /iLib mode, so nothing more to do.
-		return 0;
-
+ResultType CheckPriorInstance()
+{
 	HWND w_existing = NULL;
 	UserMessages reason_to_close_prior = (UserMessages)0;
-	if (g_AllowOnlyOneInstance && !restart_mode && !g_ForceLaunch)
+	if (g_AllowOnlyOneInstance && !g_script.mIsRestart && !g_ForceLaunch)
 	{
-		// Note: the title below must be constructed the same was as is done by our
-		// CreateWindows(), which is why it's standardized in g_script.mMainWindowTitle:
 		if (w_existing = FindWindow(WINDOW_CLASS_MAIN, g_script.mMainWindowTitle))
 		{
 			if (g_AllowOnlyOneInstance == SINGLE_INSTANCE_IGNORE)
-				return 0;
+				return EARLY_EXIT;
 			if (g_AllowOnlyOneInstance != SINGLE_INSTANCE_REPLACE)
 				if (MsgBox(_T("An older instance of this script is already running.  Replace it with this")
 					_T(" instance?\nNote: To avoid this message, see #SingleInstance in the help file.")
 					, MB_YESNO, g_script.mFileName) == IDNO)
-					return 0;
+					return EARLY_EXIT;
 			// Otherwise:
 			reason_to_close_prior = AHK_EXIT_BY_SINGLEINSTANCE;
 		}
 	}
-	if (!reason_to_close_prior && restart_mode)
+	if (!reason_to_close_prior && g_script.mIsRestart)
 		if (w_existing = FindWindow(WINDOW_CLASS_MAIN, g_script.mMainWindowTitle))
 			reason_to_close_prior = AHK_EXIT_BY_RELOAD;
 	if (reason_to_close_prior)
@@ -240,7 +258,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 				// time to finish, or if it's waiting for a network drive to timeout or some other
 				// operation in which it's thread is occupied.
 				if (MsgBox(_T("Could not close the previous instance of this script.  Keep waiting?"), 4) == IDNO)
-					return CRITICAL_ERROR;
+					return FAIL;
 				interval_count = 0;
 			}
 		}
@@ -248,24 +266,31 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// its main window has already been destroyed:
 		Sleep(100);
 	}
+	return OK;
+}
 
+
+ResultType InitForExecution()
+{
 	// Create all our windows and the tray icon.  This is done after all other chances
 	// to return early due to an error have passed, above.
-	if (g_script.CreateWindows() != OK)
-		return CRITICAL_ERROR;
-
-	// At this point, it is nearly certain that the script will be executed.
-
-	// v1.0.48.04: Turn off buffering on stdout so that "FileAppend, Text, *" will write text immediately
-	// rather than lazily. This helps debugging, IPC, and other uses, probably with relatively little
-	// impact on performance given the OS's built-in caching.  I looked at the source code for setvbuf()
-	// and it seems like it should execute very quickly.  Code size seems to be about 75 bytes.
-	setvbuf(stdout, NULL, _IONBF, 0); // Must be done PRIOR to writing anything to stdout.
+	if (!g_script.CreateWindows())
+		return FAIL;
 
 	if (g_MaxHistoryKeys && (g_KeyHistory = (KeyHistoryItem *)malloc(g_MaxHistoryKeys * sizeof(KeyHistoryItem))))
 		ZeroMemory(g_KeyHistory, g_MaxHistoryKeys * sizeof(KeyHistoryItem)); // Must be zeroed.
 	//else leave it NULL as it was initialized in globaldata.
 
+	// From this point on, any errors that are reported should not indicate that they will exit the program.
+	// Various functions also use this to detect that they are being called by the script at runtime.
+	g_script.mIsReadyToExecute = true;
+
+	return OK;
+}
+
+
+int MainExecuteScript(bool aMsgSleep)
+{
 #ifdef CONFIG_DEBUGGER
 	// Initiate debug session now if applicable.
 	if (!g_DebuggerHost.IsEmpty() && g_Debugger.Connect(g_DebuggerHost, g_DebuggerPort) == DEBUGGER_E_OK)
@@ -278,33 +303,35 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// top part (the auto-execute part) of the script so that they will be in effect even if the
 	// top part is something that's very involved and requires user interaction:
 	Hotkey::ManifestAllHotkeysHotstringsHooks(); // We want these active now in case auto-execute never returns (e.g. loop)
-	g_script.mIsReadyToExecute = true; // This is done only after the above to support error reporting in Hotkey.cpp.
-	g_HSSameLineAction = false; // `#Hotstring X` should not affect Hotstring().
-	g_SuspendExempt = false; // #SuspendExempt should not affect Hotkey()/Hotstring().
 
-	return MainExecuteScript();
-}
-
-
-int MainExecuteScript()
-{
-	
 #ifndef _DEBUG
 	__try
 #endif
 	{
-		// Run the auto-execute part at the top of the script (this call might never return):
-		if (!g_script.AutoExecSection()) // Can't run script at all. Due to rarity, just abort.
-			return CRITICAL_ERROR;
+		// Run the auto-execute part at the top of the script:
+		auto exec_result = g_script.AutoExecSection();
 		// REMEMBER: The call above will never return if one of the following happens:
 		// 1) The AutoExec section never finishes (e.g. infinite loop).
 		// 2) The AutoExec function uses the Exit or ExitApp command to terminate the script.
-		// 3) The script isn't persistent and its last line is reached (in which case an ExitApp is implicit).
+		// 3) The script isn't persistent and its last line is reached (in which case an Exit is implicit).
+		// However, #ifdef CONFIG_DLL, the call will return after Exit is used (but not explicit ExitApp).
 
-		// Call it in this special mode to kick off the main event loop.
-		// Be sure to pass something >0 for the first param or it will
-		// return (and we never want this to return):
-		MsgSleep(SLEEP_INTERVAL, WAIT_FOR_MESSAGES);
+#ifdef CONFIG_DLL
+		if (!aMsgSleep)
+			return exec_result ? 0 : CRITICAL_ERROR;
+#endif
+		if (g_script.IsPersistent())
+		{
+			// Call it in this special mode to kick off the main event loop.
+			// Be sure to pass something >0 for the first param or it will
+			// return (and we never want this to return):
+			MsgSleep(SLEEP_INTERVAL, WAIT_FOR_MESSAGES);
+		}
+		else
+		{
+			// The script isn't persistent, so call OnExit handlers and terminate.
+			g_script.ExitApp(exec_result == FAIL ? EXIT_ERROR : EXIT_EXIT);
+		}
 	}
 #ifndef _DEBUG
 	__except (EXCEPTION_EXECUTE_HANDLER)
@@ -326,5 +353,5 @@ int MainExecuteScript()
 		return ecode;
 	}
 #endif 
-	return 0; // Never executed; avoids compiler warning.
+	return 0;
 }

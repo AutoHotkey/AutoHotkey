@@ -7,14 +7,14 @@ https://www.autohotkey.com/
 
 ## How to Compile ##
 
-AutoHotkey v2 is developed with [Microsoft Visual Studio Community 2022](https://www.visualstudio.com/products/visual-studio-community-vs), which is a free download from Microsoft.
+AutoHotkey is developed with [Microsoft Visual Studio Community 2022](https://www.visualstudio.com/products/visual-studio-community-vs), which is a free download from Microsoft.
 
   - Get the source code.
   - Open AutoHotkeyx.sln in Visual Studio.
   - Select the appropriate Build and Platform.
   - Build.
 
-The project is configured in a way that allows building with Visual Studio 2012 or later. However, for the v2 branch, some newer C++ language features are used and therefore a later version of the compiler might be required.
+The project is configured in a way that allows building with Visual Studio 2012 or later, but only the 2022 toolset is regularly tested. Some newer C++ language features are used and therefore a later version of the compiler might be required.
 
 
 ## Developing in VS Code ##
@@ -38,7 +38,7 @@ AutoHotkeyx.vcxproj contains several combinations of build configurations.  The 
 Secondary configurations are:
 
   - **(mbcs)**: ANSI (multi-byte character set). Configurations without this suffix are Unicode.
-  - **(minimal)**: Alternative project settings for producing a smaller binary, possibly with lower performance and added dependencies.
+  - **.dll**: Builds an experimental dll for use hosting the interpreter, such as to enable the use of v1 libraries in a v2 script. See [README-LIB.md](README-LIB.md).
 
 
 ## Platforms ##
