@@ -1167,10 +1167,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (gui_action == GUI_EVENT_CONTEXTMENU && pcontrol)
 				{
 					// Call the control's context menu handler, if any, omitting the "Gui" parameter
-					// for consistency with other Ctrl events (and perhaps convenience).  But don't
-					// omit the first parameter if the Gui parameter was already omitted.
-					int arg_to_omit = pgui->mEventSink != pgui ? 1 : 0;
-					result = pcontrol->events.Call(gui_event_args + arg_to_omit, gui_event_arg_count - arg_to_omit, gui_event_code, gui_event_kind, pgui);
+					// for consistency with other Ctrl events (and perhaps convenience).
+					result = pcontrol->events.Call(gui_event_args + 1, gui_event_arg_count - 1, gui_event_code, gui_event_kind, pgui);
 					if (result == EARLY_RETURN // Suppress the GUI's handler for this event, if any.
 						|| !pgui->mHwnd) // Gui was destroyed.
 					{

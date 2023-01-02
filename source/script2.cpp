@@ -2488,7 +2488,7 @@ bif_impl FResult BIF_Hotkey(StrArg aName, ExprTokenType *aAction, optl<StrArg> a
 				for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
 					if (v->mHotCriterion == g->HotCriterion)
 					{
-						functor = v->mOriginalCallback.ToFunc();
+						functor = v->mOriginalCallback.ToObject();
 						goto break_twice;
 					}
 			}

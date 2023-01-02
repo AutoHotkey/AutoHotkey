@@ -361,13 +361,14 @@ void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
 			return;
 		}
 		break;
-	case 'p': if (!_tcsicmp(buf, _T("Ptr")))	aDynaParam.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64); return;
-	case 's': if (!_tcsicmp(buf, _T("Str")))	aDynaParam.type = DLL_ARG_STR; return;
-	case 'd': if (!_tcsicmp(buf, _T("Double")))	aDynaParam.type = DLL_ARG_DOUBLE; return;
-	case 'f': if (!_tcsicmp(buf, _T("Float")))	aDynaParam.type = DLL_ARG_FLOAT; return;
-	case 'a': if (!_tcsicmp(buf, _T("AStr")))	aDynaParam.type = DLL_ARG_ASTR; return;
-	case 'w': if (!_tcsicmp(buf, _T("WStr")))	aDynaParam.type = DLL_ARG_WSTR; return;
-	case 'c': if (!_tcsicmp(buf, _T("Char")))	aDynaParam.type = DLL_ARG_CHAR; return;
+	case 'p': if (!_tcsicmp(buf, _T("Ptr")))	{ aDynaParam.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64); return; } break;
+	case 's': if (!_tcsicmp(buf, _T("Str")))	{ aDynaParam.type = DLL_ARG_STR; return; }
+			  if (!_tcsicmp(buf, _T("Short")))	{ aDynaParam.type = DLL_ARG_SHORT; return; } break;
+	case 'd': if (!_tcsicmp(buf, _T("Double")))	{ aDynaParam.type = DLL_ARG_DOUBLE; return; } break;
+	case 'f': if (!_tcsicmp(buf, _T("Float")))	{ aDynaParam.type = DLL_ARG_FLOAT; return; } break;
+	case 'a': if (!_tcsicmp(buf, _T("AStr")))	{ aDynaParam.type = DLL_ARG_ASTR; return; } break;
+	case 'w': if (!_tcsicmp(buf, _T("WStr")))	{ aDynaParam.type = DLL_ARG_WSTR; return; } break;
+	case 'c': if (!_tcsicmp(buf, _T("Char")))	{ aDynaParam.type = DLL_ARG_CHAR; return; } break;
 	}
 	// Since above didn't "return", the type is invalid.
 	aDynaParam.type = DLL_ARG_INVALID; 

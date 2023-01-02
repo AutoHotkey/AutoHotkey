@@ -1309,9 +1309,8 @@ public:
 
 
 // This class encapsulates a pointer to an object which can be called by a timer,
-// hotkey, etc.  It provides common functionality that wouldn't be suitable for the
-// base IObject interface, but is needed for detection of "Suspend" or "Critical"
-// prior to calling the sub or function.
+// hotkey, etc.  It was originally added to support functions/objects in addition
+// to labels, but label support was removed.
 class IObjectPtr
 {
 protected:

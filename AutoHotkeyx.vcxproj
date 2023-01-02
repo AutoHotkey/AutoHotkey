@@ -406,11 +406,15 @@
     </Exec>
     <PropertyGroup Condition="'$(GitDescription)'!='' and '$(GitDescription.Substring(0,1))'=='v'">
       <RawAhkVersion>$([System.Text.RegularExpressions.Regex]::Replace($(GitDescription.Substring(1)), "-(?=\d+-)|-g|-dirty$", "+"))</RawAhkVersion>
+      <AhkVersionN4>$([System.Text.RegularExpressions.Regex]::Replace($(GitDescription), ".*-(\d+)-g.*", "$1"))</AhkVersionN4>
+      <AhkVersionN4 Condition="'$(AhkVersionN4)'=='$(GitDescription)'">0</AhkVersionN4>
+      <AhkVersionN>$([System.Text.RegularExpressions.Regex]::Replace($(RawAhkVersion), "\.(\d+)([^\.\d].*)?", ",$1")),$(AhkVersionN4)</AhkVersionN>
     </PropertyGroup>
     <Message Text="RAW_AHK_VERSION sourced from git: '$(RawAhkVersion)'" Importance="high" />
+    <Message Text="AHK_VERSION_N sourced from git: '$(AhkVersionN)'" Importance="high" />
     <ItemGroup Condition="'$(RawAhkVersion)'!=''">
       <ResourceCompile>
-        <PreprocessorDefinitions>RAW_AHK_VERSION=\"$(RawAhkVersion)\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+        <PreprocessorDefinitions>RAW_AHK_VERSION=\"$(RawAhkVersion)\";AHK_VERSION_N=$(AhkVersionN);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       </ResourceCompile>
       <ClCompile>
         <PreprocessorDefinitions>RAW_AHK_VERSION="$(RawAhkVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
