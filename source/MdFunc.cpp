@@ -284,7 +284,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		{
 			if (!TokenToOutputVar(param))
 			{
-				result = aResultToken.ParamError(pi, &param, _T("VarRef"));
+				result = aResultToken.ParamError(pi - 1, &param, _T("VarRef"));
 				goto end;
 			}
 			++output_var_count;
@@ -324,7 +324,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				}
 				t = &rt;
 #else
-				result = aResultToken.ParamError(pi, &param, _T("String"));
+				result = aResultToken.ParamError(pi - 1, &param, _T("String"));
 				goto end;
 #endif
 			}
@@ -337,7 +337,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			arg_value = (DWORD_PTR)TokenToObject(param);
 			if (!arg_value)
 			{
-				result = aResultToken.ParamError(pi, &param, _T("Object"));
+				result = aResultToken.ParamError(pi - 1, &param, _T("Object"));
 				goto end;
 			}
 		}
