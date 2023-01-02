@@ -2288,6 +2288,7 @@ struct GuiControlType : public Object
 	static ObjectMemberMd sMembersList[]; // Tab, ListBox, ComboBox, DDL
 	static ObjectMemberMd sMembersTab[];
 	static ObjectMemberMd sMembersDate[];
+	static ObjectMemberMd sMembersEdit[];
 	static ObjectMemberMd sMembersLV[];
 	static ObjectMemberMd sMembersTV[];
 	static ObjectMemberMd sMembersSB[];
@@ -2325,6 +2326,8 @@ struct GuiControlType : public Object
 	FResult set_Visible(BOOL aValue);
 	
 	FResult DT_SetFormat(optl<StrArg> aFormat);
+
+	FResult Edit_SetCue(StrArg aCueText, optl<BOOL> aActivate);
 	
 	FResult List_Add(ExprTokenType &aItems);
 	FResult List_Choose(ExprTokenType &aValue);
@@ -2349,8 +2352,8 @@ struct GuiControlType : public Object
 	FResult SB_SetIcon(StrArg aFilename, optl<int> aIconNumber, optl<UINT> aPartNumber, UINT_PTR &aRetVal);
 	FResult SB_SetParts(VariantParams &aParam, UINT& aRetVal);
 	FResult SB_SetText(StrArg aNewText, optl<UINT> aPartNumber, optl<UINT> aStyle);
-
-	FResult CB_CueText(StrArg aCueText);
+	
+	FResult CB_SetCue(StrArg aCueText);
 
 	FResult Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact);
 	

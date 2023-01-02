@@ -586,6 +586,11 @@ ObjectMemberMd GuiControlType::sMembersDate[] =
 	md_member_x(GuiControlType, SetFormat, DT_SetFormat, CALL, (In_Opt, String, Format))
 };
 
+ObjectMemberMd GuiControlType::sMembersEdit[] =
+{
+	md_member_x(GuiControlType, CueText, Edit_SetCue, CALL, (In, String, CueText), (In_Opt, Bool32, Activate))
+};
+
 #define FUN1(name, minp, maxp, bif) Object_Member(name, bif, 0, IT_CALL, minp, maxp)
 #define FUNn(name, minp, maxp, bif, cat) Object_Member(name, bif, FID_##cat##_##name, IT_CALL, minp, maxp)
 
@@ -629,7 +634,7 @@ ObjectMemberMd GuiControlType::sMembersSB[] =
 
 ObjectMemberMd GuiControlType::sMembersCB[] =
 {
-	md_member_x(GuiControlType, CueText, CB_CueText, CALL, (In, String, CueText))
+	md_member_x(GuiControlType, SetCue, CB_SetCue, CALL, (In, String, CueText))
 };
 
 #undef FUN1
@@ -668,6 +673,7 @@ void GuiControlType::DefineControlClasses()
 		case GUI_CONTROL_DROPDOWNLIST:
 		case GUI_CONTROL_LISTBOX: base_proto = sPrototypeList; base_class = list_class; break;
 		case GUI_CONTROL_DATETIME: more_items = sMembersDate; how_many = _countof(sMembersDate); break;
+		case GUI_CONTROL_EDIT: more_items = sMembersEdit; how_many = _countof(sMembersEdit); break;
 		case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
 		case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
 		case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
@@ -899,12 +905,21 @@ FResult GuiControlType::set_Visible(BOOL aValue)
 	return OK;
 }
 
-
-FResult GuiControlType::CB_CueText(StrArg aCueText)
+FResult GuiControlType::CB_SetCue(StrArg aCueText)
 {
 	return SendMessage(hwnd, CB_SETCUEBANNER, 0, (LPARAM)aCueText) ? OK : FR_E_FAILED;
 }
 
+FResult GuiControlType::Edit_SetCue(StrArg aCueText, optl<BOOL> aActivate)
+{
+	LONG style = GetWindowLong(hwnd, GWL_STYLE);
+	if (!(style & ES_MULTILINE)) // cue banner cannot be set on multiline edit controls
+	{
+		BOOL whole_match = aActivate.value_or(FALSE);
+		return SendMessage(hwnd, EM_SETCUEBANNER, whole_match, (LPARAM)aCueText) ? OK : FR_E_FAILED;
+	}
+	return NULL;
+}
 
 FResult GuiControlType::Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact)
 {
