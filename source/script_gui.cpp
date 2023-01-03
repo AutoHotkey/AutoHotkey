@@ -588,7 +588,7 @@ ObjectMemberMd GuiControlType::sMembersDate[] =
 
 ObjectMemberMd GuiControlType::sMembersEdit[] =
 {
-	md_member_x(GuiControlType, CueText, Edit_SetCue, CALL, (In, String, CueText), (In_Opt, Bool32, Activate))
+	md_member_x(GuiControlType, SetCue, Edit_SetCue, CALL, (In, String, CueText), (In_Opt, Bool32, Activate))
 };
 
 #define FUN1(name, minp, maxp, bif) Object_Member(name, bif, 0, IT_CALL, minp, maxp)
