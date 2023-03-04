@@ -268,7 +268,14 @@ BIF_DECL(BIF_ATan)
 	_f_return(qmathAtan(ParamIndexToDouble(0)));
 }
 
-
+BIF_DECL(BIF_ATan2)
+// For simplicity and backward compatibility, a numeric result is always returned (even if the input
+// is non-numeric or an empty string).
+{
+	Throw_if_Param_NaN(0);
+	Throw_if_Param_NaN(1);
+	_f_return(qmathAtan2(ParamIndexToDouble(0), ParamIndexToDouble(1)));
+}
 
 BIF_DECL(BIF_Exp)
 {
