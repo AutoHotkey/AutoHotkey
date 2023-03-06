@@ -127,6 +127,17 @@ Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
 
 	Map *map = new Map();
 	map->SetBase(Map::sPrototype);
+	// Check whether CaseSense is already defined in a base and set mFlags if necessary.
+	ExprTokenType casesense;
+	for (Object* that = map->Base(); that; that = that->Base())
+	{
+		if (that->GetOwnProp(casesense, _T("CaseSense")) && casesense.marker_length)
+		{
+			ExprTokenType* param[] = { &casesense };
+			map->CaseSense(ResultToken(), 0, IT_SET, param, 0);
+			break;
+		}
+	}
 	if (aParamCount && !map->SetItems(aParam, aParamCount))
 	{
 		// Out of memory.
