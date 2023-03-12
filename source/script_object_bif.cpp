@@ -35,6 +35,50 @@ BIF_DECL(Op_Array)
 		_f_return(arr);
 	_f_throw_oom;
 }
+
+
+BIF_DECL(BIF_Range)
+{
+	INT64 start, stop, step;
+	if (aParamCount <= 1) // With Range(n) consider n to be the stop
+		start = 1, stop = ParamIndexToOptionalInt64(0, 1), step = 1;
+	else
+	{
+		step = ParamIndexToOptionalInt64(2, 1);
+		if (step == 0)
+			_f_throw_value(ERR_PARAM3_INVALID);
+		start = ParamIndexToOptionalInt64(0, 1), stop = ParamIndexToOptionalInt64(1, step > 0 ? MAXLONGLONG : MINLONGLONG);
+		// The following check needs to be done only when aParamCount > 1, because otherwise step == 1
+		if (stop > start && step < 0)
+			_f_throw_value(_T("Start must be greater than stop when step is negative"));
+	}
+	if (stop < start && step > 0)
+		_f_throw_value(_T("Stop must be greater than start when step is positive"));
+
+	_f_return(new RangeEnumerator(start, stop, step, 3
+		, static_cast<RangeEnumerator::Callback>(&RangeEnumerator::RangeCallback)));
+}
+
+ResultType RangeEnumerator::RangeCallback(INT64& aIndex, Var* aVal, Var* aReserved, int aVarCount) {
+	if (mStep > 0 ? mStart <= mStop : mStop <= mStart)
+	{
+		if (aReserved)
+		{
+			aVal->Assign(aIndex);
+			aReserved->Assign(mStart);
+		}
+		else
+			aVal->Assign(mStart);
+		mStart += mStep;
+		return CONDITION_TRUE;
+	}
+	return CONDITION_FALSE;
+}
+
+ResultType RangeEnumerator::Next(Var* var0, Var* var1)
+{
+	return (this->*mGetValue)(++mIndex, var0, var1, mParamCount);
+}
 	
 
 //

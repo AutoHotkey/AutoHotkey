@@ -1881,6 +1881,28 @@ public:
 
 
 
+class RangeEnumerator : public EnumBase
+{
+public:
+	typedef ResultType(Object::* Callback)(INT64& aIndex, Var* aOutputVar1, Var* aOutputVar2, int aVarCount);
+private:
+	INT64 mStart, mStop, mStep, mIndex = 0;
+	Callback mGetValue;
+public:
+	RangeEnumerator(INT64 aStart, INT64 aStop, INT64 aStep, INT64 aVarCount, Callback aGetValue) : mGetValue(aGetValue)
+	{
+		mStart = aStart;
+		mStop = aStop;
+		mStep = aStep;
+		mParamCount = aVarCount;
+		SetBase(EnumBase::sPrototype);
+	}
+	ResultType RangeCallback(INT64& aIndex, Var*, Var*, int);
+	ResultType Next(Var*, Var*) override;
+};
+
+
+
 class ScriptTimer
 {
 public:
@@ -3298,6 +3320,7 @@ BIF_DECL(BIF_ComObjQuery);
 BIF_DECL(BIF_Click);
 BIF_DECL(BIF_Reg);
 BIF_DECL(BIF_Random);
+BIF_DECL(BIF_Range);
 BIF_DECL(BIF_Sound);
 BIF_DECL(BIF_SplitPath);
 BIF_DECL(BIF_CaretGetPos);
