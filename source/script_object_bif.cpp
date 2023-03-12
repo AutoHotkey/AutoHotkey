@@ -44,7 +44,9 @@ BIF_DECL(BIF_Range)
 		if (!ParamIndexIsOmitted(i))
 			Throw_if_Param_NaN(i);
 	}
-	if (aParamCount <= 1) // With Range(n) consider n to be the stop
+	if (aParamCount == 0) // Range() creates a semi-infinite enumerator
+		start = 1, stop = MAXLONGLONG, step = 1;
+	else if (aParamCount == 1) // With Range(n) consider n to be the stop
 		start = 1, stop = ParamIndexToOptionalInt64(0, 1), step = 1;
 	else
 	{
