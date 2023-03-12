@@ -40,6 +40,10 @@ BIF_DECL(Op_Array)
 BIF_DECL(BIF_Range)
 {
 	INT64 start, stop, step;
+	for (int i = 0; i < 3; i++) {
+		if (!ParamIndexIsOmitted(i))
+			Throw_if_Param_NaN(i);
+	}
 	if (aParamCount <= 1) // With Range(n) consider n to be the stop
 		start = 1, stop = ParamIndexToOptionalInt64(0, 1), step = 1;
 	else
