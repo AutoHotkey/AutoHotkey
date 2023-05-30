@@ -2168,6 +2168,7 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 	if (g_script.mUninterruptibleTime && g_script.mUninterruptedLineCountMax // Both components must be non-zero to start off uninterruptible.
 		|| g.ThreadIsCritical) // v1.0.38.04.
 	{
+		g.PeekFrequency = UNINTERRUPTIBLE_PEEK_FREQUENCY; // This ensures the thread will always have a chance to call Critical() before MsgSleep() is called.
 		g.AllowThreadToBeInterrupted = false; // Fairly old comment: Use g.AllowThreadToBeInterrupted vs. g_AllowInterruption in case g_AllowInterruption just happens to have been set to true for some other reason (e.g. SendKeys()):
 		if (!g.ThreadIsCritical)
 		{
@@ -2280,10 +2281,14 @@ BOOL IsInterruptible()
 		&& g->UninterruptibleDuration > -1 // Must take precedence over the below. For backward compatibility, g_script.mUninterruptibleTime is not checked because it's supposed to go into effect during thread creation, not after the thread is running and has possibly changed the timeout via "Thread Interrupt".
 		&& (DWORD)(GetTickCount()- g->ThreadStartTime) >= (DWORD)g->UninterruptibleDuration // See big comment section above.
 		)
+	{
 		// Once the thread becomes interruptible by any means, g->ThreadStartTime/UninterruptibleDuration
 		// can never matter anymore because only Critical (never "Thread Interrupt") can turn off the
 		// interruptibility again, at which time only Critical can ever re-enable interruptibility.
 		g->AllowThreadToBeInterrupted = true; // Avoids issues with 49.7 day limit of 32-bit TickCount, and also helps performance future callers of this function (they can skip most of the checking above).
+		if (!g->ThreadIsCritical)
+			g->PeekFrequency = DEFAULT_PEEK_FREQUENCY;
+	}
 	//else g->AllowThreadToBeInterrupted is already up-to-date.
 	return (BOOL)g->AllowThreadToBeInterrupted;
 }

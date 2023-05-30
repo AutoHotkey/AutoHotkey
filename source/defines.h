@@ -884,7 +884,8 @@ inline void global_init(global_struct &g)
 	// Not sure what the optimal default is.  1 seems too low (scripts would be very slow by default):
 	g.LinesPerCycle = -1;
 	g.IntervalBeforeRest = 10;  // sleep for 10ms every 10ms
-	#define DEFAULT_PEEK_FREQUENCY 5
+	#define DEFAULT_PEEK_FREQUENCY 5 // Default peek frequency for an interruptible/non-critical thread.
+	#define UNINTERRUPTIBLE_PEEK_FREQUENCY 16 // Used during a thread's uninterruptible period to ensure it has a chance to call Critical() before MsgSleep() is called.
 	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in ACT_CRITICAL.
 	g.AllowThreadToBeInterrupted = true; // Separate from g_AllowInterruption so that they can have independent values.
 	g.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
