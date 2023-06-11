@@ -2438,7 +2438,7 @@ bif_impl FResult BIF_Hotkey(StrArg aName, ExprTokenType *aAction, optl<StrArg> a
 			// I.e., find the function implicitly defined by "x::action".
 			for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
 			{
-				if (_tcscmp(Hotkey::shk[i]->mName, aName))
+				if (_tcscmp(Hotkey::shk[i]->mName, action_string))
 					continue;
 				
 				for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
