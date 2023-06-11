@@ -6290,7 +6290,13 @@ ResultType GuiType::ControlParseOptions(LPCTSTR aOptions, GuiControlOptionsType 
 				break;
 
 			case 'V': // Name (originally: Variable)
-				ControlSetName(aControl, option_value);
+				switch (ControlSetName(aControl, option_value))
+				{
+				case FR_FAIL:
+					return FAIL;
+				case FR_E_OUTOFMEM:
+					return MemoryError();
+				}
 				break;
 
 			case 'C':  // Color
