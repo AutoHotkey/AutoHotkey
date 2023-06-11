@@ -109,8 +109,9 @@ DWORD YYYYMMDDToSystemTime2(LPCTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
 		if (cp = _tcschr(aYYYYMMDD + 1, '-'))
 		{
 			// Temporarily terminate; otherwise, the dash and other chars would be considered invalid fields.
-			tmemcpy(temp, aYYYYMMDD, min(cp - aYYYYMMDD, _countof(temp) - 1));
-			temp[_countof(temp) - 1] = '\0';
+			auto n = min(cp - aYYYYMMDD, _countof(temp) - 1);
+			tmemcpy(temp, aYYYYMMDD, n);
+			temp[n] = '\0';
 			first = temp;
 		}
 		if (YYYYMMDDToSystemTime(first, aSystemTime[0], true)) // Date string is valid.
