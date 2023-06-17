@@ -1390,7 +1390,7 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 		// Since above didn't break, another instance of "ahk_" has been found. To reduce ambiguity,
 		// the following requires that any "ahk_" criteria beyond the first be preceded by at least
 		// one space or tab:
-		if (criteria_count && !IS_SPACE_OR_TAB(ahk_flag[-1])) // Relies on short-circuit boolean order.
+		if (ahk_flag > aTitle && !IS_SPACE_OR_TAB(ahk_flag[-1])) // Relies on short-circuit boolean order.
 		{
 			--criteria_count; // Decrement criteria_count to compensate for the loop's increment.
 			continue;
