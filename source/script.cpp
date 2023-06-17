@@ -1827,6 +1827,7 @@ process_completed_line:
 				}
 				// Below has a final +1 to include the terminator:
 				tmemmove(cp, cp1, _tcslen(cp1) + 1);
+				buf_length--;
 				// v2: The following is not done because 1) it is counter-intuitive for ` to affect two
 				// characters and 2) it hurts flexibility by preventing the escaping of a single colon
 				// immediately prior to the double-colon, such as ::lbl`:::.  Older comment:
