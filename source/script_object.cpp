@@ -533,7 +533,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	bool handle_params_recursively = calling;
 	ResultToken token_for_recursion;
 	IObject *etter = nullptr, *method = nullptr;
-	Variant *field = nullptr;
+	FieldType *field = nullptr;
 	index_t insert_pos, other_pos;
 	Object *that;
 
