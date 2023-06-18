@@ -1175,11 +1175,15 @@ FResult GuiType::ControlMove(GuiControlType &aControl, int xpos, int ypos, int w
 	RECT rect;
 	GetWindowRect(aControl.hwnd, &rect); // Failure seems too rare to check for.
 	POINT dest_pt = {rect.left, rect.top};
-	ScreenToClient(GetParent(aControl.hwnd), &dest_pt); // Set default x/y target position, to be possibly overridden below.
+	ScreenToClient(mHwnd, &dest_pt); // Set default x/y target position, to be possibly overridden below.
 	if (xpos != COORD_UNSPECIFIED)
 		dest_pt.x = Scale(xpos);
 	if (ypos != COORD_UNSPECIFIED)
 		dest_pt.y = Scale(ypos);
+	
+	// Map to the GUI window's client area (inverse of GetPos) in case the
+	// GUI window isn't the control's parent, such as if it is on a Tab3.
+	MapWindowPoints(mHwnd, GetParent(aControl.hwnd), &dest_pt, 1);
 
 	if (!MoveWindow(aControl.hwnd, dest_pt.x, dest_pt.y
 		, width == COORD_UNSPECIFIED ? rect.right - rect.left : Scale(width)
