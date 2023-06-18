@@ -1434,7 +1434,7 @@ bool Script::IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf)
 	*action_end = '\0';
 	bool is_control_flow = ConvertActionType(aBuf);
 	*action_end = '(';
-	if (is_control_flow)
+	if (is_control_flow && (g->CurrentFunc || !g_script.mClassObjectCount))
 		return false;
 	// It's not control flow.
 	LPTSTR param_end = action_end + FindExprDelim(action_end, ')', 1);
