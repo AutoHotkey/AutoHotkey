@@ -999,7 +999,7 @@ bool Object::CanSetBase(Object *aBase)
 	auto new_native_base = (!aBase || aBase->IsNativeClassPrototype())
 		? aBase : aBase->GetNativeBase();
 	return new_native_base == GetNativeBase() // Cannot change native type.
-		&& !aBase->IsDerivedFrom(this); // Cannot create loops.
+		&& !aBase->IsDerivedFrom(this) && aBase != this; // Cannot create loops.
 }
 
 
