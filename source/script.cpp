@@ -4518,7 +4518,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Since this is a function-call followed by a comma and some other expression, use the line's full text for later parsing.
 			}
-			else if (*action_args == '=')
+			else if (*action_args == '=' && action_args[1] != '=')
 				// v2: Give a more specific error message since the user probably meant to do an old-style assignment.
 				return ScriptError(_T("Syntax error. Did you mean to use \":=\"?"), aLineText);
 			else if (*action_args == g_delimiter)
