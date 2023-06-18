@@ -682,11 +682,11 @@ void SendKeys(LPCTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWN
 					}
 				}
 
-				else if (key_text_length > 4 && !_tcsnicmp(key_text, _T("ASC "), 4) && !aTargetWindow) // {ASC nnnnn}
+				else if (key_text_length > 4 && !_tcsicmp(key_text, _T("ASC")) && !aTargetWindow) // {ASC nnnnn}
 				{
 					// Include the trailing space in "ASC " to increase uniqueness (selectivity).
 					// Also, sending the ASC sequence to window doesn't work, so don't even try:
-					SendASC(omit_leading_whitespace(key_text + 3));
+					SendASC(next_word);
 					// Do this only once at the end of the sequence:
 					DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 				}
