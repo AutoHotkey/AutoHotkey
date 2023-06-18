@@ -2053,7 +2053,8 @@ process_completed_line:
 						{
 							found_mod = _tcschr(remap_source, *this_mod);
 							if (found_mod && found_mod[1]) // Exclude the last char for !:: and similar.
-								*next_blind_mod++ = *this_mod;
+								if (!_tcschr(remap_dest_modifiers, *this_mod)) // This works around an issue with {Blind+}+x releasing RShift to press LShift.
+									*next_blind_mod++ = *this_mod;
 						}
 						*next_blind_mod = '\0';
 						LPTSTR extra_event = _T(""); // Set default.
