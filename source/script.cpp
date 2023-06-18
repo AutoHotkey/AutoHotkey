@@ -2663,19 +2663,34 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 
 	do
 	{
-		if (balance == 0 && buf[buf_length - 1] == ':')
+		if (balance == 0)
 		{
-			if (action_type == ACT_CASE && FindExprDelim(buf, ':') == buf_length - 1)
+			if (buf[buf_length - 1] == ':')
 			{
-				// This is the colon terminating a case statement.
+				if (action_type == ACT_CASE && FindExprDelim(buf, ':') == buf_length - 1)
+				{
+					// This is the colon terminating a case statement.
+					return OK;
+				}
+				//else this colon qualifies for line continuation.
+			}
+			else if (EndsWithOperator(buf, buf + (buf_length - 1)))
+			{
+				// This relies on names of control flow statements being invalid for use as var/func names:
+				auto next_action_end = find_identifier_end((LPTSTR)next_buf);
+				TCHAR orig_char = *next_action_end;
+				*next_action_end = '\0';
+				auto next_action_type = ConvertActionType(next_buf);
+				*next_action_end = orig_char;
+				if (next_action_type)
+					// Avoid continuation in this case because it leads to confusing error messages.
+					return OK;
+			}
+			else if (!IsSOLContExpr(next_buf))
+			{
+				// There's no continuation by enclosure and no continuation operator, so we're done.
 				return OK;
 			}
-			//else this colon qualifies for line continuation.
-		}
-		else if (balance == 0 && !EndsWithOperator(buf, buf + (buf_length - 1)) && !IsSOLContExpr(next_buf))
-		{
-			// There's no continuation by enclosure and no continuation operator, so we're done.
-			return OK;
 		}
 		// Before appending each line, check whether the last line ended with OTB '{'.
 		// It can't be OTB if balance > 1 since that would mean another unclosed (/[/{.
@@ -4292,7 +4307,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			// v1.0.40: Allow things like "MsgBox :: test" to be valid by insisting that '=' follows ':'.
 			// v2.0: The example above is invalid, but it's still best to verify this is really ':='.
 			if (action_args_2nd_char == '=') // i.e. :=
-				aActionType = ACT_ASSIGNEXPR;
+				aActionType = action_args[2] ? ACT_ASSIGNEXPR : ACT_EXPRESSION; // ACT_EXPRESSION is used to produce a more helpful error message.
 			break;
 		case '+':
 		case '-':
