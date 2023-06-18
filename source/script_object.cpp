@@ -2699,19 +2699,26 @@ bool FreeVars::FullyReleased(ULONG aRefPendingRelease)
 	// This function is part of a workaround for circular references that occur because all closures
 	// have a reference to this FreeVars, while any closure referenced by itself or another closure
 	// has a reference in mVar[].
+	// aRefPendingRelease is 0 when this is being released the normal way (due to either the outer
+	// function returning or a non-grouped Closure being deleted) and 1 when the script releases its
+	// last direct reference to a grouped Closure.
 	if (mRefCount)
-		return mRefCount < 0;
+		return mRefCount < 0; // Negative values mean a previous call (still on the stack) is deleting this.
 	int circular_closures = 0;
+	ULONG extra_references = 0;
 	for (int i = 0; i < mVarCount; ++i)
 		if (mVar[i].Type() == VAR_CONSTANT)
 		{
 			ASSERT(mVar[i].HasObject() && dynamic_cast<ObjectBase*>(mVar[i].Object())); // Any object in VAR_CONSTANT must derive from ObjectBase.
 			auto obj = (ObjectBase *)mVar[i].Object();
-			if (obj->RefCount() && aRefPendingRelease == 0)
-				return false;
-			--aRefPendingRelease;
+			extra_references += obj->RefCount();
 			++circular_closures;
 		}
+	// aRefPendingRelease == 0 && extra_references > 0: keep alive.
+	// aRefPendingRelease == 1 && extra_references > 1: keep alive.
+	// aRefPendingRelease == 1 && extra_references == 1: delete, because that one Closure is being deleted.
+	if (extra_references > aRefPendingRelease)
+		return false;
 	--mRefCount; // Now that delete is certain, make this non-zero to prevent reentry.
 	if (circular_closures)
 	{
