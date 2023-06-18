@@ -8069,7 +8069,7 @@ int GuiType::FindOrCreateFont(LPCTSTR aOptions, LPCTSTR aFontName, FontType *aFo
 
 	TCHAR option[MAX_NUMBER_SIZE + 1];
 	LPCTSTR next_option, option_end;
-	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
+	for (next_option = aOptions; *(next_option = omit_leading_whitespace(next_option)); next_option = option_end)
 	{
 		// Find the end of this option item:
 		for (option_end = next_option; *option_end && !IS_SPACE_OR_TAB(*option_end); ++option_end);
