@@ -109,8 +109,9 @@ DWORD YYYYMMDDToSystemTime2(LPCTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
 		if (cp = _tcschr(aYYYYMMDD + 1, '-'))
 		{
 			// Temporarily terminate; otherwise, the dash and other chars would be considered invalid fields.
-			tmemcpy(temp, aYYYYMMDD, min(cp - aYYYYMMDD, _countof(temp) - 1));
-			temp[_countof(temp) - 1] = '\0';
+			auto n = min(cp - aYYYYMMDD, _countof(temp) - 1);
+			tmemcpy(temp, aYYYYMMDD, n);
+			temp[n] = '\0';
 			first = temp;
 		}
 		if (YYYYMMDDToSystemTime(first, aSystemTime[0], true)) // Date string is valid.
@@ -150,6 +151,10 @@ ResultType YYYYMMDDToSystemTime(LPCTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool
 	//  - tcslcpy() once and take each component from the right, re-terminating instead of copying each.
 	TCHAR temp[16];
 	size_t length = _tcslen(aYYYYMMDD); // Use this rather than incrementing the pointer in case there are ever partial fields such as 20051 vs. 200501.
+	
+	// Callers who check the return value expect this to be done even when !aValidateTimeValues:
+	if (length < 4 || (length & 1) || length > 14 || !IsNumeric(aYYYYMMDD, false, false))
+		return FAIL;
 
 	tcslcpy(temp, aYYYYMMDD, 5);
 	aSystemTime.wYear = _ttoi(temp);
@@ -215,10 +220,6 @@ ResultType YYYYMMDDToSystemTime(LPCTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool
 		y -= aSystemTime.wMonth < 3;
 		aSystemTime.wDayOfWeek = (y + y/4 - y/100 + y/400 + t[aSystemTime.wMonth-1] + aSystemTime.wDay) % 7;
 	}
-
-	// Callers who check the return value expect this to be done even when !aValidateTimeValues:
-	if (length < 4 || (length & 1) || length > 14 || !IsNumeric(aYYYYMMDD, false, false))
-		return FAIL;
 
 	if (aValidateTimeValues)
 	{

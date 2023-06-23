@@ -469,76 +469,6 @@ public:
 			aToken.object->AddRef();
 	}
 
-	bool MoveMemToResultToken(ResultToken &aResultToken)
-	// Caller must ensure mType == VAR_NORMAL.
-	{
-		if (mHowAllocated == ALLOC_MALLOC // malloc() is our allocator...
-			&& ((mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_UNINITIALIZED)) == 0)
-			&& mByteCapacity) // ...and we actually have memory allocated.
-		{
-			// Caller has determined that this var's value won't be needed anymore, so avoid
-			// an extra malloc and copy by moving this var's memory block into aResultToken:
-			aResultToken.StealMem(this);
-			return true;
-		}
-		return false;
-	}
-
-	bool ToReturnValue(ResultToken &aResultToken)
-	{
-		Var &var = *ResolveAlias();
-		// Caller may have checked attrib/type, but check it anyway for maintainability:
-		if ((var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_UNINITIALIZED)) != 0
-			// For static/global variables, return a direct pointer to Contents() and
-			// let the caller copy it into persistent memory if needed.
-			|| (var.Scope() & (VAR_LOCAL_STATIC | VAR_GLOBAL)))
-		{
-			var.ToToken(aResultToken);
-			return true;
-		}
-		// var is either local or a free var (this is an upvar/downvar).
-		if (mType == VAR_ALIAS || (mScope & VAR_VARREF))
-			// a) This var is an alias for another var.  Even if the target is local, it's
-			//    most likely not a local of the same function, so not about to be freed.
-			//    On the other hand, it could be an alias due to GetRef(), in which case
-			//    it might be freed, so we can't return Contents().
-			// b) This is a VarRef, which could probably only happen directly as a result
-			//    of a double-deref.  It may not be freed when the function returns, so we
-			//    can't steal its mem.  It may be freed (if it's actually a reference to a
-			//    local variable of this function), so we can't return Contents() either.
-			return false;
-		// Var is local.  Since the function is returning, the var is about to be freed.
-		// Instead of copying and then freeing its contents, let the caller take ownership:
-		if (mHowAllocated == ALLOC_MALLOC && mByteCapacity)
-		{
-			// mCharContents was allocated with malloc(); pass it back to the caller.
-			aResultToken.StealMem(&var);
-		}
-		else
-		{
-			// Copy contents into aResultToken.buf, which is always large enough because
-			// MAX_ALLOC_SIMPLE < MAX_NUMBER_LENGTH.  mCharContents is used vs Contents()
-			// because this isn't a number and therefore never needs UpdateContents().
-			// Although Contents() should be harmless, we want to be absolutely sure
-			// length isn't increased since that could cause buffer overflow.
-			memcpy(aResultToken.buf, mCharContents, mByteLength + sizeof(TCHAR));
-			// symbol should default to SYM_STRING, but it's more robust to use SetValue()
-			// than set marker and marker_length directly.
-			aResultToken.SetValue(aResultToken.buf, mByteLength / sizeof(TCHAR));
-		}
-		return true;
-	}
-
-	LPTSTR StealMem()
-	// Caller must ensure that mType == VAR_NORMAL and mHowAllocated == ALLOC_MALLOC.
-	{
-		LPTSTR mem = mCharContents;
-		mCharContents = Var::sEmptyString;
-		mByteCapacity = 0;
-		mByteLength = 0;
-		return mem;
-	}
-
 	// Not an enum so that it can be global more easily:
 	#define VAR_NEVER_FREE			0
 	#define VAR_ALWAYS_FREE			1
@@ -963,14 +893,6 @@ public:
 	void operator delete(void *aPtr) { free(aPtr); }
 	void operator delete[](void *aPtr) { free(aPtr); }
 };
-
-
-inline void ResultToken::StealMem(Var *aVar)
-// Caller must ensure that aVar->mType == VAR_NORMAL and aVar->mHowAllocated == ALLOC_MALLOC.
-{
-	VarSizeType length = aVar->Length(); // Must not be combined with the line below, as the compiler is free to evaluate parameters in whatever order.
-	AcceptMem(aVar->StealMem(), length);
-}
 
 
 #endif

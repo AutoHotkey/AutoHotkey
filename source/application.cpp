@@ -459,8 +459,11 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		// now only used for keyboard handling.  This reduces code complexity a little and
 		// eliminates some uncertainty about message routing.  All of the cases for WM_USER
 		// range messages below already checked msg.hwnd to ensure it is one of our messages.
+		// UPDATE: Mouse messages must also be passed through IsDialogMessage() so that clicking
+		// a Button will temporarily apply the BS_DEFPUSHBUTTON style.
 		if (g_firstGui // Checked first to help performance, since all messages must come through this bottleneck.
-			&& msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST
+			&& (msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST
+				|| msg.message >= WM_MOUSEFIRST && msg.message <= WM_MOUSELAST)
 			&& (pgui = GuiType::FindGuiParent(msg.hwnd))) // Ordered for short-circuit performance.
 		{
 			focused_control = msg.hwnd; // Alias for maintainability.  Seems more appropriate (and efficient) to use this vs. GetFocus().
@@ -596,7 +599,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (msg_was_handled) // This message was handled by IsDialogMessage() above.
 					continue; // Continue with the main message loop.
 			}
-		} // if (keyboard message posted to GUI)
+		} // if (keyboard or mouse message posted to GUI)
 
 		// v1.0.44: There's no reason to call TRANSLATE_AHK_MSG here because all WM_COMMNOTIFY messages
 		// are sent to g_hWnd. Thus, our call to DispatchMessage() later below will route such messages to

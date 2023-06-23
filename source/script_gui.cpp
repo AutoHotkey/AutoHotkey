@@ -1176,11 +1176,15 @@ FResult GuiType::ControlMove(GuiControlType &aControl, int xpos, int ypos, int w
 	RECT rect;
 	GetWindowRect(aControl.hwnd, &rect); // Failure seems too rare to check for.
 	POINT dest_pt = {rect.left, rect.top};
-	ScreenToClient(GetParent(aControl.hwnd), &dest_pt); // Set default x/y target position, to be possibly overridden below.
+	ScreenToClient(mHwnd, &dest_pt); // Set default x/y target position, to be possibly overridden below.
 	if (xpos != COORD_UNSPECIFIED)
 		dest_pt.x = Scale(xpos);
 	if (ypos != COORD_UNSPECIFIED)
 		dest_pt.y = Scale(ypos);
+	
+	// Map to the GUI window's client area (inverse of GetPos) in case the
+	// GUI window isn't the control's parent, such as if it is on a Tab3.
+	MapWindowPoints(mHwnd, GetParent(aControl.hwnd), &dest_pt, 1);
 
 	if (!MoveWindow(aControl.hwnd, dest_pt.x, dest_pt.y
 		, width == COORD_UNSPECIFIED ? rect.right - rect.left : Scale(width)
@@ -6300,7 +6304,13 @@ ResultType GuiType::ControlParseOptions(LPCTSTR aOptions, GuiControlOptionsType 
 				break;
 
 			case 'V': // Name (originally: Variable)
-				ControlSetName(aControl, option_value);
+				switch (ControlSetName(aControl, option_value))
+				{
+				case FR_FAIL:
+					return FAIL;
+				case FR_E_OUTOFMEM:
+					return MemoryError();
+				}
 				break;
 
 			case 'C':  // Color
@@ -8073,7 +8083,7 @@ int GuiType::FindOrCreateFont(LPCTSTR aOptions, LPCTSTR aFontName, FontType *aFo
 
 	TCHAR option[MAX_NUMBER_SIZE + 1];
 	LPCTSTR next_option, option_end;
-	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
+	for (next_option = aOptions; *(next_option = omit_leading_whitespace(next_option)); next_option = option_end)
 	{
 		// Find the end of this option item:
 		for (option_end = next_option; *option_end && !IS_SPACE_OR_TAB(*option_end); ++option_end);
@@ -8218,11 +8228,11 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	// CalledByIsDialogMessageOrDispatch for any threads beneath it.  Although this may technically be
 	// unnecessary, it adds maintainability.
 	LRESULT msg_reply;
-	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
-		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
-		&& MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
+	if (g->CalledByIsDialogMessageOrDispatch && g->CalledByIsDialogMessageOrDispatchMsg == iMsg)
+		g->CalledByIsDialogMessageOrDispatch = false; // Suppress this one message, not any other messages that could be sent due to recursion.
+	else if (g_MsgMonitor.Count() && MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply)) // Count is checked here to avoid function-call overhead.
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
-	g->CalledByIsDialogMessageOrDispatch = false;
+	//g->CalledByIsDialogMessageOrDispatch = false; // Now done conditionally above.
 	// Fixed for v1.0.40.01: The above line was added to resolve a case where our caller did make the value
 	// true but the message it sent us results in a recursive call to us (such as when the user resizes a
 	// window by dragging its borders: that apparently starts a loop in DefDlgProc that calls this

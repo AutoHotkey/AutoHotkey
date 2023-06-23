@@ -107,9 +107,11 @@ inline bool BreakpointLineIsSlippery(Line *aLine)
 bool LineIsFatArrowBlock(Line *line)
 {
 	return line->mActionType == ACT_BLOCK_BEGIN && line->mAttribute
-		&& line->mRelatedLine
-		&& line->mRelatedLine->mLineNumber == line->mLineNumber
-		&& line->mRelatedLine->mFileIndex == line->mFileIndex;
+		// line->mRelatedLine isn't used because it can be changed by Line::ExecUntil for ACT_STATIC.
+		//&& line->mNextLine // Always true at this stage.
+		&& line->mNextLine->mNextLine
+		&& line->mNextLine->mNextLine->mLineNumber == line->mLineNumber
+		&& line->mNextLine->mNextLine->mFileIndex == line->mFileIndex;
 }
 
 Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
@@ -147,6 +149,8 @@ Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
 // that it contains.  line should be as determined by FindFirstLineForBreakpoint().
 void SetBreakpointForLineGroup(Line *line, Breakpoint *bp)
 {
+	auto line_no = line->mLineNumber;
+	auto file_no = line->mFileIndex;
 	while (line->mActionType == ACT_BLOCK_BEGIN)
 	{
 		// Under the conditions established by FindFirstLineForBreakpoint(), this line can
@@ -161,6 +165,8 @@ void SetBreakpointForLineGroup(Line *line, Breakpoint *bp)
 		if (   !(line = line->mNextLine)     // Set it to the block-end.
 			|| !(line = line->mNextLine)   ) // Set it to the next fat-arrow block-begin or the final expression.
 			return; // Shouldn't happen.
+		if (line->mLineNumber != line_no || line->mFileIndex != file_no)
+			return; // May happen after an ACT_STATIC line is removed.
 	}
 	line->mBreakpoint = bp;
 }

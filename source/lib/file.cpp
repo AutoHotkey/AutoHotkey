@@ -665,7 +665,7 @@ bif_impl FResult FileSetAttrib(StrArg aAttributes, optl<StrArg> aFilePattern, op
 			break;
 		}
 	}
-	return FilePatternApply(aFilePattern.value(), aOperateOnFolders, aDoRecurse, FileSetAttribCallback, &attrib);
+	return FilePatternApply(path, aOperateOnFolders, aDoRecurse, FileSetAttribCallback, &attrib);
 }
 
 BOOL FileSetAttribCallback(LPCTSTR file_path, WIN32_FIND_DATA &current_file, void *aCallbackData)

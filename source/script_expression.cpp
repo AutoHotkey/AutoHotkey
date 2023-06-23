@@ -1353,14 +1353,12 @@ push_this_token:
 				result_token.var->ToToken(*aResultToken);
 				goto normal_end_skip_output_var; // result_to_return is left at its default of "".
 			}
-			if (mActionType == ACT_RETURN && result_token.var->ToReturnValue(*aResultToken))
-			{
-				// This is a non-static local var and the call above has either transferred its memory block
-				// into aResultToken or copied its value into aResultToken->buf.  This should be faster than
-				// copying it into the deref buffer, and also allows binary data to be retained.
-				// "case ACT_RETURN:" does something similar for non-expressions like "return local_var".
-				goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
-			}
+			// The following "optimizations" are avoided because of hidden complexity, most notably
+			// unwanted consequences with try-finally (which allows the script to read or modify the
+			// variable after we return):
+			//  - Return a local variable's string buffer directly, detaching it from the variable.
+			//    The idea was that the variable is about to be freed anyway, but there are exceptions.
+			//  - Return a static or global variable's string directly.
 			break;
 		case SYM_STRING:
 			if (to_free_count && to_free[to_free_count - 1] == &result_token)

@@ -460,13 +460,16 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	atp = mArgType;
 	for (int ai = first_param_index, pi = ai; output_var_count; ++atp, ++ai, ++pi)
 	{
-		if (ai == retval_index)
-			++ai; // This args slot doesn't correspond to an aParam slot.
 		ASSERT(pi < aParamCount); // Implied by how output_var_count was calculated.
 		MdType out = MdType::Void;
 		for (; MdType_IsMod(*atp); ++atp)
 			if (MdType_IsOut(*atp))
 				out = *atp;
+		if (ai == retval_index)
+		{
+			--pi; // This args slot doesn't correspond to an aParam slot.
+			continue;
+		}
 		if (out == MdType::Void || ParamIndexIsOmitted(pi))
 			continue;
 		--output_var_count;

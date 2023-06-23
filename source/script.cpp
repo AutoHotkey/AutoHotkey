@@ -1444,7 +1444,7 @@ bool Script::IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf)
 	*action_end = '\0';
 	bool is_control_flow = ConvertActionType(aBuf);
 	*action_end = '(';
-	if (is_control_flow)
+	if (is_control_flow && (g->CurrentFunc || !g_script.mClassObjectCount))
 		return false;
 	// It's not control flow.
 	LPTSTR param_end = action_end + FindExprDelim(action_end, ')', 1);
@@ -1837,6 +1837,7 @@ process_completed_line:
 				}
 				// Below has a final +1 to include the terminator:
 				tmemmove(cp, cp1, _tcslen(cp1) + 1);
+				buf_length--;
 				// v2: The following is not done because 1) it is counter-intuitive for ` to affect two
 				// characters and 2) it hurts flexibility by preventing the escaping of a single colon
 				// immediately prior to the double-colon, such as ::lbl`:::.  Older comment:
@@ -2062,7 +2063,8 @@ process_completed_line:
 						{
 							found_mod = _tcschr(remap_source, *this_mod);
 							if (found_mod && found_mod[1]) // Exclude the last char for !:: and similar.
-								*next_blind_mod++ = *this_mod;
+								if (!_tcschr(remap_dest_modifiers, *this_mod)) // This works around an issue with {Blind+}+x releasing RShift to press LShift.
+									*next_blind_mod++ = *this_mod;
 						}
 						*next_blind_mod = '\0';
 						LPTSTR extra_event = _T(""); // Set default.
@@ -2671,19 +2673,34 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 
 	do
 	{
-		if (balance == 0 && buf[buf_length - 1] == ':')
+		if (balance == 0)
 		{
-			if (action_type == ACT_CASE && FindExprDelim(buf, ':') == buf_length - 1)
+			if (buf[buf_length - 1] == ':')
 			{
-				// This is the colon terminating a case statement.
+				if (action_type == ACT_CASE && FindExprDelim(buf, ':') == buf_length - 1)
+				{
+					// This is the colon terminating a case statement.
+					return OK;
+				}
+				//else this colon qualifies for line continuation.
+			}
+			else if (EndsWithOperator(buf, buf + (buf_length - 1)))
+			{
+				// This relies on names of control flow statements being invalid for use as var/func names:
+				auto next_action_end = find_identifier_end((LPTSTR)next_buf);
+				TCHAR orig_char = *next_action_end;
+				*next_action_end = '\0';
+				auto next_action_type = ConvertActionType(next_buf);
+				*next_action_end = orig_char;
+				if (next_action_type)
+					// Avoid continuation in this case because it leads to confusing error messages.
+					return OK;
+			}
+			else if (!IsSOLContExpr(next_buf))
+			{
+				// There's no continuation by enclosure and no continuation operator, so we're done.
 				return OK;
 			}
-			//else this colon qualifies for line continuation.
-		}
-		else if (balance == 0 && !EndsWithOperator(buf, buf + (buf_length - 1)) && !IsSOLContExpr(next_buf))
-		{
-			// There's no continuation by enclosure and no continuation operator, so we're done.
-			return OK;
 		}
 		// Before appending each line, check whether the last line ended with OTB '{'.
 		// It can't be OTB if balance > 1 since that would mean another unclosed (/[/{.
@@ -4305,7 +4322,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			// v1.0.40: Allow things like "MsgBox :: test" to be valid by insisting that '=' follows ':'.
 			// v2.0: The example above is invalid, but it's still best to verify this is really ':='.
 			if (action_args_2nd_char == '=') // i.e. :=
-				aActionType = ACT_ASSIGNEXPR;
+				aActionType = action_args[2] ? ACT_ASSIGNEXPR : ACT_EXPRESSION; // ACT_EXPRESSION is used to produce a more helpful error message.
 			break;
 		case '+':
 		case '-':
@@ -4531,7 +4548,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Since this is a function-call followed by a comma and some other expression, use the line's full text for later parsing.
 			}
-			else if (*action_args == '=')
+			else if (*action_args == '=' && action_args[1] != '=')
 				// v2: Give a more specific error message since the user probably meant to do an old-style assignment.
 				return ScriptError(_T("Syntax error. Did you mean to use \":=\"?"), aLineText);
 			else if (*action_args == g_delimiter)
@@ -6182,7 +6199,7 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd)
 		return FAIL;
 	if (mClassProperty->MinParams == -1)
 	{
-		int hidden_params = ctoupper(*aBuf) == 'S' ? 2 : 1;
+		int hidden_params = g->CurrentFunc == mClassProperty->Setter() ? 2 : 1;
 		mClassProperty->MinParams = g->CurrentFunc->mMinParams - hidden_params;
 		mClassProperty->MaxParams = g->CurrentFunc->mIsVariadic ? INT_MAX : g->CurrentFunc->mParamCount - hidden_params;
 	}
