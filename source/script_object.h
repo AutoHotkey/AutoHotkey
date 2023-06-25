@@ -250,7 +250,10 @@ public:
 struct TypedProperty
 {
 	MdType type;
+	Object *class_object;
 	size_t data_offset;
+	size_t object_index;
+	~TypedProperty();
 };
 
 
@@ -318,6 +321,7 @@ protected:
 	{
 		size_t size;
 		size_t align;
+		size_t nested_count;
 	};
 
 	enum EnumeratorType
@@ -351,6 +355,7 @@ private:
 	Object *mBase = nullptr;
 	FlatVector<FieldType, index_t> mFields;
 	void *mData = nullptr;
+	Object **mNested = nullptr;
 
 	FieldType *FindField(name_t name, index_t &insert_pos);
 	FieldType *FindField(name_t name)
@@ -374,13 +379,14 @@ protected:
 	ResultType CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMeta(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMetaVarg(int aFlags, LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	void CallNestedDelete();
 
 public:
 
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 
-	ResultType New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, Object *aOuter = nullptr);
 	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	bool HasProp(name_t aName);

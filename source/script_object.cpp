@@ -410,6 +410,21 @@ ResultType Array::ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax
 
 bool Object::Delete()
 {
+	if (mNested && mNested[0] && mRefCount)
+	{
+		// Let "outer" be mNested[0] and "inner" be the current object.  The circular dependency
+		// is handled by counting inner's reference to outer only while there are external refs
+		// to inner (mRefCount>0).  Delete is called when mRefCount==1 about to become 0, meaning
+		// the last external reference is released, and inner must Release outer.
+		// Outer's __delete may rely on the inner objects, and yet inner's __delete can't execute
+		// safely if its DataPtr() points to deleted data.  So outer is always destructed first,
+		// and it becomes responsible for recursively destructing inner.
+		mRefCount--; // To reflect that this object doesn't have a counted ref to outer during outer's __delete.
+		bool deleted = mNested[0]->Release() == 0;
+		mRefCount++;
+		return deleted; // Caller will --mRefCount.
+	}
+
 	if (mBase)
 	{
 		if (FindField(_T("__Class")))
@@ -438,6 +453,12 @@ bool Object::Delete()
 			rt.Free();
 		}
 
+		// Call main destructor and all nested destructors before deleting anything, since an outer
+		// object's nested objects should be assumed valid within the outer object's destructor,
+		// and all objects in the group may rely on the mData of the outer-most object.
+		if (mNested)
+			CallNestedDelete();
+
 		g->ExcptMode = outer_excptmode;
 
 		// Exceptions thrown by __Delete are reported immediately because they would not be handled
@@ -460,12 +481,49 @@ bool Object::Delete()
 		if (mRefCount > 1)
 			return false;
 	}
+
 	return ObjectBase::Delete();
+}
+
+
+void Object::CallNestedDelete()
+{
+	// Caller has prepared the thread for __Delete to be called directly.
+	ASSERT(mRefCount == 1 && mNested);
+	auto proto = mBase;
+	while (proto && !(proto->mFlags & DataIsStructInfo))
+		proto = proto->mBase;
+	ASSERT(proto);
+	for (auto i = ((StructInfo*)proto->mData)->nested_count; i > 0; --i)
+		if (mNested[i] && !mNested[i]->mRefCount)
+		{
+			FuncResult rt;
+			++mRefCount;
+			++mNested[i]->mRefCount;
+			CallMeta(_T("__Delete"), rt, ExprTokenType(mNested[i]), nullptr, 0);
+			rt.Free();
+			if (mNested[i]->mNested && mNested[i]->mNested[0])
+				mNested[i]->CallNestedDelete();
+			--mNested[i]->mRefCount;
+			--mRefCount;
+		}
 }
 
 
 Object::~Object()
 {
+	if (mNested)
+	{
+		// Nested objects have been "destructed" but not actually deleted yet.
+		auto proto = mBase;
+		while (proto && !(proto->mFlags & DataIsStructInfo))
+			proto = proto->mBase;
+		ASSERT(proto);
+		for (auto i = ((StructInfo*)proto->mData)->nested_count; i > 0; --i)
+			if (mNested[i] && !mNested[i]->mRefCount)
+				delete mNested[i];
+		delete[] mNested;
+	}
 	if (mBase)
 		mBase->Release();
 	if (mFlags & DataIsAllocatedFlag)
@@ -623,7 +681,40 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		handle_params_recursively = actual_param_count || calling;
 		if (setting && !handle_params_recursively)
 		{
+			if (field->tprop->class_object)
+				return aResultToken.Error(_T("Assignment to struct is not supported."));
 			return SetValueOfTypeAtPtr(field->tprop->type, ptr, *actual_param[0], aResultToken);
+		}
+		else if (field->tprop->class_object) // Struct type.
+		{
+			Object *nested = realthis->mNested[field->tprop->object_index];
+			if (nested)
+			{
+				if (nested->AddRef() == 1)
+					realthis->AddRef();
+			}
+			else
+			{
+				// TODO: support native types other than Object
+				nested = Object::Create();
+				if (!nested)
+					return aResultToken.MemoryError();
+				nested->SetDataPtr((UINT_PTR)ptr);
+				ExprTokenType prop_class { field->tprop->class_object }, *pcarg { &prop_class };
+				auto result = nested->New(aResultToken, &pcarg, 1, realthis);
+				if (result == FAIL || result == EARLY_EXIT)
+				{
+					nested->Release();
+					return result;
+				}
+				realthis->mNested[field->tprop->object_index] = nested;
+			}
+			if (!handle_params_recursively)
+			{
+				aResultToken.SetValue(nested);
+				return OK;
+			}
+			token_for_recursion.SetValue(nested);
 		}
 		else
 		{
@@ -631,6 +722,8 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 				, handle_params_recursively ? token_for_recursion : aResultToken);
 			if (!handle_params_recursively)
 				return OK;
+			if (token_for_recursion.symbol == SYM_OBJECT)
+				token_for_recursion.object->AddRef();
 		}
 	}
 	else if (etter) // Property with getter/setter.
@@ -670,7 +763,8 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	{
 		ExprTokenType func_token;
 
-		if (etter || field && field->symbol == SYM_TYPED_FIELD)
+		bool tfr_set = etter || field && field->symbol == SYM_TYPED_FIELD; // TODO: measure these checks against initializing token_for_recursion.symbol and checking that instead
+		if (tfr_set)
 			func_token.CopyValueFrom(token_for_recursion);
 		else if (!field)
 			return INVOKE_NOT_HANDLED;
@@ -679,7 +773,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		else
 			field->ToToken(func_token);
 		auto result = CallAsMethod(func_token, aResultToken, aThisToken, actual_param, actual_param_count);
-		if (etter)
+		if (tfr_set)
 			token_for_recursion.Free();
 		if (result == INVOKE_NOT_HANDLED)
 		{
@@ -736,7 +830,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			// to override the default error message, which would indicate that "x" is unknown.
 			result = aResultToken.UnknownMemberError(token_for_recursion, aFlags, nullptr);
 		}
-		if (etter)
+		if (etter || field && field->symbol == SYM_TYPED_FIELD)
 			token_for_recursion.Free();
 		return result;
 	}
@@ -1476,6 +1570,7 @@ Object::StructInfo *Object::GetStructInfo()
 		{
 			((StructInfo*)mData)->size = 0;
 			((StructInfo*)mData)->align = 1;
+			((StructInfo*)mData)->nested_count = 0;
 			mFlags |= DataIsStructInfo | DataIsAllocatedFlag;
 		}
 	}
@@ -1523,8 +1618,23 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	auto desc = dynamic_cast<Object *>(ParamIndexToObject(1));
 	if (desc && desc->GetOwnProp(value, _T("Type"))) // TODO: make this properly mutually exclusive with the others
 	{
-		auto ptype = TypeCode(TokenToString(value));
-		auto psize = TypeSize(ptype);
+		MdType ptype = MdType::Void;
+		size_t psize = 0, palign = 0;
+		Object *pclass = dynamic_cast<Object*>(TokenToObject(value));
+		if (pclass)
+		{
+			if (auto proto = dynamic_cast<Object*>(pclass->GetOwnPropObj(_T("Prototype"))))
+			{
+				auto psi = proto->GetStructInfo();
+				psize = psi->size;
+				palign = psi->align;
+			}
+		}
+		else
+		{
+			ptype = TypeCode(TokenToString(value));
+			palign = psize = TypeSize(ptype);
+		}
 		if (!psize)
 			_o_throw_param(1);
 		auto si = GetStructInfo();
@@ -1534,12 +1644,17 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 		if (!tprop)
 			_o_throw_oom;
 		tprop->type = ptype;
-		if (psize > si->align) // TODO: allow overriding struct packing
-			si->align = psize;
-		ASSERT(si->align && ((si->align & (si->align - 1)) == 0)); // Must be a power of 2.
-		si->size = (si->size + si->align - 1) & ~(si->align - 1);
+		if (tprop->class_object = pclass)
+		{
+			tprop->object_index = ++si->nested_count; // 1-based, as index 0 is reserved.
+			pclass->AddRef();
+		}
+		if (palign > si->align) // TODO: allow overriding struct packing
+			si->align = palign;
+		ASSERT(palign && ((palign & (palign - 1)) == 0)); // Must be a power of 2.
+		si->size = (si->size + palign - 1) & ~(palign - 1);
 		tprop->data_offset = si->size;
-		si->size += psize; // size may be unaligned until the struct definition is closed (if psize < si-align).
+		si->size += psize; // size may be unaligned until the struct definition is closed (if palign < si-align).
 		AddRef();
 		_o_return(this);
 	}
@@ -1613,7 +1728,10 @@ void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, Expr
 	}
 	else if (field->symbol == SYM_TYPED_FIELD)
 	{
-		desc->SetOwnProp(_T("Type"), TypeName(field->tprop->type));
+		if (field->tprop->class_object)
+			desc->SetOwnProp(_T("Type"), field->tprop->class_object);
+		else
+			desc->SetOwnProp(_T("Type"), TypeName(field->tprop->type));
 		desc->SetOwnProp(_T("Offset"), field->tprop->data_offset);
 	}
 	else
@@ -1630,7 +1748,7 @@ void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, Expr
 // Class objects
 //
 
-ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, Object *aOuter)
 {
 	Object *base = dynamic_cast<Object *>(ParamIndexToObject(0));
 	Object *proto = base ? dynamic_cast<Object *>(base->GetOwnPropObj(_T("Prototype"))) : nullptr;
@@ -1648,9 +1766,31 @@ ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 		proto = proto->mBase;
 	if (proto) // Typed properties are defined.
 	{
-		if (FAILED(AllocDataPtr(proto->GetStructInfo()->size)))
-			return aResultToken.MemoryError();
-		ZeroMemory((void*)DataPtr(), DataSize());
+		auto si = proto->GetStructInfo();
+		if (!mData)
+		{
+			if (FAILED(AllocDataPtr(si->size)))
+				return aResultToken.MemoryError();
+			ZeroMemory((void*)DataPtr(), DataSize());
+		}
+		if (si->nested_count)
+		{
+			mNested = new (std::nothrow) Object * [si->nested_count + 1];
+			if (!mNested)
+				return aResultToken.MemoryError();
+			ZeroMemory(mNested, sizeof(Object *) * (si->nested_count + 1));
+		}
+	}
+	if (aOuter)
+	{
+		if (!mNested)
+		{
+			mNested = new (std::nothrow) Object * [1];
+			if (!mNested)
+				return aResultToken.MemoryError();
+		}
+		mNested[0] = aOuter;
+		aOuter->AddRef();
 	}
 	return Construct(aResultToken, aParam + 1, aParamCount - 1);
 }
@@ -1920,6 +2060,12 @@ void Object::Variant::Free()
 	case SYM_DYNAMIC: delete prop; break;
 	case SYM_TYPED_FIELD: delete tprop; break;
 	}
+}
+
+TypedProperty::~TypedProperty()
+{
+	if (class_object)
+		class_object->Release();
 }
 
 
