@@ -381,6 +381,7 @@ protected:
 	ResultType CallMeta(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMetaVarg(int aFlags, LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	void CallNestedDelete();
+	ResultType NestedNew(ResultToken &aResultToken, StructInfo *si);
 
 public:
 

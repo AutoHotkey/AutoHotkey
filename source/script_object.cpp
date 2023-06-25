@@ -682,27 +682,9 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		else if (field->tprop->class_object) // Struct type.
 		{
 			Object *nested = realthis->mNested[field->tprop->object_index];
-			if (nested)
-			{
-				if (nested->AddRef() == 1)
-					realthis->AddRef();
-			}
-			else
-			{
-				// TODO: support native types other than Object
-				nested = Object::Create();
-				if (!nested)
-					return aResultToken.MemoryError();
-				nested->SetDataPtr((UINT_PTR)ptr);
-				ExprTokenType prop_class { field->tprop->class_object }, *pcarg { &prop_class };
-				auto result = nested->New(aResultToken, &pcarg, 1, realthis);
-				if (result == FAIL || result == EARLY_EXIT)
-				{
-					nested->Release();
-					return result;
-				}
-				realthis->mNested[field->tprop->object_index] = nested;
-			}
+			ASSERT(nested);
+			if (nested->AddRef() == 1)
+				realthis->AddRef();
 			if (!handle_params_recursively)
 			{
 				aResultToken.SetValue(nested);
@@ -1794,6 +1776,9 @@ ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 			if (!mNested)
 				return aResultToken.MemoryError();
 			ZeroMemory(mNested, sizeof(Object *) * (si->nested_count + 1));
+			auto result = NestedNew(aResultToken, si);
+			if (result != OK)
+				return result;
 		}
 	}
 	if (aOuter)
@@ -1808,6 +1793,55 @@ ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 		aOuter->AddRef();
 	}
 	return Construct(aResultToken, aParam + 1, aParamCount - 1);
+}
+
+ResultType Object::NestedNew(ResultToken &aResultToken, StructInfo *si)
+{
+	ASSERT(si->nested_count && mNested);
+	
+	// TODO: probably make an ordered list in si during definition (or when the struct definition is finalized) instead of this?
+	auto offsets = (size_t*)_alloca(sizeof(size_t) * si->nested_count);
+	ZeroMemory(offsets, sizeof(size_t) * si->nested_count);
+
+	// First pass: gather class objects into definition order.
+	for (auto base = mBase; base; base = base->mBase)
+	{
+		if (!(base->mFlags & DataIsStructInfo))
+			continue;
+		for (index_t i = 0; i < base->mFields.Length(); ++i)
+		{
+			auto &field = base->mFields[i];
+			if (field.symbol == SYM_TYPED_FIELD && field.tprop->class_object)
+			{
+				ASSERT(field.tprop->object_index <= si->nested_count);
+				ASSERT(!mNested[field.tprop->object_index]); // Should always be null since every new property gets a new object_index, even if it shadows a base property.
+				mNested[field.tprop->object_index] = field.tprop->class_object;
+				offsets[field.tprop->object_index - 1] = field.tprop->data_offset;
+			}
+		}
+	}
+
+	auto data_ptr = DataPtr();
+
+	// Second pass: construct objects.
+	for (size_t i = 1; i <= si->nested_count; ++i)
+	{
+		ASSERT(mNested[i]);
+		// TODO: support native types other than Object
+		auto nested = Object::Create();
+		if (!nested)
+			return aResultToken.MemoryError();
+		nested->SetDataPtr(data_ptr + offsets[i-1]);
+		ExprTokenType prop_class { mNested[i] }, *pcarg {&prop_class};
+		auto result = nested->New(aResultToken, &pcarg, 1, this);
+		if (result == FAIL || result == EARLY_EXIT)
+		{
+			nested->Release();
+			return result;
+		}
+		mNested[i] = nested;
+	}
+	return OK;
 }
 
 ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
