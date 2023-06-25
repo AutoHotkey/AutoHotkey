@@ -489,12 +489,9 @@ bool Object::Delete()
 void Object::CallNestedDelete()
 {
 	// Caller has prepared the thread for __Delete to be called directly.
-	ASSERT(mRefCount == 1 && mNested);
-	auto proto = mBase;
-	while (proto && !(proto->mFlags & DataIsStructInfo))
-		proto = proto->mBase;
-	ASSERT(proto);
-	for (auto i = ((StructInfo*)proto->mData)->nested_count; i > 0; --i)
+	ASSERT(mRefCount == 1 && mNested && mBase);
+	auto si = mBase->GetStructInfo();
+	for (auto i = si->nested_count; i > 0; --i)
 		if (mNested[i] && !mNested[i]->mRefCount)
 		{
 			FuncResult rt;
@@ -515,11 +512,8 @@ Object::~Object()
 	if (mNested)
 	{
 		// Nested objects have been "destructed" but not actually deleted yet.
-		auto proto = mBase;
-		while (proto && !(proto->mFlags & DataIsStructInfo))
-			proto = proto->mBase;
-		ASSERT(proto);
-		for (auto i = ((StructInfo*)proto->mData)->nested_count; i > 0; --i)
+		auto si = mBase->GetStructInfo();
+		for (auto i = si->nested_count; i > 0; --i)
 			if (mNested[i] && !mNested[i]->mRefCount)
 				delete mNested[i];
 		delete[] mNested;
@@ -1560,19 +1554,41 @@ TypedProperty *Object::DefineTypedProperty(name_t aName)
 	return field->tprop;
 }
 
-Object::StructInfo *Object::GetStructInfo()
+Object::StructInfo *Object::GetStructInfo(bool aDefine)
 {
+	if (!aDefine)
+	{
+		if (!(mFlags & StructInfoLocked))
+		{
+			mFlags |= StructInfoLocked; // Permit no further changes now that there is a dependent struct instance or definition.
+			if (mFlags & DataIsStructInfo)
+			{
+				// Apply the struct's final alignment requirement to its size.
+				auto si = (StructInfo*)mData;
+				si->size = (si->size + si->align - 1) & ~(si->align - 1);
+			}
+		}
+	}
 	if (!(mFlags & DataIsStructInfo))
 	{
+		auto bsi = mBase ? mBase->GetStructInfo(false) : nullptr;
 		if (mFlags & DataIsSetFlag)
+			return aDefine ? nullptr : bsi;
+		auto si = (StructInfo*)malloc(sizeof(StructInfo));
+		if (!si)
 			return nullptr;
-		if (mData = malloc(sizeof(StructInfo)))
+		if (bsi)
 		{
-			((StructInfo*)mData)->size = 0;
-			((StructInfo*)mData)->align = 1;
-			((StructInfo*)mData)->nested_count = 0;
-			mFlags |= DataIsStructInfo | DataIsAllocatedFlag;
+			*si = *bsi;
 		}
+		else
+		{
+			si->size = 0;
+			si->align = 1;
+			si->nested_count = 0;
+		}
+		mData = si;
+		mFlags |= DataIsStructInfo | DataIsAllocatedFlag;
 	}
 	return (StructInfo*)mData;
 }
@@ -1625,9 +1641,11 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 		{
 			if (auto proto = dynamic_cast<Object*>(pclass->GetOwnPropObj(_T("Prototype"))))
 			{
-				auto psi = proto->GetStructInfo();
-				psize = psi->size;
-				palign = psi->align;
+				if (auto psi = proto->GetStructInfo())
+				{
+					psize = psi->size;
+					palign = psi->align;
+				}
 			}
 		}
 		else
@@ -1637,9 +1655,9 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 		}
 		if (!psize)
 			_o_throw_param(1);
-		auto si = GetStructInfo();
-		if (!si)
-			_o_throw(_T("Cannot add typed property to active struct."));
+		auto si = GetStructInfo(true);
+		if (!si || (mFlags & StructInfoLocked))
+			_o_throw(_T("Cannot add typed property."));
 		auto tprop = DefineTypedProperty(name);
 		if (!tprop)
 			_o_throw_oom;
@@ -1762,11 +1780,8 @@ ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 		Release();
 		return FAIL;
 	}
-	while (proto && !(proto->mFlags & DataIsStructInfo))
-		proto = proto->mBase;
-	if (proto) // Typed properties are defined.
+	if (auto si = proto->GetStructInfo()) // Typed properties are defined.
 	{
-		auto si = proto->GetStructInfo();
 		if (!mData)
 		{
 			if (FAILED(AllocDataPtr(si->size)))

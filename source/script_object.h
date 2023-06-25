@@ -343,7 +343,8 @@ protected:
 		DataIsSetFlag = 0x04,
 		DataIsAllocatedFlag = 0x08,
 		DataIsStructInfo = 0x10,
-		LastObjectFlag = 0x10
+		StructInfoLocked = 0x20,
+		LastObjectFlag = 0x20
 	};
 
 	Object *CloneTo(Object &aTo);
@@ -373,7 +374,7 @@ private:
 		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
 	
-	StructInfo *GetStructInfo();
+	StructInfo *GetStructInfo(bool aDefine = false);
 
 protected:
 	ResultType CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
