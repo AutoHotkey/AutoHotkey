@@ -676,7 +676,13 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		if (setting && !handle_params_recursively)
 		{
 			if (field->tprop->class_object)
+			{
+				Object *nested = realthis->mNested[field->tprop->object_index];
+				auto result = nested->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(nested), actual_param, 1);
+				if (result != INVOKE_NOT_HANDLED)
+					return result;
 				return aResultToken.Error(_T("Assignment to struct is not supported."));
+			}
 			return SetValueOfTypeAtPtr(field->tprop->type, ptr, *actual_param[0], aResultToken);
 		}
 		else if (field->tprop->class_object) // Struct type.
@@ -687,6 +693,9 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 				realthis->AddRef();
 			if (!handle_params_recursively)
 			{
+				auto result = nested->Invoke(aResultToken, IT_GET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(nested), nullptr, 0);
+				if (result != INVOKE_NOT_HANDLED)
+					return result;
 				aResultToken.SetValue(nested);
 				return OK;
 			}
