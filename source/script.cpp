@@ -4266,7 +4266,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		action_args = omit_leading_whitespace(end_marker);
 		TCHAR end_char = *end_marker;
 		could_be_named_action = (!end_char || IS_SPACE_OR_TAB(end_char) || end_char == '(')
-			&& *action_args != '='; // Allow for a more specific error message for `x = y`, to ease transition from v1.
+			&& *action_args != '=' // Allow for a more specific error message for `x = y`, to ease transition from v1.
+			&& *action_args != ':'; // Exclude `default :` (for anything else, this just affects which error message is shown).
 	}
 	else
 	{
