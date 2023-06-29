@@ -555,6 +555,8 @@ INT_PTR CALLBACK ErrorBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			{
 				// Call the handler directly since g_hWnd might be NULL if this is a warning dialog.
 				HandleMenuItem(NULL, LOWORD(wParam), NULL);
+				if (LOWORD(wParam) == ID_FILE_RELOADSCRIPT)
+					EndDialog(hwnd, IDCANCEL);
 				return TRUE;
 			}
 		}
