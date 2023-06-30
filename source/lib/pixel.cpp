@@ -365,7 +365,7 @@ bif_impl FResult PixelSearch(BOOL &aFound, ResultToken *aFoundX, ResultToken *aF
 
 
 
-bif_impl FResult ImageSearch(ResultToken &aFoundX, ResultToken &aFoundY
+bif_impl FResult ImageSearch(ResultToken *aFoundX, ResultToken *aFoundY
 	, int aLeft, int aTop, int aRight, int aBottom, StrArg aImageFile
 	, BOOL &aRetVal)
 // Author: ImageSearch was created by Aurelian Maga.
@@ -740,10 +740,12 @@ end:
 	if (found)
 	{
 		// Calculate xpos and ypos of where the match was found and adjust coords to
-		// make them relative to the position of the target window (rect will contain
-		// zeroes if this doesn't need to be done):
-		aFoundX.SetValue((aLeft + i%screen_width) - origin.x);
-		aFoundY.SetValue((aTop + i/screen_width) - origin.y);
+		// make them relative to the origin point (which will contain zeroes if this
+		// doesn't need to be done):
+		if (aFoundX)
+			aFoundX->SetValue((aLeft + i%screen_width) - origin.x);
+		if (aFoundY)
+			aFoundY->SetValue((aTop + i/screen_width) - origin.y);
 	}
 	aRetVal = found;
 	return OK;

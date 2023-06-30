@@ -144,7 +144,7 @@ md_func(IL_Add, (In, UIntPtr, ImageList), (In, String, Filename), (In_Opt, Int32
 md_func_x(IL_Create, IL_Create, UIntPtr, (In_Opt, Int32, InitialCount), (In_Opt, Int32, GrowCount), (In_Opt, Bool32, LargeIcons))
 md_func_x(IL_Destroy, IL_Destroy, Bool32, (In, UIntPtr, ImageList))
 
-md_func(ImageSearch, (Out, Variant, X), (Out, Variant, Y), (In, Int32, X1), (In, Int32, Y1), (In, Int32, X2), (In, Int32, Y2), (In, String, Image), (Ret, Bool32, Found))
+md_func(ImageSearch, (Out_Opt, Variant, X), (Out_Opt, Variant, Y), (In, Int32, X1), (In, Int32, Y1), (In, Int32, X2), (In, Int32, Y2), (In, String, Image), (Ret, Bool32, Found))
 
 md_func(IniDelete, (In, String, Path), (In, String, Section), (In_Opt, String, Key))
 md_func(IniRead, (In, String, Path), (In_Opt, String, Section), (In_Opt, String, Key), (In_Opt, String, Default), (Ret, String, RetVal))
