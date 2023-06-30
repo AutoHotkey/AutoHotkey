@@ -345,8 +345,10 @@ fast_end:
 	// zeroes if this doesn't need to be done):
 	if (found)
 	{
-		aFoundX->SetValue((left + i%screen_width) - origin.x);
-		aFoundY->SetValue((top + i/screen_width) - origin.y);
+		if (aFoundX)
+			aFoundX->SetValue((left + i%screen_width) - origin.x);
+		if (aFoundY)
+			aFoundY->SetValue((top + i/screen_width) - origin.y);
 	}
 	*aFound = found;
 	return OK;
@@ -354,10 +356,10 @@ fast_end:
 
 
 
-bif_impl FResult PixelSearch(BOOL &aFound, ResultToken &aFoundX, ResultToken &aFoundY
+bif_impl FResult PixelSearch(BOOL &aFound, ResultToken *aFoundX, ResultToken *aFoundY
 	, int aLeft, int aTop, int aRight, int aBottom, UINT aColor, optl<int> aVariation)
 {
-	return PixelSearch(&aFound, &aFoundX, &aFoundY, aLeft, aTop, aRight, aBottom, aColor
+	return PixelSearch(&aFound, aFoundX, aFoundY, aLeft, aTop, aRight, aBottom, aColor
 		, aVariation.value_or(0), nullptr);
 }
 

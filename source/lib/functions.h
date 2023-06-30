@@ -213,7 +213,7 @@ md_func(Pause, (In_Opt, Int32, NewState))
 md_func_v(Persistent, (In_Opt, Bool32, NewValue), (Ret, Bool32, OldValue))
 
 md_func(PixelGetColor, (In, Int32, X), (In, Int32, Y), (In_Opt, String, Mode), (Ret, String, Color))
-md_func(PixelSearch, (Ret, Bool32, Found), (Out, Variant, X), (Out, Variant, Y), (In, Int32, X1), (In, Int32, Y1), (In, Int32, X2), (In, Int32, Y2), (In, UInt32, Color), (In_Opt, Int32, Variation))
+md_func(PixelSearch, (Ret, Bool32, Found), (Out_Opt, Variant, X), (Out_Opt, Variant, Y), (In, Int32, X1), (In, Int32, Y1), (In, Int32, X2), (In, Int32, Y2), (In, UInt32, Color), (In_Opt, Int32, Variation))
 
 #undef PostMessage
 md_func_x(PostMessage, ScriptPostMessage, FResult, (In, UInt32, Msg), (In_Opt, Variant, wParam), (In_Opt, Variant, lParam), MD_CONTROL_ARGS_OPT)
