@@ -9320,6 +9320,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 					return LineError(ERR_TOO_MANY_PARAMS, FAIL, func->mName);
 
 				auto func_as_bif = dynamic_cast<BuiltInFunc*>(func);
+				auto func_as_udf = dynamic_cast<UserFunc*>(func);
 				auto *bif = func_as_bif ? func_as_bif->mBIF : nullptr;
 
 				for (int i = 0; i < param_count; ++i)
@@ -9327,8 +9328,15 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 					switch (param[i]->symbol)
 					{
 					case SYM_MISSING:
-						if (i < func->mMinParams)
-							return LineError(ERR_PARAM_REQUIRED);
+						if (!func->ArgIsOptional(i))
+						{
+							TCHAR buf[16], *arg;
+							if (func_as_udf)
+								arg = func_as_udf->mParam[i].var->mName;
+							else
+								sntprintf(arg = buf, _countof(buf), _T("#%i"), i + 1);
+							return LineError(ERR_PARAM_REQUIRED, FAIL, arg);
+						}
 						break;
 					case SYM_REF:
 						if (func->ArgIsOutputVar(i))
