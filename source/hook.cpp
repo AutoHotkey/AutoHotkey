@@ -1481,14 +1481,15 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				return AllowKeyToGoToSystem;
 			// Otherwise (v1.0.44): Since there is a hotkey to fire upon release (somewhat rare under these conditions),
 			// check if any of its criteria will allow it to fire, and if so whether that variant is non-suppressed.
-			// If it is, this down-even should be non-suppressed too (for symmetry).  This check isn't 100% reliable
+			// If it is, this down-event should be non-suppressed too (for symmetry).  This check isn't 100% reliable
 			// because the active/existing windows checked by the criteria might change before the user actually
 			// releases the key, but there doesn't seem any way around that.
-			Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release // firing_is_certain==false under these conditions, so no need to check it.
+			if (!Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release
 				, true  // Always a key-up since it will fire upon release.
 				, aExtraInfo // May affect the result due to #InputLevel.  Assume the key-up's SendLevel will be the same as the key-down.
 				, this_key.no_suppress // Unused and won't be altered because above is "true".
-				, fire_with_no_suppress, NULL); // fire_with_no_suppress is the value we really need to get back from it.
+				, fire_with_no_suppress, NULL)) // fire_with_no_suppress is the value we really need to get back from it.
+				fire_with_no_suppress = true; // Although it's not "firing" in this case; just for use below.
 			this_key.hotkey_down_was_suppressed = !fire_with_no_suppress; // Fixed for v1.1.33.01: If this isn't set, the key-up won't be suppressed even after the key-down is.
 			return fire_with_no_suppress ? AllowKeyToGoToSystem : SuppressThisKey;
 		}
@@ -1522,12 +1523,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// Otherwise, this is a key-down event with a corresponding key-up hotkey.
 		fire_with_no_suppress = false; // Reset it for the check below.
 		// This check should be identical to the section above dealing with hotkey_to_fire_upon_release:
-		Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release // firing_is_certain==false under these conditions, so no need to check it.
+		firing_is_certain = Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release
 			, true  // Always a key-up since it will fire upon release.
 			, aExtraInfo // May affect the result due to #InputLevel.  Assume the key-up's SendLevel will be the same as the key-down.
 			, this_key.no_suppress // Unused and won't be altered because above is "true".
 			, fire_with_no_suppress, NULL); // fire_with_no_suppress is the value we really need to get back from it.
-		if (fire_with_no_suppress)
+		if (!firing_is_certain || fire_with_no_suppress)
 			return AllowKeyToGoToSystem;
 		// Both this down event and the corresponding up event should be suppressed, so
 		// unset the flag which was set by the first call to CriterionFiringIsCertain():

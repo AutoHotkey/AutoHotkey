@@ -701,8 +701,17 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 	}
 
 	// Otherwise, this hotkey has no variants that can fire.  Caller wants a few things updated in that case.
-	if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty.
-		aFireWithNoSuppress = true; // Fix for v1.0.47.04: Added this line and the one above to fix the fact that a context-sensitive hotkey like "a UP::" would block the down-event of that key even when the right window/criteria aren't met.
+
+	// v1.1.37: The following isn't done anymore because it makes logic elsewhere harder to follow,
+	// and was causing a bug where the key-up event of a custom prefix key wasn't suppressed if the
+	// key had an ineligible key-down hotkey and an eligible key-up hotkey.  Another reason not to
+	// do it is that some callers will consider alternative hotkeys after we return false, so the
+	// proper value of fire_with_no_suppress can only be known when firing IS certain.  The simple
+	// and logical solution to the issue mentioned below is for certain callers to check our return
+	// value, and if false, don't suppress.
+	//if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty.
+	//	aFireWithNoSuppress = true; // Fix for v1.0.47.04: Added this line and the one above to fix the fact that a context-sensitive hotkey like "a UP::" would block the down-event of that key even when the right window/criteria aren't met.
+
 	// If this is a key-down hotkey:
 	// Leave aHotkeyToFireUponRelease set to whatever it was so that the criteria are
 	// evaluated later, at the time of release.  It seems more correct that way, though the actual
