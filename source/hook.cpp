@@ -869,8 +869,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					this_key.was_just_used = AS_PASSTHROUGH_PREFIX;
 				if (suppress_this_prefix && !modifiersLRnew) // So far, it looks like the prefix should be suppressed.
 				{
-					UCHAR unused_no_suppress; // Leave this_key.no_suppress unchanged in case !firing_is_certain.
-					firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, unused_no_suppress, fire_with_no_suppress, NULL);
+					firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, fire_with_no_suppress, NULL);
 					if (!firing_is_certain || !fire_with_no_suppress) // Hotkey is ineligible to fire or lacks the no-suppress prefix.
 					{
 						// Resetting the ID is necessary to avoid the following cases:
@@ -883,7 +882,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 						{
 							// This key-down hotkey has a key-up counterpart.
 							fire_with_no_suppress = false; // Reset for the call below.
-							auto firing_up = Hotkey::CriterionFiringIsCertain(hotkey_up[hotkey_id_with_flags], aKeyUp, aExtraInfo, unused_no_suppress, fire_with_no_suppress, NULL);
+							auto firing_up = Hotkey::CriterionFiringIsCertain(hotkey_up[hotkey_id_with_flags], aKeyUp, aExtraInfo, fire_with_no_suppress, NULL);
 							if (  !(firing_up && fire_with_no_suppress)  ) // Both key-down and key-up are either ineligible or lack the no-suppress prefix.
 								hotkey_id_with_flags = HOTKEY_ID_INVALID; // See comments above about resetting the ID.
 							else if (firing_is_certain) // Both key-down and key-up are eligible, but key-down should be suppressed.
@@ -1206,8 +1205,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			{
 				hotkey_id_with_flags = found_hk->mID; // Flags not needed.
 				if (   !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags
-					, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))   )
+					, aKeyUp, aExtraInfo, fire_with_no_suppress, &pKeyHistoryCurr->event_type))   )
+				{
+					if (!aKeyUp)
+						this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT; // Necessary to ensure any corresponding key-up hotkey doesn't suppress the key-up.
 					return AllowKeyToGoToSystem; // This should handle pForceToggle for us, suppressing if necessary.
+				}
 			}
 			hotkey_id_temp = hotkey_id_with_flags;
 			if (pPrefixKey->was_just_used != AS_PASSTHROUGH_PREFIX)
@@ -1392,7 +1395,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				if (hotkey_id_temp < Hotkey::sHotkeyCount && hotkey_up[hotkey_id_temp] != HOTKEY_ID_INVALID) // Relies on short-circuit boolean order.
 				{
 					if (  fell_through_from_case2
-						|| !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))  )
+						|| !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, fire_with_no_suppress, &pKeyHistoryCurr->event_type))  )
 					{
 						// The key-down hotkey isn't eligible for firing, so fall back to the key-up hotkey:
 						hotkey_id_with_flags = hotkey_up[hotkey_id_temp];
@@ -1487,7 +1490,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			if (!Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release
 				, true  // Always a key-up since it will fire upon release.
 				, aExtraInfo // May affect the result due to #InputLevel.  Assume the key-up's SendLevel will be the same as the key-down.
-				, this_key.no_suppress // Unused and won't be altered because above is "true".
 				, fire_with_no_suppress, NULL)) // fire_with_no_suppress is the value we really need to get back from it.
 				fire_with_no_suppress = true; // Although it's not "firing" in this case; just for use below.
 			this_key.hotkey_down_was_suppressed = !fire_with_no_suppress; // Fixed for v1.1.33.01: If this isn't set, the key-up won't be suppressed even after the key-down is.
@@ -1503,7 +1505,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK;
 	if (hotkey_id_temp < Hotkey::sHotkeyCount // i.e. don't call the below for Alt-tab hotkeys and similar.
 		&& !firing_is_certain  // i.e. CriterionFiringIsCertain() wasn't already called earlier.
-		&& !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type)))
+		&& !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, fire_with_no_suppress, &pKeyHistoryCurr->event_type)))
 	{
 		if (pKeyHistoryCurr->event_type == 'i') // This non-zero SendLevel event is being ignored due to #InputLevel, so unconditionally pass it through, like with is_ignored.
 			return AllowKeyToGoToSystem;
@@ -1526,13 +1528,15 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		firing_is_certain = Hotkey::CriterionFiringIsCertain(this_key.hotkey_to_fire_upon_release
 			, true  // Always a key-up since it will fire upon release.
 			, aExtraInfo // May affect the result due to #InputLevel.  Assume the key-up's SendLevel will be the same as the key-down.
-			, this_key.no_suppress // Unused and won't be altered because above is "true".
 			, fire_with_no_suppress, NULL); // fire_with_no_suppress is the value we really need to get back from it.
 		if (!firing_is_certain || fire_with_no_suppress)
+		{
+			// If the conditions change and allow the key-up hotkey to fire, make sure not to suppress it.
+			this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT;
 			return AllowKeyToGoToSystem;
-		// Both this down event and the corresponding up event should be suppressed, so
-		// unset the flag which was set by the first call to CriterionFiringIsCertain():
-		this_key.no_suppress &= ~NO_SUPPRESS_NEXT_UP_EVENT;
+		}
+		// Both this down event and the corresponding up event should be suppressed.
+		ASSERT(!(this_key.no_suppress & NO_SUPPRESS_NEXT_UP_EVENT));
 		this_key.hotkey_down_was_suppressed = true;
 		return SuppressThisKey;
 	}
