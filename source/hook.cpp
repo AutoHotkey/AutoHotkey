@@ -1443,28 +1443,16 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 
 			// For execution to have reached this point, the following must be true:
 			// 1) aKeyUp==false
-			// 2) this_key must be both a prefix and suffix, but be acting in its capacity as a suffix.
+			// 2) this_key is not a prefix, or it is also a suffix but some other custom prefix key
+			//    is being held down (otherwise, Case #1 would have returned).
 			// 3) No hotkey is eligible to fire.
-			// Since no hotkey action will fire, and since this_key wasn't used as a prefix, I think that
-			// must mean that not all of the required modifiers aren't present.  For example:
-			// a & b::Run calc
-			// LShift & a:: Run Notepad
-			// In that case, if the 'a' key is pressed and released by itself, perhaps its native
-			// function should be performed by suppressing this key-up event, replacing it with a
-			// down and up of our own.  However, it seems better not to do this, for now, since this
-			// is really just a subset of allowing all prefixes to perform their native functions
-			// upon key-release their value of was_just_used is false, which is probably
-			// a bad idea in many cases (e.g. if user configures VK_VOLUME_MUTE button to be a
-			// prefix, it might be undesirable for the volume to be muted if the button is pressed
-			// but the user changes his mind and doesn't use it to modify anything, so just releases
-			// it (at least it seems that I do this).  In any case, this default behavior can be
-			// changed by explicitly configuring 'a', in the example above, to be "Send, a".
-			// Here's a more complete example:
-			// a & b:: Run Notepad
-			// LControl & a:: Run Calc
-			// a::Send a
-			// So in summary, by default a prefix key's native function is always suppressed except if it's
-			// a toggleable key such as num/caps/scroll-lock.
+			// If this_key is a prefix under these conditions, there are some combinations that are
+			// inconsistent with Case #1.  Case #1 would pass it through if it has no enabled suffixes,
+			// or it's a modifier/toggleable key, but otherwise would suppress it.  By contrast, this
+			// section would unconditionally pass through a prefix key if the user was already holding
+			// another prefix key.  Just suppressing it doesn't seem useful since it still wouldn't
+			// function as a prefix key (since case #1 didn't set pPrefixKey to this_key), and fixing
+			// that would change the behaviour in ways that might be undesired, so it's left as is.
 			if (this_key.hotkey_to_fire_upon_release == HOTKEY_ID_INVALID)
 				return AllowKeyToGoToSystem;
 			// Otherwise (v1.0.44): Since there is a hotkey to fire upon release (somewhat rare under these conditions),
