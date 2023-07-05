@@ -3165,6 +3165,7 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 				case VK_RMENU:    g_PhysicalKeyState[VK_MENU] = g_PhysicalKeyState[VK_LMENU]; break;
 				}
 			}
+			g_modifiersLR_last_pressed = 0;
 		}
 		else // Modifier key was pressed down.
 		{
@@ -3193,6 +3194,9 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 				case VK_RMENU:    g_PhysicalKeyState[VK_MENU] = STATE_DOWN; break;
 				}
 			}
+			// See comments in GetModifierLRState() for details about the following.
+			g_modifiersLR_last_pressed = modLR;
+			g_modifiersLR_last_pressed_time = GetTickCount();
 		}
 	} // vk is a modifier key.
 }
