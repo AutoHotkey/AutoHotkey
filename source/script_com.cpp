@@ -1167,7 +1167,7 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 
 	DISPID dispid;
 	HRESULT	hr;
-	if (aFlags & IF_NEWENUM)
+	if ((aFlags & IF_NEWENUM) && (!aParamCount || ParamIndexToInt(0) <= 2))
 	{
 		hr = S_OK;
 		dispid = DISPID_NEWENUM;
