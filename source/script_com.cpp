@@ -1487,7 +1487,8 @@ ResultType ComEnum::Next(Var *aVar0, Var *aVar1)
 	VARIANT var[2] = {0};
 	if (penum->Next(1 + (cheat && aVar1), var, NULL) == S_OK)
 	{
-		AssignVariant(*aVar0, var[0], false);
+		if (aVar0)
+			AssignVariant(*aVar0, var[0], false);
 		if (aVar1)
 		{
 			if (cheat && aVar1)
