@@ -46,6 +46,8 @@ extern modLR_type g_modifiersLR_logical_non_ignored;
 extern modLR_type g_modifiersLR_physical;  // Same as above except it's which modifiers are PHYSICALLY down.
 extern modLR_type g_modifiersLR_numpad_mask;  // Shift keys temporarily released by Numpad.
 extern modLR_type g_modifiersLR_ctrlaltdel_mask; // For excluding AltGr from Ctrl+Alt+Del handling.
+extern modLR_type g_modifiersLR_last_pressed;
+extern DWORD g_modifiersLR_last_pressed_time;
 
 extern key_type *pPrefixKey;
 

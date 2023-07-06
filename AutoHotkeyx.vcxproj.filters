@@ -185,6 +185,9 @@
     <ClCompile Include="source\MdFunc.cpp">
       <Filter>Core</Filter>
     </ClCompile>
+    <ClCompile Include="source\ahklib.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\ahkversion.h">
@@ -292,6 +295,9 @@
     <ClInclude Include="source\abi.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="source\DispObject.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="source\resources\icon_filetype.ico">
@@ -333,5 +339,10 @@
     <Natvis Include="debug.natvis">
       <Filter>Build &amp; debug</Filter>
     </Natvis>
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="source\ahklib.idl">
+      <Filter>Source Files</Filter>
+    </Midl>
   </ItemGroup>
 </Project>

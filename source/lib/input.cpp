@@ -215,6 +215,7 @@ ResultType input_type::SetKeyFlags(LPCTSTR aKeys, bool aEndKeyMode, UCHAR aFlags
 			modifiersLR = 0;  // Init prior to below.
 			vk = TextToVK(single_char_string, &modifiersLR, true);
 			vk_by_number = false;
+			sc_by_number = false;
 		} // switch()
 
 		if (vk) // A valid virtual key code was discovered above.
