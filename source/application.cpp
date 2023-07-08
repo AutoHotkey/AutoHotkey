@@ -826,8 +826,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						// keystrokes to the wrong window, or when the hotstring has become suspended.
 						continue;
 					// For details, see comments in the hotkey section of this switch().
-					if (!(hs->mHotCriterion->Type == HOT_IF_ACTIVE || hs->mHotCriterion->Type == HOT_IF_EXIST))
+					if (hs->mHotCriterion->Type == HOT_IF_NOT_ACTIVE || hs->mHotCriterion->Type == HOT_IF_NOT_EXIST)
 						criterion_found_hwnd = NULL; // For "NONE" and "NOT", there is no last found window.
+					else if (HOT_IF_REQUIRES_EVAL(hs->mHotCriterion->Type))
+						criterion_found_hwnd = g_HotExprLFW; // For #if WinExist(WinTitle) and similar.
 				}
 				else // No criterion, so it's a global hotstring.  It can always fire, but it has no "last found window".
 					criterion_found_hwnd = NULL;
