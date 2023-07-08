@@ -4188,7 +4188,7 @@ DWORD WINAPI HookThreadProc(LPVOID aUnused)
 			}
 			else // Caller specified that the keyboard hook is to be deactivated (if it isn't already).
 				if (g_KeybdHook)
-					if (UnhookWindowsHookEx(g_KeybdHook))
+					if (UnhookWindowsHookEx(g_KeybdHook) || GetLastError() == ERROR_INVALID_HOOK_HANDLE) // Check last error in case the OS has already removed the hook.
 						g_KeybdHook = NULL;
 
 			if (msg.wParam & HOOK_MOUSE) // Activate the mouse hook (if it isn't already).
@@ -4203,7 +4203,7 @@ DWORD WINAPI HookThreadProc(LPVOID aUnused)
 			}
 			else // Caller specified that the mouse hook is to be deactivated (if it isn't already).
 				if (g_MouseHook)
-					if (UnhookWindowsHookEx(g_MouseHook))
+					if (UnhookWindowsHookEx(g_MouseHook) || GetLastError() == ERROR_INVALID_HOOK_HANDLE) // Check last error in case the OS has already removed the hook.
 						g_MouseHook = NULL;
 
 			// Upon failure, don't display MsgBox here because although MsgBox's own message pump would
