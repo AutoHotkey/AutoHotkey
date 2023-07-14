@@ -1597,7 +1597,7 @@ STDMETHODIMP_(ULONG) EnumComCompat::AddRef()
 
 STDMETHODIMP_(ULONG) EnumComCompat::Release()
 {
-	if (mRefCount)
+	if (mRefCount > 1)
 		return --mRefCount;
 	delete this;
 	return 0;
