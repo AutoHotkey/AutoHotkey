@@ -678,7 +678,11 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			if (field->tprop->class_object)
 			{
 				Object *nested = realthis->mNested[field->tprop->object_index];
+				mRefCount++;
+				nested->mRefCount++; // Avoid calling Delete() when the __value setter returns.
 				auto result = nested->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS, _T("__value"), ExprTokenType(nested), actual_param, 1);
+				nested->mRefCount--;
+				mRefCount--;
 				if (result != INVOKE_NOT_HANDLED)
 					return result;
 				return aResultToken.Error(_T("Assignment to struct is not supported."));
@@ -693,7 +697,11 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 				realthis->AddRef();
 			if (!handle_params_recursively)
 			{
+				mRefCount++;
+				nested->mRefCount++; // Avoid calling Delete() when the __value getter returns.
 				auto result = nested->Invoke(aResultToken, IT_GET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(nested), nullptr, 0);
+				nested->mRefCount--;
+				mRefCount--;
 				if (result != INVOKE_NOT_HANDLED)
 					return result;
 				aResultToken.SetValue(nested);
