@@ -596,7 +596,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		continue;
 	} // for (that = each base)
 
-	if (!hasprop && aName)
+	if (!hasprop && !IS_INVOKE_META)
 	{
 		// Invoke a meta-function in place of this non-existent property.
 		auto result = CallMetaVarg(aFlags, aName, aResultToken, aThisToken, actual_param, actual_param_count);
