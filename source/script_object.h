@@ -406,6 +406,7 @@ public:
 		None = 0,
 		Value,
 		Object,
+		Typed,
 		DynamicValue,
 		DynamicMethod,
 		DynamicMixed
@@ -422,6 +423,7 @@ public:
 				return field->prop->Method() ? PropType::DynamicMixed : PropType::DynamicValue;
 			return field->prop->Method() ? PropType::DynamicMethod : PropType::None;
 		case SYM_OBJECT: return PropType::Object;
+		case SYM_TYPED_FIELD: return PropType::Typed;
 		default: return PropType::Value;
 		}
 	}
@@ -475,6 +477,7 @@ public:
 	
 	Property *DefineProperty(name_t aName);
 	TypedProperty *DefineTypedProperty(name_t aName);
+	FResult DefineTypedProperty(name_t aName, MdType aType, Object *aClass);
 	bool DefineMethod(name_t aName, IObject *aFunc);
 	void DefineClass(name_t aName, Object *aClass);
 	

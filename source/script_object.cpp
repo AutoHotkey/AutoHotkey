@@ -1545,6 +1545,47 @@ TypedProperty *Object::DefineTypedProperty(name_t aName)
 	return field->tprop;
 }
 
+FResult Object::DefineTypedProperty(name_t aName, MdType aType, Object *aClass)
+{
+	size_t psize = 0, palign = 0;
+	if (aClass)
+	{
+		if (auto proto = dynamic_cast<Object*>(aClass->GetOwnPropObj(_T("Prototype"))))
+		{
+			if (auto psi = proto->GetStructInfo())
+			{
+				psize = psi->size;
+				palign = psi->align;
+			}
+		}
+	}
+	else
+	{
+		palign = psize = TypeSize(aType);
+	}
+	if (!psize)
+		return FR_E_ARGS;
+	auto si = GetStructInfo(true);
+	if (!si || (mFlags & StructInfoLocked))
+		return FR_E_FAILED;
+	auto tprop = DefineTypedProperty(aName);
+	if (!tprop)
+		return FR_E_OUTOFMEM;
+	tprop->type = aType;
+	if (tprop->class_object = aClass)
+	{
+		tprop->object_index = ++si->nested_count; // 1-based, as index 0 is reserved.
+		aClass->AddRef();
+	}
+	if (palign > si->align) // TODO: allow overriding struct packing
+		si->align = palign;
+	ASSERT(palign && ((palign & (palign - 1)) == 0)); // Must be a power of 2.
+	si->size = (si->size + palign - 1) & ~(palign - 1);
+	tprop->data_offset = si->size;
+	si->size += psize; // size may be unaligned until the struct definition is closed (if palign < si-align).
+	return OK;
+}
+
 Object::StructInfo *Object::GetStructInfo(bool aDefine)
 {
 	if (!aDefine)
@@ -1625,47 +1666,20 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	auto desc = dynamic_cast<Object *>(ParamIndexToObject(1));
 	if (desc && desc->GetOwnProp(value, _T("Type"))) // TODO: make this properly mutually exclusive with the others
 	{
-		MdType ptype = MdType::Void;
-		size_t psize = 0, palign = 0;
 		Object *pclass = dynamic_cast<Object*>(TokenToObject(value));
-		if (pclass)
+		MdType ptype = pclass ? MdType::Void : TypeCode(TokenToString(value));
+		switch (DefineTypedProperty(name, ptype, pclass))
 		{
-			if (auto proto = dynamic_cast<Object*>(pclass->GetOwnPropObj(_T("Prototype"))))
-			{
-				if (auto psi = proto->GetStructInfo())
-				{
-					psize = psi->size;
-					palign = psi->align;
-				}
-			}
-		}
-		else
-		{
-			ptype = TypeCode(TokenToString(value));
-			palign = psize = TypeSize(ptype);
-		}
-		if (!psize)
+		case OK:
+			AddRef();
+			_o_return(this);
+		case FR_E_ARGS:
 			_o_throw_param(1);
-		auto si = GetStructInfo(true);
-		if (!si || (mFlags & StructInfoLocked))
-			_o_throw(_T("Cannot add typed property."));
-		auto tprop = DefineTypedProperty(name);
-		if (!tprop)
+		case FR_E_OUTOFMEM:
 			_o_throw_oom;
-		tprop->type = ptype;
-		if (tprop->class_object = pclass)
-		{
-			tprop->object_index = ++si->nested_count; // 1-based, as index 0 is reserved.
-			pclass->AddRef();
+		default:
+			_o_throw(_T("Cannot add typed property."));
 		}
-		if (palign > si->align) // TODO: allow overriding struct packing
-			si->align = palign;
-		ASSERT(palign && ((palign & (palign - 1)) == 0)); // Must be a power of 2.
-		si->size = (si->size + palign - 1) & ~(palign - 1);
-		tprop->data_offset = si->size;
-		si->size += psize; // size may be unaligned until the struct definition is closed (if palign < si-align).
-		AddRef();
-		_o_return(this);
 	}
 	if (!desc // Must be an Object.
 		|| desc->GetOwnProp(getter, _T("Get")) && getter.symbol != SYM_OBJECT  // If defined, must be an object.
