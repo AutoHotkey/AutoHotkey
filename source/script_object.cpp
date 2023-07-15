@@ -678,7 +678,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			if (field->tprop->class_object)
 			{
 				Object *nested = realthis->mNested[field->tprop->object_index];
-				auto result = nested->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(nested), actual_param, 1);
+				auto result = nested->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS, _T("__value"), ExprTokenType(nested), actual_param, 1);
 				if (result != INVOKE_NOT_HANDLED)
 					return result;
 				return aResultToken.Error(_T("Assignment to struct is not supported."));
@@ -844,6 +844,8 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		
 		if (!field || this != that) // No such property in this object yet.
 		{
+			if (aFlags & IF_NO_NEW_PROPS)
+				return INVOKE_NOT_HANDLED;
 			if (actual_param[0]->symbol == SYM_MISSING)
 				return OK; // No action needed for x.y := unset.
 			if (  !(field = Insert(name, insert_pos))  )
