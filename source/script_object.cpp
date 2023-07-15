@@ -1857,11 +1857,13 @@ ResultType Object::NestedNew(ResultToken &aResultToken, StructInfo *si)
 		nested->SetDataPtr(data_ptr + offsets[i-1]);
 		ExprTokenType prop_class { mNested[i] }, *pcarg {&prop_class};
 		auto result = nested->New(aResultToken, &pcarg, 1, this);
+		// During construction, 'nested' has a non-zero mRefCount and a counted reference to 'this'.
+		// Now it needs to have mRefCount == 0 to reflect that there aren't any external references.
+		nested->mRefCount--;
+		mRefCount--;
+		ASSERT(nested->mRefCount == 0 && mRefCount);
 		if (result == FAIL || result == EARLY_EXIT)
-		{
-			nested->Release();
 			return result;
-		}
 		mNested[i] = nested;
 	}
 	return OK;
