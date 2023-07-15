@@ -1167,7 +1167,7 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 
 	DISPID dispid;
 	HRESULT	hr;
-	if (aFlags & IF_NEWENUM)
+	if ((aFlags & IF_NEWENUM) && (!aParamCount || ParamIndexToInt(0) <= 2))
 	{
 		hr = S_OK;
 		dispid = DISPID_NEWENUM;
@@ -1466,6 +1466,7 @@ Object *ComObject::Base()
 
 ComEnum::ComEnum(IEnumVARIANT *enm)
 	: penum(enm)
+	, cheat(false)
 {
 	IServiceProvider *sp;
 	if (SUCCEEDED(enm->QueryInterface<IServiceProvider>(&sp)))
@@ -1486,7 +1487,8 @@ ResultType ComEnum::Next(Var *aVar0, Var *aVar1)
 	VARIANT var[2] = {0};
 	if (penum->Next(1 + (cheat && aVar1), var, NULL) == S_OK)
 	{
-		AssignVariant(*aVar0, var[0], false);
+		if (aVar0)
+			AssignVariant(*aVar0, var[0], false);
 		if (aVar1)
 		{
 			if (cheat && aVar1)
@@ -1595,7 +1597,7 @@ STDMETHODIMP_(ULONG) EnumComCompat::AddRef()
 
 STDMETHODIMP_(ULONG) EnumComCompat::Release()
 {
-	if (mRefCount)
+	if (mRefCount > 1)
 		return --mRefCount;
 	delete this;
 	return 0;

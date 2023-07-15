@@ -3501,6 +3501,33 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 		// to a process with higher integrity level than our own became active while the key was
 		// down, so we saw the down event but not the up event.
 		modLR_type modifiers_wrongly_down = g_modifiersLR_logical & ~modifiersLR;
+		// modifiers_wrongly_down can sometimes include modifiers that have only just been pressed
+		// but aren't yet reflected by IsKeyDownAsync().  This happens much more often if a keyboard
+		// hook is installed AFTER our own.  The following simple script was enough to reproduce this:
+		//	~*RWin::GetKeyState("RWin", "P")
+		//	>#/::MsgBox  ; This hotkey sometimes or always failed to fire.
+		// The sequence of events was probably something like this:
+		//  - OS detects RWin down.
+		//  - OS calls other hook.
+		//  - Other hook calls ours via CallNextHookEx (meaning its thread is blocked
+		//    waiting for the call to return).
+		//  - Our hook updates key state, posts AHK_HOOK_HOTKEY and RETURNS IMMEDIATELY
+		//    (but the other hook is in another thread, so it doesn't resume immediately).
+		//  - Script thread receives AHK_HOOK_HOTKEY and fires hotkey.
+		//  - Hotkey calls Send or GetKeyState, triggering the section below, adjusting
+		//    g_modifiersLR_logical to match GetAsyncKeyState().
+		//  - Other hook's thread wakes up and returns.
+		//  - OS updates key state, so then GetAsyncKeyState() reports the correct state
+		//    and g_modifiersLR_logical is incorrect.
+		//  - RWin+/ doesn't fire the hotkey because the hook thinks RWin isn't down,
+		//    even though KeyHistory shows that it should be down.
+		// The issue occurred with maybe 50% frequency if the other hook was an AutoHotkey hook,
+		// and 100% frequency if the other hook was implemented by a script (which is slower).
+		// Only the last pressed modifier is excluded, since any other key-down or key-up being
+		// detected would usually mean that the previous call to the hook has finished (although
+		// the hook can be called recursively with artificial input).
+		if (g_modifiersLR_last_pressed && GetTickCount() - g_modifiersLR_last_pressed_time < 20)
+			modifiers_wrongly_down &= ~g_modifiersLR_last_pressed;
 		if (modifiers_wrongly_down)
 		{
 			// Adjust the physical and logical hook state to release the keys that are wrongly down.
