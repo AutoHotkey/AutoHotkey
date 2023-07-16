@@ -323,6 +323,7 @@ bif_impl FResult WinWaitNotActive(ExprTokenType *aWinTitle, optl<StrArg> aWinTex
 BIF_DECL(BIF_RunWait)
 {
 	Line *waiting_line = g_script.mCurrLine;
+	DWORD start_time = GetTickCount();
 
 	_f_param_string_opt(arg1, 0);
 	_f_param_string_opt(arg2, 1);
@@ -342,12 +343,15 @@ BIF_DECL(BIF_RunWait)
 	if (!running_process) // Nothing to wait for (rare?).
 		_f_return_i(0);
 
-	Wait(-1, (void*)running_process, [](void *p)
-		{
-			// Using WaitForSingleObject() rather than GetExitCodeProcess() avoids an
-			// infinite loop if a process returns 259 (STILL_ACTIVE) as its exit code.
-			return WaitForSingleObject((HANDLE)p, 0) != WAIT_TIMEOUT;
-		});
+	for (;;)
+	{
+		// The below call takes care of determining whether the process has exited,
+		// and is more reliable than GetExitCodeProcess() == STILL_ACTIVE because
+		// STILL_ACTIVE is also valid exit code.
+		if (MsgWaitForMultipleObjects(1, &running_process, FALSE, INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0)
+			break;
+		MsgSleepWithListLines(-1, waiting_line, start_time);
+	}
 
 	DWORD exit_code = 0;
 	GetExitCodeProcess(running_process, &exit_code);

@@ -85,9 +85,10 @@ void MsgSleepWithListLines(int aSleepDuration, Line *waiting_line, DWORD start_t
 static FResult ProcessWait(StrArg aProcess, optl<double> aTimeout, UINT &aRetVal, bool aWaitClose)
 {
 	DWORD pid;
+	HANDLE proc = NULL;
 	// This section is similar to that used for WINWAIT and RUNWAIT:
 	bool wait_indefinitely;
-	int sleep_duration;
+	int sleep_duration, remainder;
 	DWORD start_time = GetTickCount();
 	Line *waiting_line = g_script.mCurrLine;
 	if (aTimeout.has_value()) // The param containing the timeout value was specified.
@@ -102,7 +103,15 @@ static FResult ProcessWait(StrArg aProcess, optl<double> aTimeout, UINT &aRetVal
 	}
 	for (;;)
 	{ // Always do the first iteration so that at least one check is done.
-		pid = ProcessExist(aProcess);
+		if (proc && WaitForSingleObject(proc, 0) != WAIT_TIMEOUT)
+		{
+			// Reset proc so that if a timeout occurs in this iteration, the PID won't be returned.
+			// Don't reset pid directly because there might be other matching processes.
+			CloseHandle(proc);
+			proc = NULL;
+		}
+		if (!proc)
+			pid = ProcessExist(aProcess);
 		if ((!aWaitClose) == (pid != 0)) // i.e. condition of this cmd is satisfied.
 		{
 			// For WaitClose: Since PID cannot always be determined (i.e. if process never existed,
@@ -110,13 +119,34 @@ static FResult ProcessWait(StrArg aProcess, optl<double> aTimeout, UINT &aRetVal
 			aRetVal = pid;
 			return OK;
 		}
-		// Must cast to int or any negative result will be lost due to DWORD type:
-		if (wait_indefinitely || (int)(sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
+		// Must use int or any negative result (due to exceeding sleep_duration) will be lost due to DWORD type:
+		if (wait_indefinitely || (remainder = sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
 		{
+			if (aWaitClose && (proc || (proc = OpenProcess(SYNCHRONIZE, FALSE, pid))))
+			{
+				switch (MsgWaitForMultipleObjects(1, &proc, FALSE, wait_indefinitely ? INFINITE : remainder, QS_ALLINPUT))
+				{
+				case WAIT_OBJECT_0:
+					CloseHandle(proc);
+					proc = NULL;
+					// This process has closed, but we may need another iteration to verify that no other
+					// matching processes are running.
+				case WAIT_OBJECT_0 + 1:
+					MsgSleepWithListLines(-1, waiting_line, start_time);
+					continue;
+				case WAIT_TIMEOUT:
+					CloseHandle(proc);
+					aRetVal = pid;
+					return OK; // Avoid the 100ms sleep below.
+				}
+				// In case of failure, fall through:
+			}
 			MsgSleepWithListLines(100, waiting_line, start_time);  // For performance reasons, don't check as often as the WinWait family does.
 		}
 		else // Done waiting.
 		{
+			if (proc)
+				CloseHandle(proc);
 			// Return 0 if ProcessWait times out; or the PID of the process that still exists
 			// if ProcessWaitClose times out.
 			aRetVal = pid;
