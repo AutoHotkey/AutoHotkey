@@ -80,18 +80,20 @@ bif_impl FResult ProcessGetPath(optl<StrArg> aProcess, StrRet &aRetVal)
 
 
 
+void MsgSleepWithListLines(int aSleepDuration, Line *waiting_line, DWORD start_time);
+
 static FResult ProcessWait(StrArg aProcess, optl<double> aTimeout, UINT &aRetVal, bool aWaitClose)
 {
 	DWORD pid;
 	// This section is similar to that used for WINWAIT and RUNWAIT:
 	bool wait_indefinitely;
 	int sleep_duration;
-	DWORD start_time;
+	DWORD start_time = GetTickCount();
+	Line *waiting_line = g_script.mCurrLine;
 	if (aTimeout.has_value()) // The param containing the timeout value was specified.
 	{
 		wait_indefinitely = false;
 		sleep_duration = (int)(aTimeout.value_or(0) * 1000); // Can be zero.
-		start_time = GetTickCount();
 	}
 	else
 	{
@@ -111,7 +113,7 @@ static FResult ProcessWait(StrArg aProcess, optl<double> aTimeout, UINT &aRetVal
 		// Must cast to int or any negative result will be lost due to DWORD type:
 		if (wait_indefinitely || (int)(sleep_duration - (GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
 		{
-			MsgSleep(100);  // For performance reasons, don't check as often as the WinWait family does.
+			MsgSleepWithListLines(100, waiting_line, start_time);  // For performance reasons, don't check as often as the WinWait family does.
 		}
 		else // Done waiting.
 		{
