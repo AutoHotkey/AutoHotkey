@@ -9529,8 +9529,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 
 		// At this point, a pause may have been triggered either by the above MsgSleep()
 		// or due to the action of a command (e.g. Pause, or perhaps tray menu "pause" was selected during Sleep):
-		while (g.IsPaused) // An initial "if (g.IsPaused)" prior to the loop doesn't make it any faster.
-			MsgSleep(INTERVAL_UNSPECIFIED);  // Must check often to periodically run timed subroutines.
+		if (g.IsPaused)
+			MsgWaitUnpause();
 
 		// Do these only after the above has had its opportunity to spend a significant amount
 		// of time doing what it needed to do.  i.e. do these immediately before the line will actually
@@ -11881,8 +11881,7 @@ void PauseCurrentThread()
 	//    the script to pause immediately rather than after evaluating more of the expression.
 	// 2) If `return Pause()` is used, the thread might end before checking g.IsPaused, in which
 	//    case g_nPausedThreads would not be adjusted and timers would forever be disabled.
-	while (g.IsPaused)
-		MsgSleep(INTERVAL_UNSPECIFIED);
+	MsgWaitUnpause();
 }
 
 

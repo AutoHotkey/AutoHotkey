@@ -2011,6 +2011,18 @@ BOOL IsInterruptible()
 
 
 
+void MsgWaitUnpause()
+{
+	auto &g = *::g;
+	while (g.IsPaused)
+	{
+		MsgWaitForMultipleObjects(0, nullptr, FALSE, INFINITE, QS_ALLINPUT);
+		MsgSleep(-1);
+	}
+}
+
+
+
 VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 {
 	// Unfortunately, it appears that MessageBox() will return zero rather
