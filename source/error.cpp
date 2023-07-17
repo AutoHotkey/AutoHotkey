@@ -1020,6 +1020,8 @@ ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], in
 			ASSERT(!code);
 			return aResultToken.SetExitResult(FAIL);
 		case FR_FACILITY_ARG:
+			if (aResult == FR_E_ARGS)
+				return aResultToken.Error(ERR_PARAM_INVALID);
 			return aResultToken.ParamError(code, code + aFirstParam < aParamCount ? aParam[code + aFirstParam] : nullptr);
 		case FACILITY_WIN32:
 			if (!code)
