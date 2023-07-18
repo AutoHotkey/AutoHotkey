@@ -609,6 +609,10 @@ MdType TypeCode(LPCTSTR aName)
 	for (int i = 1; i < _countof(sTypeNames); ++i)
 		if (!_tcsicmp(sTypeNames[i], aName))
 			return (MdType)i;
+	if (!_tcsicmp(_T("uptr"), aName))
+		return MdType::IntPtr;
+	if (!_tcsicmp(_T("iptr"), aName))
+		return MdType::UIntPtr;
 	return MdType::Void;
 }
 
