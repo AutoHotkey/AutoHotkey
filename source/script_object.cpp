@@ -687,6 +687,8 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 					return result;
 				return aResultToken.Error(_T("Assignment to struct is not supported."));
 			}
+			if (field->tprop->item_count)
+				return aResultToken.Error(ERR_PROPERTY_READONLY, name);
 			return SetValueOfTypeAtPtr(field->tprop->type, ptr, *actual_param[0], aResultToken);
 		}
 		else if (field->tprop->class_object) // Struct type.
@@ -711,6 +713,13 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		}
 		else
 		{
+			if (field->tprop->item_count)
+			{
+				ASSERT(field->tprop->type == MdType::Void); // Untyped buffer.
+				(handle_params_recursively ? token_for_recursion : aResultToken).SetValue((size_t)ptr);
+				if (!handle_params_recursively)
+					return OK;
+			}
 			TypedPtrToToken(field->tprop->type, ptr
 				, handle_params_recursively ? token_for_recursion : aResultToken);
 			if (!handle_params_recursively)
@@ -1555,7 +1564,7 @@ TypedProperty *Object::DefineTypedProperty(name_t aName)
 	return field->tprop;
 }
 
-FResult Object::DefineTypedProperty(name_t aName, MdType aType, Object *aClass)
+FResult Object::DefineTypedProperty(name_t aName, MdType aType, Object *aClass, size_t aCount)
 {
 	size_t psize = 0, palign = 0;
 	if (aClass)
@@ -1567,6 +1576,14 @@ FResult Object::DefineTypedProperty(name_t aName, MdType aType, Object *aClass)
 				psize = psi->size;
 				palign = psi->align;
 			}
+		}
+	}
+	else if (aCount)
+	{
+		if (aType == MdType::Void)
+		{
+			psize = aCount;
+			palign = 1;
 		}
 	}
 	else
@@ -1587,6 +1604,7 @@ FResult Object::DefineTypedProperty(name_t aName, MdType aType, Object *aClass)
 		tprop->object_index = ++si->nested_count; // 1-based, as index 0 is reserved.
 		aClass->AddRef();
 	}
+	tprop->item_count = aCount;
 	if (palign > si->align) // TODO: allow overriding struct packing
 		si->align = palign;
 	ASSERT(palign && ((palign & (palign - 1)) == 0)); // Must be a power of 2.
@@ -1678,7 +1696,8 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	{
 		Object *pclass = dynamic_cast<Object*>(TokenToObject(value));
 		MdType ptype = pclass ? MdType::Void : TypeCode(TokenToString(value));
-		switch (DefineTypedProperty(name, ptype, pclass))
+		size_t pcount = (ptype == MdType::Void) ? (size_t)TokenToInt64(value) : 0;
+		switch (DefineTypedProperty(name, ptype, pclass, pcount))
 		{
 		case OK:
 			AddRef();
@@ -1763,8 +1782,10 @@ void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, Expr
 	{
 		if (field->tprop->class_object)
 			desc->SetOwnProp(_T("Type"), field->tprop->class_object);
-		else
+		else if (field->tprop->type != MdType::Void)
 			desc->SetOwnProp(_T("Type"), TypeName(field->tprop->type));
+		else
+			desc->SetOwnProp(_T("Type"), (__int64)field->tprop->item_count);
 		desc->SetOwnProp(_T("Offset"), field->tprop->data_offset);
 	}
 	else

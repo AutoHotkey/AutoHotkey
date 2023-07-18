@@ -253,6 +253,7 @@ struct TypedProperty
 	Object *class_object;
 	size_t data_offset;
 	size_t object_index;
+	size_t item_count;
 	~TypedProperty();
 };
 
@@ -477,7 +478,7 @@ public:
 	
 	Property *DefineProperty(name_t aName);
 	TypedProperty *DefineTypedProperty(name_t aName);
-	FResult DefineTypedProperty(name_t aName, MdType aType, Object *aClass);
+	FResult DefineTypedProperty(name_t aName, MdType aType, Object *aClass, size_t aCount);
 	bool DefineMethod(name_t aName, IObject *aFunc);
 	void DefineClass(name_t aName, Object *aClass);
 	

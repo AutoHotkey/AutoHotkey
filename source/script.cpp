@@ -6285,9 +6285,15 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 					*type_name_end = '\0';
 					Object *pclass = nullptr;
 					auto ptype = TypeCode(type_name);
+					size_t pcount = 0;
 					if (ptype == MdType::Void)
-						pclass = FindClass(type_name);
-					switch (class_object->DefineTypedProperty(item, ptype, pclass))
+					{
+						if (IsNumeric(type_name, false, false))
+							pcount = (size_t)ATOU64(type_name);
+						else
+							pclass = FindClass(type_name);
+					}
+					switch (class_object->DefineTypedProperty(item, ptype, pclass, pcount))
 					{
 					case OK:
 						break;
