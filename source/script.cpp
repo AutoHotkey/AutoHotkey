@@ -6220,11 +6220,10 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd)
 ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 {
 	Object *class_object = mClassObject[mClassObjectCount - 1];
-	if (!aStatic)
-		class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+	Object *prototype = aStatic ? class_object : (Object *)class_object->GetOwnPropObj(_T("Prototype"));
 
 	LPTSTR item, item_end;
-	TCHAR orig_char, buf[LINE_SIZE];
+	TCHAR orig_char, buf[LINE_SIZE], type_buf[LINE_SIZE];
 	size_t buf_used = 0;
 	ExprTokenType empty_token;
 	empty_token.symbol = SYM_MISSING;
@@ -6236,7 +6235,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			return ScriptError(ERR_INVALID_CLASS_VAR, item);
 		orig_char = *item_end;
 		*item_end = '\0'; // Temporarily terminate.
-		auto item_exists = class_object->GetOwnPropType(item);
+		auto item_exists = prototype->GetOwnPropType(item);
 		*item_end = orig_char; // Undo termination.
 		bool item_name_has_dot = (orig_char == '.');
 		if (item_name_has_dot)
@@ -6261,12 +6260,38 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		{
 			LPTSTR type_name = nullptr, type_name_end = nullptr;
 			item_end = omit_leading_whitespace(item_end);
-			if (*item_end == ':' && item_end[1] != '=')
+			if (*item_end == ':' && item_end[1] != '=' && !aStatic)
 			{
-				// Later checks will pick up syntax errors where no identifier is present.
+				// A type declaration could consist of any expression that returns
+				// a Class-like object, but this section primarily aims to permit:
+				//  - abc
+				//  - abc.def
+				//  - abc(params)
+				//  - abc[count]
+				// This is done in a way that allows other forms for flexibility:
+				//  - abc(params).subtype
+				//  - (any expression)
 				type_name = omit_leading_whitespace(item_end + 1);
-				type_name_end = find_identifier_end(type_name);
-				item_end = omit_leading_whitespace(type_name_end);
+				for (auto cp = type_name;; ++cp)
+				{
+					cp = find_identifier_end(cp);
+					if (*cp == '(' || *cp == '[')
+					{
+						cp += 1 + FindExprDelim(cp + 1, *cp == '(' ? ')' : ']');
+						if (*cp)
+							++cp;
+					}
+					type_name_end = cp;
+					cp = omit_leading_whitespace(type_name_end);
+					if (*cp != '.' || cp == type_name)
+					{
+						if ((*cp == ':' && cp[1] == '=' || *cp == ',' || !*cp) && cp != type_name)
+							item_end = cp;
+						else
+							type_name = nullptr;
+						break;
+					}
+				}
 			}
 			switch (item_exists)
 			{
@@ -6281,36 +6306,27 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 				*name_end = '\0'; // Temporarily terminate.
 				if (type_name)
 				{
+					// Use static __Init() to define the property types.
+					// It's done this way for a couple of reasons:
+					//  - Allows types to be parameterized or dynamically constructed.
+					//  - Allows properties to depend on classes that are defined below
+					//    the current point in the script.
 					auto type_end_char = *type_name_end;
 					*type_name_end = '\0';
-					Object *pclass = nullptr;
-					auto ptype = TypeCode(type_name);
-					size_t pcount = 0;
-					if (ptype == MdType::Void)
-					{
-						if (IsNumeric(type_name, false, false))
-							pcount = (size_t)ATOU64(type_name);
-						else
-							pclass = FindClass(type_name);
-					}
-					switch (class_object->DefineTypedProperty(item, ptype, pclass, pcount))
-					{
-					case OK:
-						break;
-					case FR_E_ARGS:
-						return ScriptError(_T("Invalid type."), type_name);
-					case FR_E_OUTOFMEM:
-						return ScriptError(ERR_OUTOFMEM);
-					default:
-						return ScriptError(_T("Cannot add typed property."), item);
-					}
+					TCHAR qu[2] { 0 };
+					if (TypeCode(type_name) != MdType::Void)
+						qu[0] = '\'';
+					_sntprintf(type_buf, _countof(type_buf), _T("this.Prototype.DefineProp('%s',{Type:%s%s%s})")
+						, item, qu, type_name, qu);
+					if (!DefineClassVarInit(type_buf, true, class_object, ACT_EXPRESSION))
+						return FAIL;
 					*type_name_end = type_end_char;
 				}
 				else
 				{
-					// Assign class_object[item] := "" to mark it as a value property
+					// Assign prototype[item] := "" to mark it as a value property
 					// and allow duplicate declarations to be detected:
-					if (!class_object->SetOwnProp(item, empty_token))
+					if (!prototype->SetOwnProp(item, empty_token))
 						return ScriptError(ERR_OUTOFMEM);
 				}
 				*name_end = orig_char; // Undo termination.
@@ -6363,7 +6379,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 	{
 		// Above wrote at least one initializer expression into buf.
 		buf[buf_used -= 2] = '\0'; // Remove the final ", "
-		return DefineClassVarInit(buf, aStatic, class_object);
+		return DefineClassVarInit(buf, aStatic, prototype);
 	}
 	return OK;
 }
