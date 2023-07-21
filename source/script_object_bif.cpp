@@ -312,6 +312,8 @@ bif_impl FResult ObjGetDataSize(IObject *aObj, UINT_PTR &aRetVal)
 	if (!aObj->IsOfType(Object::sPrototype))
 		return FR_E_ARG(0);
 	aRetVal = ((Object*)aObj)->DataSize();
+	if (!aRetVal)
+		aRetVal = ((Object*)aObj)->StructSize();
 	return OK;
 }
 
