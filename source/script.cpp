@@ -6256,10 +6256,10 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			}
 			name_end = item_end;
 		}
-		else
+		item_end = omit_leading_whitespace(item_end);
+		if (!item_name_has_dot)
 		{
 			LPTSTR type_name = nullptr, type_name_end = nullptr;
-			item_end = omit_leading_whitespace(item_end);
 			if (*item_end == ':' && item_end[1] != '=' && !aStatic)
 			{
 				// A type declaration could consist of any expression that returns
