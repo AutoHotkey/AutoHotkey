@@ -80,8 +80,10 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Ob
 	obj->SetBase(aPrototype);
 	FuncResult rt;
 	g_script.mCurrLine = this;
+	g_script.mNewRuntimeException = obj;
 	if (!obj->Construct(rt, aParam, aParamCount))
-		return nullptr;
+		obj = nullptr; // Construct released it.
+	g_script.mNewRuntimeException = nullptr;
 	return obj;
 }
 
