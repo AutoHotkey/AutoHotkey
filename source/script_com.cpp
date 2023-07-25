@@ -1627,7 +1627,7 @@ STDMETHODIMP EnumComCompat::Next(ULONG celt, /*out*/ VARIANT *rgVar, /*out*/ ULO
 				TokenToVariant(value, rgVar[1], FALSE);
 			}
 			if (pCeltFetched)
-				*pCeltFetched = pc - 1;
+				*pCeltFetched = pc;
 			break;
 		}
 		// else fall through.

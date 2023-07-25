@@ -596,7 +596,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		continue;
 	} // for (that = each base)
 
-	if (!hasprop && aName)
+	if (!hasprop && !IS_INVOKE_META)
 	{
 		// Invoke a meta-function in place of this non-existent property.
 		auto result = CallMetaVarg(aFlags, aName, aResultToken, aThisToken, actual_param, actual_param_count);
@@ -3062,6 +3062,7 @@ void Object::CreateRootPrototypes()
 	sClassPrototype = Object::CreatePrototype(_T("Class"), Object::sPrototype);
 	auto anyClass = CreateClass(_T("Any"), sClassPrototype, sAnyPrototype, nullptr);
 	Object::sClass = CreateClass(_T("Object"), anyClass, Object::sPrototype, NewObject<Object>);
+	Object::sObjectCall = Object::sClass->GetOwnPropMethod(_T("Call"));
 
 	ObjectCtor no_ctor = nullptr;
 	ObjectMember *no_members = nullptr;
@@ -3174,6 +3175,8 @@ namespace ErrorPrototype
 
 Object *Object::sVarRefPrototype;
 Object *Object::sComObjectPrototype, *Object::sComValuePrototype, *Object::sComArrayPrototype, *Object::sComRefPrototype;
+
+IObject *Object::sObjectCall;
 
 
 //

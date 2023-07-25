@@ -3183,8 +3183,32 @@ void Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	SetOwnProp(_T("Stack"), _T("")); // Avoid "unknown property" in compiled scripts.
 #else
 	DbgStack::Entry *stack_top = g_Debugger.mStack.mTop - 1;
-	if (stack_top->type == DbgStack::SE_BIF && _tcsicmp(what, stack_top->func->mName))
-		--stack_top;
+	// I think this was originally intended to omit Exception(); doesn't seem to be needed anymore?
+	//if (stack_top->type == DbgStack::SE_BIF && _tcsicmp(what, stack_top->func->mName))
+	//	--stack_top;
+	if (g_script.mNewRuntimeException != this)
+	{
+		// This Error is likely being constructed by the script with a call like Error(),
+		// but there may be additional calls to __new.  Find the stack entry corresponding
+		// to the initial call, so we have a predictable starting point for -What values
+		// and a good default Line.
+		for (auto se = stack_top; se >= g_Debugger.mStack.mBottom; --se)
+		{
+			if (se->type == DbgStack::SE_BIF && se->func == Object::sObjectCall)
+			{
+				line = se->line;
+				stack_top = se - 1;
+				break;
+			}
+			// In order to avoid omitting any stack frames that aren't actually related to the
+			// construction of this Error object, omit only frames where this == script's this.
+			// Multiple instances of the same function on the stack will all report the same
+			// value due to how UDFs work, but that's very unlikely to be an issue in practice.
+			// This would bypass Object.Call: (Error.Prototype.__New)({base: Error.Prototype})
+			if (se->type != DbgStack::SE_UDF || !se->udf->func->mClass || se->udf->func->mParam[0].var->ToObject() != this)
+				break;
+		}
+	}
 
 	if (ParamIndexIsOmitted(1)) // "What"
 	{
