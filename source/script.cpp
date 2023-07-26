@@ -7661,7 +7661,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 	{
 		0,0,0,0,0,0,0,0,0// SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_SUPER, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
 		, 82, 82         // SYM_POST_INCREMENT, SYM_POST_DECREMENT: Highest precedence operator so that it will work even though it comes *after* a variable name (unlike other unaries, which come before).
-		, 86             // SYM_DOT
+		, 86, 86         // SYM_MAYBE, SYM_DOT
 		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
 		, 6              // SYM_COMMA -- Must be just above SYM_OPAREN so it doesn't pop OPARENs off the stack.
 		, 7,7,7,7,7,7,7,7,7,7,7,7,7  // SYM_ASSIGN_*. THESE HAVE AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for cascading assignments such as x:=y:=1 to work.
@@ -8121,9 +8121,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 				case '?':
 					if (cp1 == '?')
 					{
-						if ( !(infix_count && (infix[infix_count - 1].symbol == SYM_VAR || infix[infix_count - 1].symbol == SYM_DYNAMIC)) )
-							return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
-						infix[infix_count - 1].var_usage = VARREF_READ_MAYBE; // `var ??` implies that no error should be raised if var is unset.
 						++cp; // An additional increment to have loop skip over the operator's second symbol.
 						this_infix_item.symbol = SYM_OR_MAYBE;
 						break;
@@ -8135,14 +8132,17 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						// Under the conditions checked above, this '?' can't be a valid ternary operator.
 						// If there's a variable to the left, this is probably a valid "maybe" reference.
 						// Future use: other operations such as x[y]?.
-						if ( !(infix_count && (infix[infix_count - 1].symbol == SYM_VAR || infix[infix_count - 1].symbol == SYM_DYNAMIC)) )
-							return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
-						infix[infix_count - 1].var_usage = VARREF_READ_MAYBE;
-						++cp; // Discard this '?'.
-						--infix_count; // Counter the loop's increment.
-						continue;
+						if (infix_count && (infix[infix_count - 1].symbol == SYM_VAR || infix[infix_count - 1].symbol == SYM_DYNAMIC))
+						{
+							infix[infix_count - 1].var_usage = VARREF_READ_MAYBE;
+							++cp; // Discard this '?'.
+							--infix_count; // Counter the loop's increment.
+							continue;
+						}
+						this_infix_item.symbol = SYM_MAYBE;
 					}
-					this_infix_item.symbol = SYM_IFF_THEN;
+					else
+						this_infix_item.symbol = SYM_IFF_THEN;
 					this_infix_item.marker = cp; // For error-reporting.
 					break;
 				case ':':
@@ -8892,6 +8892,15 @@ unquoted_literal:
 
 				if (IS_SHORT_CIRCUIT_OPERATOR(infix_symbol))
 				{
+					if (infix_symbol == SYM_OR_MAYBE)
+					{
+						if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
+							postfix[postfix_count - 1]->var_usage = VARREF_READ_MAYBE; // `var ??` implies that no error should be raised if var is unset.
+						else if (sym_postfix == SYM_FUNC) // A function/method/property call.
+							postfix[postfix_count - 1]->callsite->maybe_unset(true);
+						else
+							return LineError(ERR_EXPR_SYNTAX, FAIL, this_infix->error_reporting_marker);
+					}
 					// Short-circuit boolean evaluation works as follows:
 					//
 					// When an AND/OR/IFF is encountered in infix, it is immediately put into postfix to act as a
@@ -9089,6 +9098,17 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				else if (!IS_OPERATOR_VALID_LVALUE(target.symbol))
 					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_postfix->error_reporting_marker);
 			}
+			break;
+
+		case SYM_MAYBE:
+			if (  !(postfix_count && postfix[postfix_count - 1]->symbol == SYM_FUNC)  )
+				return LineError(ERR_EXPR_SYNTAX, FAIL, this_postfix->error_reporting_marker);
+			postfix[postfix_count - 1]->callsite->maybe_unset(true);
+			continue; // Not break; discard this token.
+
+		case SYM_COMMA:
+			if (postfix_count && postfix[postfix_count - 1]->symbol == SYM_FUNC)
+				postfix[postfix_count - 1]->callsite->maybe_unset(true);
 			break;
 
 		default:
@@ -9370,7 +9390,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		} // SYM_FUNC
 	} // postfix loop
 
-	if (stack_count != 1 || TOKEN_MAY_MISS(stack[stack_count - 1]) && mActionType != ACT_ASSIGNEXPR)
+	if (stack_count != 1 || TOKEN_MAY_MISS(stack[stack_count - 1]) && mActionType != ACT_ASSIGNEXPR && mActionType != ACT_RETURN)
 		return LineError(ERR_EXPR_SYNTAX);
 
 #undef TOKEN_MAY_MISS

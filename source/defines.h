@@ -176,7 +176,8 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_BEGIN = SYM_OPERAND_END  // SYM_BEGIN is a special marker to simplify the code.
 #define IS_OPERAND(symbol) ((symbol) < SYM_OPERAND_END)
 	, SYM_POST_INCREMENT, SYM_POST_DECREMENT // Kept in this position for use by YIELDS_AN_OPERAND() [helps performance].
-#define IS_POSTFIX_OPERATOR(symbol) ((symbol) == SYM_POST_INCREMENT || (symbol) == SYM_POST_DECREMENT)
+	, SYM_MAYBE
+#define IS_POSTFIX_OPERATOR(symbol) ((symbol) <= SYM_MAYBE && (symbol) >= SYM_POST_INCREMENT)
 	, SYM_DOT // DOT must precede SYM_OPAREN so YIELDS_AN_OPERAND(SYM_GET) == TRUE, allowing auto-concat to work for it even though it is positioned after its second operand.
 	, SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE, SYM_COMMA  // CPAREN (close-paren)/CBRACKET/CBRACE must come right before OPAREN for YIELDS_AN_OPERAND.
 #define IS_OPAREN_LIKE(symbol) ((symbol) <= SYM_OBRACE && (symbol) >= SYM_OPAREN)
@@ -324,6 +325,7 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define EIF_VARIADIC		0x010000
 #define EIF_STACK_MEMBER	0x020000
 #define EIF_LEAVE_PARAMS	0x040000
+#define EIF_MAYBE_UNSET		0x080000
 
 
 // Helper function for event handlers and __Delete:

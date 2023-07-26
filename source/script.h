@@ -227,7 +227,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_TYPE_MISMATCH _T("Type mismatch.")
 #define ERR_NOT_ENUMERABLE _T("Value not enumerable.")
 #define ERR_PROPERTY_READONLY _T("Property is read-only.")
-#define ERR_ITEM_UNSET _T("Item has no value.")
 #define ERR_NO_PROCESS _T("Target process not found.")
 #define ERR_NO_WINDOW _T("Target window not found.")
 #define ERR_NO_CONTROL _T("Target control not found.")
@@ -391,6 +390,9 @@ struct CallSite
 	
 	bool is_variadic() { return flags & EIF_VARIADIC; }
 	void is_variadic(bool b) { if (b) flags |= EIF_VARIADIC; else flags &= ~EIF_VARIADIC; }
+
+	bool maybe_unset() { return flags & EIF_MAYBE_UNSET; }
+	void maybe_unset(bool b) { if (b) flags |= EIF_MAYBE_UNSET; else flags &= ~EIF_MAYBE_UNSET; }
 	
 	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
@@ -467,6 +469,7 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _o_return_FAIL			_f_return_FAIL
 #define _o_return_retval		_f_return_retval
 #define _o_return_empty			_o_return_retval  // Default return value for Invoke is "".
+#define _o_return_unset			return (void)(aResultToken.symbol = SYM_MISSING)
 
 
 struct LoopFilesStruct : WIN32_FIND_DATA

@@ -822,7 +822,7 @@ void Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *
 			{
 				auto result = Invoke(aResultToken, IT_GET, _T("Default"), ExprTokenType { this }, nullptr, 0);
 				if (result == INVOKE_NOT_HANDLED)
-					_o_throw(ERR_ITEM_UNSET, *aParam[0], ErrorPrototype::UnsetItem);
+					_o_return_unset;
 				return;
 			}
 			// Otherwise, caller provided a default value.
@@ -1189,8 +1189,8 @@ void Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *
 	if (!item) // Nothing to remove.
 	{
 		// Our return value when only one arg is given is supposed to be the value
-		// removed from this[arg].  Since this[arg] would throw an exception...
-		_o_throw(ERR_ITEM_UNSET, *aParam[0], ErrorPrototype::UnsetItem);
+		// removed from this[arg], but there wasn't one.
+		_o_return_unset;
 	}
 	// Set return value to the removed item.
 	item->ReturnMove(aResultToken);
@@ -1989,7 +1989,7 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 			auto result = Object::Invoke(aResultToken, IT_GET, _T("Default"), ExprTokenType{this}, nullptr, 0);
 			if (result != INVOKE_NOT_HANDLED)
 				_o_return_retval;
-			_o_throw(ERR_ITEM_UNSET, *aParam[0], ErrorPrototype::UnsetItem);
+			_o_return_unset;
 		}
 		item.ReturnRef(aResultToken);
 		_o_return_retval;

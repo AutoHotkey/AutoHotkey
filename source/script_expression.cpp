@@ -383,9 +383,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// reason for early exit) should be considered valid/meaningful only if result_to_return is NULL.
 				goto normal_end_skip_output_var; // output_var is left unchanged in these cases.
 			case INVOKE_NOT_HANDLED:
-				result_token.UnknownMemberError(*func_token, flags, member);
-				aResult = result_token.Result(); // FAIL to abort, OK if user or OnError requested continuation.
-				goto abort_if_result;
+				if (!this_token.callsite->maybe_unset() || param_count || (flags & IT_BITMASK) == IT_CALL)
+				{
+					result_token.UnknownMemberError(*func_token, flags, member);
+					aResult = result_token.Result(); // FAIL to abort, OK if user or OnError requested continuation.
+					goto abort_if_result;
+				}
+				// For something like (a.b?) or (a.b ?? c), INVOKE_NOT_HANDLED is treated as unset.
+				result_token.symbol = SYM_MISSING;
 			}
 
 #ifdef CONFIG_DEBUGGER
@@ -407,6 +412,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 			if (result_token.symbol != SYM_STRING)
 			{
+				if (result_token.symbol == SYM_MISSING && !this_token.callsite->maybe_unset())
+				{
+					result_token.Error(_T("No value was returned.")
+						, (flags & IT_BITMASK) == IT_GET && !member ? ErrorPrototype::UnsetItem : ErrorPrototype::Unset);
+					aResult = result_token.Result(); // FAIL to abort, OK if user or OnError requested continuation.
+					goto abort_if_result;
+				}
 				// No need for make_result_persistent or early Assign().  Any numeric or object result can
 				// be considered final because it's already stored in permanent memory (the token itself).
 				// Additionally, this_token.mem_to_free is assumed to be NULL since the result is not
@@ -648,7 +660,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		ExprTokenType &right = *STACK_POP;
 		if (right.symbol == SYM_MISSING)
 		{
-			if (this_token.symbol == SYM_OR_MAYBE) // SYM_MISSING is to ?? what False is to ||.
+			if (this_token.symbol == SYM_OR_MAYBE // SYM_MISSING is to ?? what False is to ||.
+				|| this_token.symbol == SYM_COMMA) // The operand of a multi-statement comma is always ignored, so is not required to be a value.
 				continue; // Continue on to evaluate the right branch.
 			if (this_token.symbol != SYM_ASSIGN) // Anything other than := is not permitted.
 				goto abort_with_exception;
@@ -1322,9 +1335,6 @@ push_this_token:
 		goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 	}
 
-	if (result_token.symbol == SYM_MISSING) // No valid cases permit this as a final result except those already handled above.  Some sections below might not handle it.
-		goto abort_with_exception;
-
 	if (mActionType == ACT_IF || mActionType == ACT_WHILE || mActionType == ACT_UNTIL)
 	{
 		// This is an optimization that improves the speed of ACT_IF by up to 50% (ACT_WHILE is
@@ -1341,6 +1351,7 @@ push_this_token:
 		case SYM_INTEGER:
 		case SYM_FLOAT:
 		case SYM_OBJECT:
+		case SYM_MISSING: // return unset
 			// Return numeric or object result as-is.
 			aResultToken->symbol = result_token.symbol;
 			aResultToken->value_int64 = result_token.value_int64; // Union copy.
@@ -1372,6 +1383,9 @@ push_this_token:
 		// Since above didn't return, the result is a string.  Continue on below to copy it into persistent memory.
 	}
 	
+	if (result_token.symbol == SYM_MISSING) // No valid cases permit this as a final result except those already handled above.  Some sections below might not handle it.
+		goto abort_with_exception;
+
 	//
 	// Store the result of the expression in the deref buffer for the caller.
 	//
