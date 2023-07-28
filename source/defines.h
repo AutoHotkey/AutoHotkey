@@ -188,6 +188,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define YIELDS_AN_OPERAND(symbol) ((symbol) < SYM_OPAREN) // CPAREN also covers the tail end of a function call.  Post-inc/dec yields an operand for things like Var++ + 2.  Definitely needs the parentheses around symbol.
 	, SYM_ASSIGN, SYM_ASSIGN_ADD, SYM_ASSIGN_SUBTRACT, SYM_ASSIGN_MULTIPLY, SYM_ASSIGN_DIVIDE, SYM_ASSIGN_INTEGERDIVIDE
 	, SYM_ASSIGN_BITOR, SYM_ASSIGN_BITXOR, SYM_ASSIGN_BITAND, SYM_ASSIGN_BITSHIFTLEFT, SYM_ASSIGN_BITSHIFTRIGHT, SYM_ASSIGN_BITSHIFTRIGHT_LOGICAL // SYM_ASSIGN_BITSHIFTLEFT_LOGICAL doesn't exist but <<<= is the same as <<=
+	, SYM_ASSIGN_MAYBE
 	, SYM_ASSIGN_CONCAT // THIS MUST BE KEPT AS THE LAST (AND SYM_ASSIGN THE FIRST) BECAUSE THEY'RE USED IN A RANGE-CHECK.
 #define IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) (symbol <= SYM_ASSIGN_CONCAT && symbol >= SYM_ASSIGN) // Check upper bound first for short-circuit performance.
 #define IS_ASSIGNMENT_OR_POST_OP(symbol) (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) || symbol == SYM_POST_INCREMENT || symbol == SYM_POST_DECREMENT)
@@ -238,7 +239,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 
 
 enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET, VARREF_READ_MAYBE
-	, VARREF_REF, VARREF_LVALUE, VARREF_OUTPUT_VAR };
+	, VARREF_REF, VARREF_LVALUE, VARREF_LVALUE_MAYBE, VARREF_OUTPUT_VAR };
 #define VARREF_IS_WRITE(var_usage) ((var_usage) >= VARREF_REF)
 #define VARREF_IS_READ(var_usage) ((var_usage) == VARREF_READ || (var_usage) == VARREF_READ_MAYBE) // But not VARREF_ISSET.
 

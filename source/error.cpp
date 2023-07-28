@@ -747,7 +747,7 @@ ResultType Line::ValidateVarUsage(Var *aVar, int aUsage)
 	if (   VARREF_IS_WRITE(aUsage)
 		&& (aUsage == VARREF_REF
 			? aVar->Type() != VAR_NORMAL // Aliasing VAR_VIRTUAL is currently unsupported.
-			: aVar->IsReadOnly())   )
+			: aVar->IsReadOnly() && aUsage != VARREF_LVALUE_MAYBE)   )
 		return VarIsReadOnlyError(aVar, aUsage);
 	return OK;
 }

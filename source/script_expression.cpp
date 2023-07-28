@@ -189,7 +189,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				this_token.var = temp_var;
 				this_token.symbol = SYM_VAR;
 			}
-			if (this_token.symbol == SYM_VAR && !VARREF_IS_WRITE(this_token.var_usage))
+			if (this_token.symbol == SYM_VAR && (!VARREF_IS_WRITE(this_token.var_usage) || this_token.var_usage == VARREF_LVALUE_MAYBE))
 			{
 				if (this_token.var->Type() == VAR_VIRTUAL && VARREF_IS_READ(this_token.var_usage))
 				{
@@ -273,6 +273,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						this_token.symbol = SYM_MISSING;
 						goto push_this_token;
 					}
+					else if (this_token.var_usage == VARREF_LVALUE_MAYBE)
+					{
+						// Skip the short-circuit operator and push the variable onto the stack for assignment.
+						++this_postfix;
+						ASSERT(this_postfix->symbol == SYM_OR_MAYBE);
+					}
 				}
 			}
 			goto push_this_token;
@@ -346,10 +352,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto abort_with_exception;
 			}
 
-			if (flags & EIF_LEAVE_PARAMS)
-				// Leave params on the stack for the next part of a compound assignment.
-				stack_count = prev_stack_count;
-			
 			// The following two steps are done for built-in functions inside Func::Call:
 			//result_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
 			//result_token.func = func;          // Inform function of which built-in function called it (allows code sharing/reduction).
@@ -399,7 +401,15 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				g_Debugger.PostExecFunctionCall(this);
 #endif
 			g_script.mCurrLine = this; // For error-reporting.
-
+			
+			if ((flags & EIF_LEAVE_PARAMS)
+				&& (!(flags & EIF_MAYBE_UNSET) || result_token.symbol == SYM_MISSING))
+				// Leave params on the stack for the next part of a compound assignment.
+				// The combination of (EIF_LEAVE_PARAMS | EIF_MAYBE_UNSET) implies this is
+				// something like the `x.y` in `x.y ??= z`, which needs to take the params
+				// off the stack if it's going to short-circuit (i.e. result is unset).
+				stack_count = prev_stack_count;
+			
 			if (flags & IT_SET)
 			{
 				result_token.Free();

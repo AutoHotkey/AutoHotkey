@@ -4391,7 +4391,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						|| cp[1] == '=' && _tcschr(_T(":+-*/|&^."), cp[0]) // Two-char assignment operator.
 						// or there are two repeated characters 
 						|| cp[1] == cp[0]
-						&& ( ( _tcschr(_T("/<>"), cp[0]) && cp[2] == '=' // //=, <<= or >>=
+						&& ( ( _tcschr(_T("/<>?"), cp[0]) && cp[2] == '=' // //=, <<=, >>= or ??=
 									|| *cp == '+' || *cp == '-' ) // x.y++ or x.y--
 							// or three repeated characters:
 							|| (cp[0] == '>' && cp[2] == '>' && cp[3] == '=') )	) // >>>=
@@ -7664,7 +7664,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 		, 86, 86         // SYM_MAYBE, SYM_DOT
 		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
 		, 6              // SYM_COMMA -- Must be just above SYM_OPAREN so it doesn't pop OPARENs off the stack.
-		, 7,7,7,7,7,7,7,7,7,7,7,7,7  // SYM_ASSIGN_*. THESE HAVE AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for cascading assignments such as x:=y:=1 to work.
+		, 7,7,7,7,7,7,7,7,7,7,7,7,7,7  // SYM_ASSIGN_*. THESE HAVE AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for cascading assignments such as x:=y:=1 to work.
 //		, 8              // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 11, 11         // SYM_IFF_ELSE, SYM_IFF_THEN (ternary conditional).  HAS AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for ternaries to perform traditionally when nested in each other without parentheses.
 //		, 12             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
@@ -8122,7 +8122,13 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					if (cp1 == '?')
 					{
 						++cp; // An additional increment to have loop skip over the operator's second symbol.
-						this_infix_item.symbol = SYM_OR_MAYBE;
+						if (cp[1] == '=')
+						{
+							this_infix_item.symbol = SYM_ASSIGN_MAYBE;
+							++cp;
+						}
+						else
+							this_infix_item.symbol = SYM_OR_MAYBE;
 						break;
 					}
 					if (IS_SPACE_OR_TAB(cp1))
@@ -8857,17 +8863,17 @@ unquoted_literal:
 				if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
 				{
 					// Assignment and postfix operators must be preceded by a variable, except for
-					// assignment operators which have been marked with a non-NULL deref, indicating
-					// that the target is an object's property.  Postfix operators which apply to an
-					// object's property are fully handled in the standard_pop_into_postfix section.
+					// assignment operators which have a non-null callsite, indicating that the target
+					// is an object's property.  Postfix operators which apply to an object's property
+					// are fully handled in the standard_pop_into_postfix section.
 					if (this_infix->callsite) // Object property.  Takes precedence over the next checks.
 					{}  // Nothing needed here.
 					else if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
 					{
 						ExprTokenType &target = *postfix[postfix_count - 1];
-						target.var_usage = VARREF_LVALUE; // Mark this as the target of an assignment.
+						target.var_usage = (infix_symbol == SYM_ASSIGN_MAYBE) ? VARREF_LVALUE_MAYBE : VARREF_LVALUE; // Mark this as the target of an assignment.
 					}
-					else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
+					else if (infix_symbol == SYM_ASSIGN_MAYBE || !IS_OPERATOR_VALID_LVALUE(sym_postfix))
 						return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_infix->error_reporting_marker);
 				}
 				else
@@ -8890,7 +8896,18 @@ unquoted_literal:
 						return LineError(ERR_EXPR_MISSING_OPERAND, FAIL, this_infix->error_reporting_marker);
 				}
 
-				if (IS_SHORT_CIRCUIT_OPERATOR(infix_symbol))
+				if (infix_symbol == SYM_ASSIGN_MAYBE)
+				{
+					// Handle the ?? part of ??= by inserting it into postfix immediately and pointing
+					// it at this assignment (evaluation resumes at the token after circuit_token).
+					this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+					this_postfix->symbol = SYM_OR_MAYBE;
+					this_postfix->error_reporting_marker = this_infix->error_reporting_marker; // FinalizeExpression relies on this.
+					this_postfix->circuit_token = this_infix;
+					++postfix_count;
+					this_infix->symbol = SYM_ASSIGN; // This might be changed again in standard_pop_into_postfix.
+				}
+				else if (IS_SHORT_CIRCUIT_OPERATOR(infix_symbol))
 				{
 					if (infix_symbol == SYM_OR_MAYBE)
 					{
@@ -8988,6 +9005,8 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 						this_postfix->callsite->flags		= callsite->flags | EIF_LEAVE_PARAMS;
 						this_postfix->callsite->member		= callsite->member;
 						this_postfix->callsite->param_count	= callsite->param_count;
+						if (infix_symbol == SYM_ASSIGN_MAYBE)
+							this_postfix->callsite->maybe_unset(true);
 					}
 					else
 					{
@@ -9205,7 +9224,10 @@ end_of_infix_to_postfix:
 		if (SYM_USES_CIRCUIT_TOKEN(new_token.symbol)) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
 		{
 			// circuit_token should always be non-NULL at this point.
-			for (j = i + 1; postfix[j] != new_token.circuit_token; ++j); // Should always be found, and always to the right in the postfix array, so no need to check postfix_count.
+			for (j = i + 1; postfix[j] != new_token.circuit_token; ++j)
+			{
+				ASSERT(j < postfix_count); // Should always be found (unless there's a bug), and always to the right in the postfix array, so no need to check postfix_count in release mode.
+			}
 			new_token.circuit_token = aArg.postfix + j;
 		}
 		// Simple calculation: only operands and SYM_FUNC can increase the stack count,
@@ -9288,7 +9310,13 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 			// branch, since it might contain invalid function calls.  This seems difficult to do in one pass since
 			// the end of the right branch isn't marked in any way, but it can be done by having a recursive call
 			// finalize from [this_postfix] to [this_postfix->circuit_token], then having this layer skip it.
-			--stack_count;
+			// One exception: the ?? implicitly inserted by `A ??= B` doesn't pop A because it's needed by the
+			// assignment.  This doesn't apply to `A.B ??= C` because there's an implicit SYM_FUNC which grows
+			// the stack by one, and the final assignment is SYM_FUNC, not SYM_ASSIGN.
+			if (  !(postfix_symbol == SYM_OR_MAYBE
+				&& this_postfix->circuit_token->symbol == SYM_ASSIGN
+				&& *this_postfix->circuit_token->error_reporting_marker == '?')  ) // SYM_ASSIGN_MAYBE was changed to this at load time.
+				--stack_count;
 		}
 		else if (postfix_symbol == SYM_COMMA)
 		{
