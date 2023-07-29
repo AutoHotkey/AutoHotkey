@@ -9019,7 +9019,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					// Now let this_infix be processed by the next iteration, and eventually
 					// have its symbol changed to SYM_FUNC.
 				}
-				else if (!IS_OPERAND(infix_symbol))
+				else
 				{
 					stack_symbol = stack[stack_count - 1]->symbol;
 					// Post-increment/decrement has higher precedence, so check for it first:
@@ -9062,9 +9062,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 							postfix_count += 3;
 					}
 				}
-				// Otherwise, IS_OPERAND(infix_symbol) == true, which should only be possible
-				// if this_infix[1] is SYM_DOT.  In that case, a later iteration should apply
-				// the transformations above to that operator.
 			}
 			else if ((this_postfix->callsite->flags & IT_BITMASK) == IT_CALL)
 			{
