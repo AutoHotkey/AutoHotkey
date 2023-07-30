@@ -8414,7 +8414,6 @@ unquoted_literal:
 		else if (this_deref_ref.type == DT_DOUBLE) // Marks the end of a var double-dereference.
 		{
 			infix[infix_count].symbol = SYM_DYNAMIC;
-			infix[infix_count].var = nullptr; // Indicate this is a double-deref.
 			infix[infix_count].var_usage = VARREF_READ; // Set default.
 		}
 		else if (this_deref_ref.type == DT_DOTPERCENT)
