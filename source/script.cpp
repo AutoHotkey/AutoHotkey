@@ -8690,8 +8690,6 @@ unquoted_literal:
 			goto standard_pop_into_postfix; // Pop it into postfix to immediately follow its operands.
 
 		case SYM_IFF_ELSE: // i.e. this infix symbol is ':'.
-			if (stack_symbol == SYM_BEGIN) // An ELSE with no matching IF/THEN.
-				return LineError(_T("A \":\" is missing its \"?\"")); // Below relies on the above check having been done, to avoid underflow.
 			if (stack_symbol == SYM_OBRACE)
 			{
 				// This should be the end of a property name in something like {x: y}.
@@ -8717,7 +8715,7 @@ unquoted_literal:
 				++this_infix;
 				continue;
 			}
-			if (stack_symbol == SYM_OPAREN || stack_symbol == SYM_OBRACKET)
+			if (stack_symbol == SYM_OPAREN || stack_symbol == SYM_OBRACKET || stack_symbol == SYM_BEGIN)
 				return LineError(_T("Unexpected \":\"")); // () and [] were already balanced by GetLineContExpr(), so the colon seems to be what is out of place.  Also, don't refer to ')' since it might be a function call statement.
 			// Otherwise:
 			if (stack_symbol == SYM_IFF_THEN) // See comments near the bottom of this case. The first found "THEN" on the stack must be the one that goes with this "ELSE".
@@ -9062,7 +9060,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			continue; // This token was already put into postfix by an earlier stage, so skip it this time.
 		}
 		case SYM_IFF_THEN:
-			return LineError(_T("A \"?\" is missing its \":\""), FAIL, this_postfix->marker);
+			return LineError(_T("Unexpected \"?\""), FAIL, this_postfix->marker);
 
 		case SYM_REF:
 			postfix_symbol = postfix[postfix_count - 1]->symbol;
