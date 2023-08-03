@@ -7695,7 +7695,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 		, 77, 77         // SYM_PRE_INCREMENT, SYM_PRE_DECREMENT (higher precedence than SYM_POWER because it doesn't make sense to evaluate power first because that would cause ++/-- to fail due to operating on a non-lvalue.
 //		, 78             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
-		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
+		, 2              // SYM_FUNC -- Only SYM_CPAREN should terminate the parameter list and pop SYM_FUNC off the stack.
 		, 0, 0           // SYM_RESERVED_*
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
@@ -7948,7 +7948,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					// the string "int)", this symbol is not open-paren at all but instead the unary type-cast-to-int
 					// operator.
 					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)
-						&& IS_SPACE_OR_TAB(cp[-1])) // If there's no space, assume it's something valid like "new Class()" until it can be proven otherwise.
+						&& IS_SPACE_OR_TAB(cp[-1])) // If there's no space, it will be processed as a function call.
 					{
 						infix[infix_count++].symbol = SYM_CONCAT;
 					}
@@ -8531,7 +8531,6 @@ unquoted_literal:
 
 	SymbolType stack_symbol, infix_symbol, sym_prev, sym_next;
 	ExprTokenType *this_infix = infix;
-	CallSite *in_param_list = nullptr; // The function call site of the parameter list which directly contains the current token.
 
 	for (;;) // While SYM_BEGIN is still on the stack, continue iterating.
 	{
@@ -8556,42 +8555,35 @@ unquoted_literal:
 		case SYM_CBRACKET:	// Requires similar handling to CPAREN.
 		case SYM_CBRACE:	// Requires similar handling to CPAREN.
 		case SYM_COMMA:		// COMMA is handled here with CPAREN/BRACKET/BRACE for parameter counting and validation.
-			if (infix_symbol != SYM_COMMA && !IS_OPAREN_MATCHING_CPAREN(stack_symbol, infix_symbol))
+		{
+			// Prior handling ensures there is an OPAREN or FUNC on the stack for any CPAREN/CBRACKET/CBRACE,
+			// and GetLineContExpr()/BalanceExpr() has ensured that the opening and closing symbols match.
+			if (sPrecedence[stack_symbol] > sPrecedence[infix_symbol])
 			{
-				// This stack item is not the OPAREN/BRACKET/BRACE corresponding to this CPAREN/BRACKET/BRACE.
-				if (stack_symbol == SYM_BEGIN // Not sure if this is possible.
-					|| IS_OPAREN_LIKE(stack_symbol)) // Mismatched parens/brackets/braces.
-				{
-					// This should never happen due to balancing done by GetLineContExpr()/BalanceExpr().
-					return LineError(ERR_EXPR_SYNTAX);
-				}
-				else // This stack item is an operator.
-				{
-					goto standard_pop_into_postfix;
-					// By not incrementing i, the loop will continue to encounter SYM_CPAREN and thus
-					// continue to pop things off the stack until the corresponding OPAREN is reached.
-				}
+				goto standard_pop_into_postfix;
+				// By not incrementing i, the loop will continue to encounter SYM_CPAREN and thus
+				// continue to pop things off the stack until the corresponding OPAREN is reached.
 			}
+			ASSERT(stack_symbol == SYM_FUNC || IS_OPAREN_LIKE(stack_symbol)
+				|| infix_symbol == SYM_COMMA && (stack_symbol == SYM_COMMA || stack_symbol == SYM_BEGIN));
 			// Otherwise, this infix item is a comma or a close-paren/bracket/brace whose corresponding
-			// open-paren/bracket/brace is now at the top of the stack.  If a function parameter has just
-			// been completed in postfix, we have extra work to do:
+			// open-paren or SYM_FUNC is now at the top of the stack.  A function parameter has just
+			// been completed in postfix, so we have extra work to do:
 			//  a) Maintain and validate the parameter count.
 			//  b) Allow empty parameters by inserting the SYM_MISSING marker.
-			//  c) Optimize DllCalls by pre-resolving common function names.
+			CallSite *in_param_list = (stack_symbol == SYM_FUNC || stack_symbol == SYM_OBRACE || stack_symbol == SYM_OBRACKET)
+				? stack[stack_count - 1]->callsite : nullptr;
+			sym_prev = this_infix[-1].symbol; // There's always at least one token preceding this one.
 			if (!in_param_list)
 			{
-				sym_prev = this_infix[-1].symbol; // There's always at least one token preceding this one.
 				if (sym_prev == SYM_OPAREN || sym_prev == SYM_COMMA) // () or ,)
 					return LineError(ERR_EXPR_SYNTAX, FAIL, this_infix->error_reporting_marker);
 			}
-			else if (IS_OPAREN_LIKE(stack_symbol))
+			else
 			{
-				if (infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol) // i.e. not an empty parameter list.
+				if (infix_symbol == SYM_COMMA || !IS_OPAREN_LIKE(sym_prev)) // i.e. not an empty parameter list.
 				{
-					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
-					// non-NULL, and that can only be the result of a previous SYM_OPAREN/BRACKET.
-					SymbolType prev_sym = this_infix[-1].symbol;
-					if (prev_sym == SYM_COMMA || prev_sym == stack_symbol) // Empty parameter.
+					if (sym_prev == SYM_COMMA || IS_OPAREN_LIKE(sym_prev)) // Empty parameter.
 					{
 						int num_blank_params = 0;
 						while (this_infix->symbol == SYM_COMMA)
@@ -8600,7 +8592,7 @@ unquoted_literal:
 							++num_blank_params;
 						}
 						infix_symbol = this_infix->symbol; // In case this_infix changed above.
-						if (!IS_OPAREN_MATCHING_CPAREN(stack_symbol, infix_symbol))
+						if (!IS_CPAREN_LIKE(infix_symbol))
 						{
 							for (int i = 0; i < num_blank_params; ++i)
 							{
@@ -8629,89 +8621,66 @@ unquoted_literal:
 					}
 				}
 			}
-				
-			switch (infix_symbol)
+			
+			if (infix_symbol == SYM_COMMA)
 			{
-			case SYM_CPAREN: // implies stack_symbol == SYM_OPAREN.
-				// See comments near the bottom of this (outer) case.  The first open-paren on the stack must be the one that goes with this close-paren.
-				--stack_count; // Remove this open-paren from the stack, since it is now complete.
-				++this_infix;  // Since this pair of parentheses is done, move on to the next token in the infix expression.
-
-				in_param_list = stack[stack_count]->outer_param_list; // Restore in_param_list to the value it had when SYM_OPAREN was pushed onto the stack.
-
-				if (stack[stack_count-1]->symbol == SYM_FUNC) // i.e. topmost item on stack is SYM_FUNC.
+				if (!in_param_list) // This comma separates statements rather than function parameters.
 				{
-					goto standard_pop_into_postfix; // Within the postfix list, a function-call should always immediately follow its params.
+					if (postfix_count && postfix[postfix_count - 1]->symbol == SYM_FUNC)
+						postfix[postfix_count - 1]->callsite->maybe_unset(true);
+					// Put this comma immediately into postfix so that when it is encountered at
+					// run-time, it will pop and discard the result of its left-hand sub-statement.
+					this_postfix = this_infix++;
+					++postfix_count;
+					continue;
 				}
-				break;
-				
-			case SYM_CBRACKET: // implies stack_symbol == SYM_OBRACKET.
-			case SYM_CBRACE: // implies stack_symbol == SYM_OBRACE.
+				// It's a function comma, so don't put it in stack or postfix because parameters need
+				// to be pushed sequentially onto the stack and left there until SYM_FUNC pops them off.
+				++this_infix;
+			}
+			else if (stack_symbol == SYM_OPAREN)
 			{
-				ExprTokenType &stack_top = *stack[stack_count - 1];
-				//--stack_count; // DON'T DO THIS.
-				stack_top.symbol = SYM_FUNC; // Change this OBRACKET to FUNC (see below).
-				++this_infix; // Since this pair of brackets is done, move on to the next token in the infix expression.
-				in_param_list = stack_top.outer_param_list; // Restore in_param_list to the value it had when '[' was pushed onto the stack.					
+				++this_infix;  // Since this pair of parentheses is done, move on to the next token in the infix expression.
+				--stack_count; // Remove this open-paren from the stack, since it is now complete.
+			}
+			else
+			{
+				++this_infix;
+				stack[stack_count - 1]->symbol = SYM_FUNC; // In case it was SYM_OBRACKET or SYM_OBRACE.
 				goto standard_pop_into_postfix; // Pop the token (now SYM_FUNC) into the postfix array to immediately follow its params.
 			}
-
-			default: // case SYM_COMMA:
-				if (sPrecedence[stack_symbol] < sPrecedence[infix_symbol]) // i.e. stack_symbol is SYM_BEGIN or SYM_OPAREN/BRACKET/BRACE.
-				{
-					if (!in_param_list) // This comma separates statements rather than function parameters.
-					{
-						STACK_PUSH(this_infix++);
-						// Pop this comma immediately into postfix so that when it is encountered at
-						// run-time, it will pop and discard the result of its left-hand sub-statement.
-						goto standard_pop_into_postfix;
-					}
-					else
-					{
-						// It's a function comma, so don't put it in stack because function commas aren't
-						// needed and they would probably prevent proper evaluation.  Only statement-separator
-						// commas need to go onto the stack.
-					}
-					++this_infix; // Regardless of the outcome above, move rightward to the next infix item.
-				}
-				else
-					goto standard_pop_into_postfix;
-				break;
-			} // end switch (infix_symbol)
 			break;
+		}
 
 		case SYM_FUNC:
 			// Normal function calls are handled by case SYM_OPAREN; this one handles some misc. cases
 			// like x.y(), x.%y%() and IsSet().
 			STACK_PUSH(this_infix++);
-			// NOW FALL INTO THE OPEN-PAREN BELOW because load-time validation has ensured that each SYM_FUNC
-			// is followed by a '('.
-// ABOVE CASE FALLS INTO BELOW.
+			ASSERT(this_infix->symbol == SYM_OPAREN);
+			this_infix++;
+			break;
+
 		case SYM_OPAREN:
-			// Open-parentheses always go on the stack to await their matching close-parentheses.
-			this_infix->outer_param_list = in_param_list; // Save current value on the stack with this SYM_OPAREN.
-			if (infix_symbol == SYM_FUNC)
-				in_param_list = this_infix[-1].callsite; // Store this SYM_FUNC's deref.
-			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
+			// Each open-parenthesis goes on the stack to await its matching close-parenthesis,
+			// unless it belongs to a function call, in which case SYM_FUNC goes on the stack.
+			if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
 				&& *this_infix->marker == '(') // i.e. it's not an implicit SYM_OPAREN generated by DT_STRING.
 			{
 				// this_infix[-1] is the object to be called (or an error).
-				auto token = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+				auto token = (ExprTokenType *)_alloca(sizeof(ExprTokenType)); // Reusing this_infix breaks validation for IS_PREFIX_OPERATOR(infix_symbol).
 				token->symbol = SYM_FUNC;
-				token->callsite = in_param_list = new CallSite();
-				if (!in_param_list)
+				token->callsite = new CallSite();
+				if (!token->callsite)
 					return LineError(ERR_OUTOFMEM);
 				STACK_PUSH(token);
 			}
 			else
-				in_param_list = NULL; // Allow multi-statement commas, even in cases like Func((x,y)).
-			STACK_PUSH(this_infix++);
+				STACK_PUSH(this_infix);
+			this_infix++;
 			break;
 			
 		case SYM_OBRACKET:
 		case SYM_OBRACE:
-			this_infix->outer_param_list = in_param_list; // Save current value on the stack with this SYM_OBRACKET.
-			in_param_list = this_infix->callsite;
 			STACK_PUSH(this_infix++); // Push this '[' onto the stack to await its ']'.
 			break;
 
@@ -8723,7 +8692,7 @@ unquoted_literal:
 		case SYM_IFF_ELSE: // i.e. this infix symbol is ':'.
 			if (stack_symbol == SYM_BEGIN) // An ELSE with no matching IF/THEN.
 				return LineError(_T("A \":\" is missing its \"?\"")); // Below relies on the above check having been done, to avoid underflow.
-			if (in_param_list && stack_symbol == SYM_OBRACE)
+			if (stack_symbol == SYM_OBRACE)
 			{
 				// This should be the end of a property name in something like {x: y}.
 				if (postfix_count)
@@ -8744,16 +8713,12 @@ unquoted_literal:
 						return LineError(_T("Invalid property name in object literal."));
 					}
 				}
-				++in_param_list->param_count;
+				++stack[stack_count - 1]->callsite->param_count;
 				++this_infix;
 				continue;
 			}
-			if (stack_symbol == SYM_OPAREN)
-				return LineError(_T("Unexpected \":\"")); // No reference to ")" since it might be a function call statement.
-			if (stack_symbol == SYM_OBRACKET)
-				return LineError(_T("Missing \"]\" before \":\""));
-			if (stack_symbol == SYM_OBRACE)
-				return LineError(_T("Missing \"}\" before \":\""));
+			if (stack_symbol == SYM_OPAREN || stack_symbol == SYM_OBRACKET)
+				return LineError(_T("Unexpected \":\"")); // () and [] were already balanced by GetLineContExpr(), so the colon seems to be what is out of place.  Also, don't refer to ')' since it might be a function call statement.
 			// Otherwise:
 			if (stack_symbol == SYM_IFF_THEN) // See comments near the bottom of this case. The first found "THEN" on the stack must be the one that goes with this "ELSE".
 			{
@@ -8778,23 +8743,27 @@ unquoted_literal:
 			break;
 
 		case SYM_INVALID:
+			ASSERT(!IS_OPAREN_LIKE(stack_symbol)); // GetLineContExpr()/BalanceExpr() ensures this won't happen.
 			if (stack_symbol == SYM_BEGIN) // Stack is basically empty, so stop the loop.
 			{
 				--stack_count; // Remove SYM_BEGIN from the stack, leaving the stack empty for use in postfix eval.
 				goto end_of_infix_to_postfix; // Both infix and stack have been fully processed, so the postfix expression is now completely built.
 			}
-			else if (  stack_symbol == SYM_OPAREN // Open paren is never closed (currently impossible due to load-time balancing, but kept for completeness).
-					|| stack_symbol == SYM_OBRACKET
-					|| stack_symbol == SYM_OBRACE  )
-				return LineError(ERR_EXPR_SYNTAX);
 			else // Pop item off the stack, AND CONTINUE ITERATING, which will hit this line until stack is empty.
 				goto standard_pop_into_postfix;
 			// ALL PATHS ABOVE must continue or goto.
 			
 		case SYM_MULTIPLY:
-			if (in_param_list && (this_infix[1].symbol == SYM_CPAREN || this_infix[1].symbol == SYM_CBRACKET)) // Func(params*) or obj.foo[params*]
+			if (this_infix[1].symbol == SYM_CPAREN || this_infix[1].symbol == SYM_CBRACKET) // Func(params*) or obj.foo[params*]
 			{
-				in_param_list->is_variadic(true);
+				// Balancing done by GetLineContExpr()/BalanceExpr() ensures there is a matching FUNC/OPAREN/OBRACKET,
+				// which must be still on the stack at this point.
+				ASSERT(stack_symbol != SYM_BEGIN);
+				if (!IS_OPAREN_LIKE(stack_symbol) && stack_symbol != SYM_FUNC)
+					goto standard_pop_into_postfix;
+				if (stack_symbol == SYM_OPAREN) // Non-function parentheses.
+					return LineError(ERR_EXPR_SYNTAX, FAIL, this_infix->error_reporting_marker);
+				stack[stack_count - 1]->callsite->is_variadic(true);
 				++this_infix;
 				continue;
 			}
@@ -9121,11 +9090,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				return LineError(ERR_EXPR_SYNTAX, FAIL, this_postfix->error_reporting_marker);
 			postfix[postfix_count - 1]->callsite->maybe_unset(true);
 			continue; // Not break; discard this token.
-
-		case SYM_COMMA:
-			if (postfix_count && postfix[postfix_count - 1]->symbol == SYM_FUNC)
-				postfix[postfix_count - 1]->callsite->maybe_unset(true);
-			break;
 
 		default:
 			if (!IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(postfix_symbol))

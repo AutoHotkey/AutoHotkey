@@ -31,7 +31,6 @@
       <Item Name="var_deref" Condition="symbol == SYM_VAR">var_deref</Item>
       <Item Name="callsite" Condition="symbol == SYM_FUNC">callsite</Item>
       <Item Name="marker" Condition="symbol == SYM_OPAREN">marker</Item>
-      <Item Name="outer" Condition="symbol == SYM_OPAREN">outer_param_list</Item>
     </Expand>
   </Type>
   <Type Name="Var">

@@ -361,7 +361,6 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
-				CallSite *outer_param_list; // Used by ExpressionToPostfix().
 				LPTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
 				size_t marker_length;
 				VarRefUsageType var_usage; // for SYM_DYNAMIC and SYM_VAR (at load time)
