@@ -699,6 +699,8 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMe
 		// Caller has passed a pointer to the variable in the linked list which should
 		// hold this new item; either &mFirstMenuItem or &previous_item->mNextMenuItem.
 		menu_item->mNextMenuItem = *aInsertAt;
+		if (!*aInsertAt)
+			mLastMenuItem = menu_item;
 		// This must be done after the above:
 		*aInsertAt = menu_item;
 	}
