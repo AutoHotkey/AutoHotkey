@@ -236,7 +236,7 @@ Action g_act[] =
 
 	// ASSIGNEXPR: Give it a name for Line::ToText().
 	// 1st param is the target, 2nd (optional) is the value:
-	, {_T(":="), 2, 2} // Same, though param #2 is flagged as numeric so that expression detection is automatic.
+	, {_T(":="), 2, 2}
 
 	// ACT_EXPRESSION, which is a stand-alone expression outside of any IF or assignment-command;
 	// e.g. fn1(123, fn2(y)) or x&=3

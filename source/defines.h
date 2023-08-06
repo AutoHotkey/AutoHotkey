@@ -194,8 +194,9 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define IS_ASSIGNMENT_OR_POST_OP(symbol) (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) || symbol == SYM_POST_INCREMENT || symbol == SYM_POST_DECREMENT)
 	, SYM_IFF_ELSE, SYM_IFF_THEN // THESE TERNARY OPERATORS MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE BELOW.
 	, SYM_OR_MAYBE, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE for the range checks below.
-#define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_THEN) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
-#define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_ELSE)
+#define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && ((symbol) >= SYM_IFF_THEN || (symbol) == SYM_MAYBE)) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
+#define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && ((symbol) >= SYM_IFF_ELSE || (symbol) == SYM_MAYBE))
+#define SYM_MAYBE_IGNORES_ON_STACK(symbol) (SYM_USES_CIRCUIT_TOKEN(symbol) && (symbol) != SYM_IFF_THEN)
 	, SYM_IS
 	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL, SYM_NOTEQUALCASE // =, ==, !=, !==... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 #define IS_EQUALITY_OPERATOR(symbol) (symbol >= SYM_EQUAL && symbol <= SYM_NOTEQUALCASE)
@@ -236,7 +237,6 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define IS_OPERATOR_VALID_LVALUE(sym) \
 	(IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(sym) \
 		|| sym == SYM_PRE_INCREMENT || sym == SYM_PRE_DECREMENT)
-
 
 enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET, VARREF_READ_MAYBE
 	, VARREF_REF, VARREF_LVALUE, VARREF_LVALUE_MAYBE, VARREF_OUTPUT_VAR };
@@ -326,7 +326,8 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define EIF_VARIADIC		0x010000
 #define EIF_STACK_MEMBER	0x020000
 #define EIF_LEAVE_PARAMS	0x040000
-#define EIF_MAYBE_UNSET		0x080000
+#define EIF_UNSET_RETURN	0x100000
+#define EIF_UNSET_PROP		0x200000
 
 
 // Helper function for event handlers and __Delete:
@@ -356,12 +357,12 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				CallSite *callsite;   // for SYM_FUNC, and (while parsing) SYM_ASSIGN etc.
 				DerefType *var_deref; // for SYM_VAR while parsing
 				Var *var;             // for SYM_VAR and SYM_DYNAMIC
-				LPTSTR marker;        // for SYM_STRING and (while parsing) SYM_OPAREN
+				LPTSTR marker;        // for SYM_STRING
 				ExprTokenType *circuit_token; // for short-circuit operators
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
-				LPTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
+				LPCTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
 				size_t marker_length;
 				VarRefUsageType var_usage; // for SYM_DYNAMIC and SYM_VAR (at load time)
 			};

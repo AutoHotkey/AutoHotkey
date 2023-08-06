@@ -385,7 +385,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// reason for early exit) should be considered valid/meaningful only if result_to_return is NULL.
 				goto normal_end_skip_output_var; // output_var is left unchanged in these cases.
 			case INVOKE_NOT_HANDLED:
-				if (!this_token.callsite->maybe_unset() || param_count || (flags & IT_BITMASK) == IT_CALL)
+				if (!(flags & EIF_UNSET_PROP))
 				{
 					result_token.UnknownMemberError(*func_token, flags, member);
 					aResult = result_token.Result(); // FAIL to abort, OK if user or OnError requested continuation.
@@ -403,9 +403,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			g_script.mCurrLine = this; // For error-reporting.
 			
 			if ((flags & EIF_LEAVE_PARAMS)
-				&& (!(flags & EIF_MAYBE_UNSET) || result_token.symbol == SYM_MISSING))
+				&& (!(flags & EIF_UNSET_RETURN) || result_token.symbol == SYM_MISSING))
 				// Leave params on the stack for the next part of a compound assignment.
-				// The combination of (EIF_LEAVE_PARAMS | EIF_MAYBE_UNSET) implies this is
+				// The combination of (EIF_LEAVE_PARAMS | EIF_UNSET_RETURN) implies this is
 				// something like the `x.y` in `x.y ??= z`, which needs to take the params
 				// off the stack if it's going to short-circuit (i.e. result is unset).
 				stack_count = prev_stack_count;
@@ -422,9 +422,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 			if (result_token.symbol != SYM_STRING)
 			{
-				if (result_token.symbol == SYM_MISSING && !this_token.callsite->maybe_unset())
+				if (result_token.symbol == SYM_MISSING && !(flags & EIF_UNSET_RETURN))
 				{
 					result_token.Error(_T("No value was returned.")
+						, this_token.error_reporting_marker
 						, (flags & IT_BITMASK) == IT_GET && !member ? ErrorPrototype::UnsetItem : ErrorPrototype::Unset);
 					aResult = result_token.Result(); // FAIL to abort, OK if user or OnError requested continuation.
 					goto abort_if_result;
@@ -673,6 +674,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			if (this_token.symbol == SYM_OR_MAYBE // SYM_MISSING is to ?? what False is to ||.
 				|| this_token.symbol == SYM_COMMA) // The operand of a multi-statement comma is always ignored, so is not required to be a value.
 				continue; // Continue on to evaluate the right branch.
+			if (this_token.symbol == SYM_MAYBE)
+			{
+				++stack_count; // Put unset back on the stack.
+				this_postfix = this_token.circuit_token;
+				continue;
+			}
 			if (this_token.symbol != SYM_ASSIGN) // Anything other than := is not permitted.
 				goto abort_with_exception;
 		}
@@ -697,6 +704,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			// result of the comma's left-hand sub-statement.  At this point the right-hand sub-statement
 			// has not yet been evaluated.  Like C++ and other languages, but unlike AutoHotkey v1, the
 			// rightmost operand is preserved, not the leftmost.
+			continue;
+
+		case SYM_MAYBE:
+			++stack_count; // right was already confirmed to not be SYM_MISSING, so just put it back on the stack.
 			continue;
 
 		default:
@@ -727,11 +738,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				{
 					// This will be the final result of this AND/OR because it's right branch was
 					// discarded above without having been evaluated nor any of its functions called:
-					this_token.CopyValueFrom(right);
+					++stack_count; // It's already at stack[stack_count], so this "puts it back" on the stack.
 					// Any SYM_OBJECT on our stack was already put into to_free[], so if this is SYM_OBJECT,
 					// there's no need to do anything; we actually MUST NOT AddRef() unless we also put it
 					// into to_free[].
-					break;
 				}
 			}
 			else

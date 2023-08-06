@@ -373,6 +373,7 @@ struct DerefType
 		bool terminal; // DT_STRING
 		SymbolType symbol; // DT_WORDOP
 		int int_value; // DT_CONST_INT
+		LPCTSTR error_marker; // DT_DOUBLE, DT_DOTPERCENT
 	};
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
@@ -390,9 +391,6 @@ struct CallSite
 	
 	bool is_variadic() { return flags & EIF_VARIADIC; }
 	void is_variadic(bool b) { if (b) flags |= EIF_VARIADIC; else flags &= ~EIF_VARIADIC; }
-
-	bool maybe_unset() { return flags & EIF_MAYBE_UNSET; }
-	void maybe_unset(bool b) { if (b) flags |= EIF_MAYBE_UNSET; else flags &= ~EIF_MAYBE_UNSET; }
 	
 	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
@@ -871,6 +869,7 @@ public:
 	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("%+-\n") // L31: Used in a few places where '.' needs special treatment.
 	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT _T(".") // L31: Used in expressions where '.' is always an operator.
 	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS _T("\"'")
+	#define EXPR_SYMBOLS_AFTER_MAYBE _T("),]}:?") // Excludes '.', which needs more complicated logic.
 	// The following HOTSTRING option recognizer is kept somewhat forgiving/non-specific for backward compatibility
 	// (e.g. scripts may have some invalid hotstring options, which are simply ignored).  This definition is here
 	// because it's related to continuation line symbols. Also, avoid ever adding "&" to hotstring options because
