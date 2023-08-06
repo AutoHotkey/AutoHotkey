@@ -594,6 +594,7 @@ enum DllArgTypes {
 	, DLL_ARG_FLOAT
 	, DLL_ARG_DOUBLE
 	, DLL_ARG_WSTR
+	, DLL_ARG_STRUCT
 	, DLL_ARG_STR  = UorA(DLL_ARG_WSTR, DLL_ARG_ASTR)
 	, DLL_ARG_xSTR = UorA(DLL_ARG_ASTR, DLL_ARG_WSTR) // To simplify some sections.
 };  // Some sections might rely on DLL_ARG_INVALID being 0.

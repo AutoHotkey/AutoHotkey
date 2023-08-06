@@ -64,9 +64,16 @@ struct DYNAPARM
 	// Might help reduce struct size to keep other members last and adjacent to each other (due to
 	// 8-byte alignment caused by the presence of double and __int64 members in the union above).
 	DllArgTypes type;
-	bool passed_by_address;
-	bool is_unsigned; // Allows return value and output parameters to be interpreted as unsigned vs. signed.
-	bool is_hresult; // Only used for the return value.
+	union
+	{
+		int struct_size;
+		struct
+		{
+			bool passed_by_address;
+			bool is_unsigned; // Allows return value and output parameters to be interpreted as unsigned vs. signed.
+			bool is_hresult; // Only used for the return value.
+		};
+	};
 };
 
 #ifdef _WIN64
@@ -90,9 +97,9 @@ static inline UINT_PTR DynaParamToElement(DYNAPARM& parm)
 
 #ifdef WIN32_PLATFORM
 DYNARESULT DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException
-	, void *aRet, int aRetSize)
+	, void *&aRet, int aRetSize, DWORD aExtraStackSize = 0)
 #elif defined(_WIN64)
-DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException)
+DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException, void*& aRet, int aRetSize)
 #else
 #error DllCall not supported on this platform
 #endif
@@ -109,19 +116,19 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 
 	// Declaring all variables early should help minimize stack interference of C code with asm.
 	DWORD *our_stack;
-    int param_size;
-	DWORD stack_dword, our_stack_size = 0; // Both might have to be DWORD for _asm.
-	BYTE *cp;
-    DWORD esp_start, esp_end, dwEAX, dwEDX;
+	// Used to read the structure
+	DWORD *pdword;
+	DWORD esp_start, esp_end; // , dwEAX, dwEDX;
 	int i, esp_delta; // Declare this here rather than later to prevent C code from interfering with esp.
 
 	// Reserve enough space on the stack to handle the worst case of our args (which is currently a
 	// maximum of 8 bytes per arg). This avoids any chance that compiler-generated code will use
 	// the stack in a way that disrupts our insertion of args onto the stack.
-	DWORD reserved_stack_size = aParamCount * 8;
+	DWORD reserved_stack_size = aParamCount * 8 + aExtraStackSize;
 	_asm
 	{
 		mov our_stack, esp  // our_stack is the location where we will write our args (bypassing "push").
+		mov esp_start, esp  // For detecting whether a DC_CALL_STD function was sent too many or too few args.
 		sub esp, reserved_stack_size  // The stack grows downward, so this "allocates" space on the stack.
 	}
 
@@ -130,37 +137,38 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	for (i = aParamCount - 1; i > -1; --i)
 	{
 		DYNAPARM &this_param = aParam[i]; // For performance and convenience.
-		// Push the arg or its address onto the portion of the stack that was reserved for our use above.
-		if (this_param.passed_by_address)
+		if (this_param.type == DLL_ARG_STRUCT)
 		{
-			stack_dword = (DWORD)(size_t)&this_param.value_int; // Any union member would work.
-			--our_stack;              // ESP = ESP - 4
-			*our_stack = stack_dword; // SS:[ESP] = stack_dword
-			our_stack_size += 4;      // Keep track of how many bytes are on our reserved portion of the stack.
+			int& size = this_param.struct_size;
+			ASSERT(!(size % 4));
+			for (pdword = (DWORD*)(this_param.value_uintptr + size); size; size -= 4)
+				*--our_stack = *--pdword;
 		}
+		// Push the arg or its address onto the portion of the stack that was reserved for our use above.
+		else if (this_param.passed_by_address)
+			*--our_stack = (DWORD)&this_param.value_int; // Any union member would work.
 		else // this_param's value is contained directly inside the union.
 		{
-			param_size = (this_param.type == DLL_ARG_INT64 || this_param.type == DLL_ARG_DOUBLE) ? 8 : 4;
-			our_stack_size += param_size; // Must be done before our_stack_size is decremented below.  Keep track of how many bytes are on our reserved portion of the stack.
-			cp = (BYTE *)&this_param.value_int + param_size - 4; // Start at the right side of the arg and work leftward.
-			while (param_size > 0)
+			if (this_param.type == DLL_ARG_INT64 || this_param.type == DLL_ARG_DOUBLE)
 			{
-				stack_dword = *(DWORD *)cp;  // Get first four bytes
-				cp -= 4;                     // Next part of argument
-				--our_stack;                 // ESP = ESP - 4
-				*our_stack = stack_dword;    // SS:[ESP] = stack_dword
-				param_size -= 4;
+				our_stack -= 2;
+				*(__int64*)our_stack = this_param.value_int64;
 			}
+			else
+				*--our_stack = this_param.value_uintptr;
 		}
     }
 
-	if ((aRet != NULL) && ((aFlags & DC_BORLAND) || (aRetSize > 8)))
+	if (aRet)
 	{
-		// Return value isn't passed through registers, memory copy
-		// is performed instead. Pass the pointer as hidden arg.
-		our_stack_size += 4;       // Add stack size
-		--our_stack;               // ESP = ESP - 4
-		*our_stack = (DWORD)(size_t)aRet;  // SS:[ESP] = pMem
+		if (aRetSize == 1 || aRetSize == 2 || aRetSize == 4 || aRetSize == 8)
+			aRet = NULL;
+		else
+		{
+			// Return value isn't passed through registers, memory copy
+			// is performed instead. Pass the pointer as hidden arg.
+			*--our_stack = (DWORD)aRet;	// ESP = ESP - 4, SS:[ESP] = pMem
+		}
 	}
 
 	// Call the function.
@@ -168,10 +176,8 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	{
 		_asm
 		{
-			add esp, reserved_stack_size // Restore to original position
-			mov esp_start, esp      // For detecting whether a DC_CALL_STD function was sent too many or too few args.
-			sub esp, our_stack_size // Adjust ESP to indicate that the args have already been pushed onto the stack.
-			call [aFunction]        // Stack is now properly built, we can call the function
+			mov esp, our_stack	   // Adjust ESP to indicate that the args have already been pushed onto the stack.
+			call[aFunction]        // Stack is now properly built, we can call the function
 		}
 	}
 	__except(EXCEPTION_EXECUTE_HANDLER)
@@ -194,8 +200,6 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		// and even for CDECL, the following line restores esp to what it was before we pushed the
 		// function's args onto the stack, which in the case of DC_CALL_STD helps prevent crashes
 		// due to too many or to few args having been passed.
-		mov dwEAX, eax          // Save eax/edx registers
-		mov dwEDX, edx
 	}
 
 	// Possibly adjust stack and read return values.
@@ -210,35 +214,32 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	{
 		_asm
 		{
-			mov  eax, [dwEAX]
 			mov  DWORD PTR [Res], eax
-			mov  edx, [dwEDX]
 			mov  DWORD PTR [Res + 4], edx
-		}
-	}
-	else if (((aFlags & DC_BORLAND) == 0) && (aRetSize <= 8))
-	{
-		// Microsoft optimized less than 8-bytes structure passing
-        _asm
-		{
-			mov ecx, DWORD PTR [aRet]
-			mov eax, [dwEAX]
-			mov DWORD PTR [ecx], eax
-			mov edx, [dwEDX]
-			mov DWORD PTR [ecx + 4], edx
 		}
 	}
 
 #endif // WIN32_PLATFORM
 #ifdef _WIN64
 
-	int params_left = aParamCount;
+	int params_left = aParamCount, i = 0;
 	DWORD_PTR regArgs[4];
 	DWORD_PTR* stackArgs = NULL;
 	size_t stackArgsSize = 0;
 
+	if (aRet)
+	{
+		if (aRetSize == 1 || aRetSize == 2 || aRetSize == 4 || aRetSize == 8)
+			aRet = NULL;
+		else
+		{
+			// Return value isn't passed through registers, memory copy
+			// is performed instead. Pass the pointer as hidden arg.
+			regArgs[i++] = (DWORD_PTR)aRet;
+		}
+	}
 	// The first four parameters are passed in x64 through registers... like ARM :D
-	for(int i = 0; (i < 4) && params_left; i++, params_left--)
+	for(; (i < 4) && params_left; i++, params_left--)
 		regArgs[i] = DynaParamToElement(aParam[i]);
 
 	// Copy the remaining parameters
@@ -370,8 +371,14 @@ void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
 	case 'w': if (!_tcsicmp(buf, _T("WStr")))	{ aDynaParam.type = DLL_ARG_WSTR; return; } break;
 	case 'c': if (!_tcsicmp(buf, _T("Char")))	{ aDynaParam.type = DLL_ARG_CHAR; return; } break;
 	}
-	// Since above didn't "return", the type is invalid.
-	aDynaParam.type = DLL_ARG_INVALID; 
+	int b = 0;
+	if (!aDynaParam.passed_by_address && !aDynaParam.is_unsigned && (isdigit(buf[b]) || !_tcsnicmp(buf, _T("Struct"), b = 6) && isdigit(buf[b]))) {
+		int i = b + 1, n = buf[b] - '0';
+		while (isdigit(buf[i])) n = n * 10 + (buf[i++] - '0');
+		aDynaParam.struct_size = n;
+		aDynaParam.type = n && buf[i] == 0 ? DLL_ARG_STRUCT : DLL_ARG_INVALID;
+	}
+	else aDynaParam.type = DLL_ARG_INVALID;
 }
 
 
@@ -549,9 +556,37 @@ BIF_DECL(BIF_DllCall)
 
 	// Determine the type of return value.
 	DYNAPARM return_attrib = {0}; // Init all to default in case ConvertDllArgType() isn't called below. This struct holds the type and other attributes of the function's return value.
+	void* return_struct_ptr = nullptr;
+	int return_struct_size = 0;
 #ifdef WIN32_PLATFORM
 	int dll_call_mode = DC_CALL_STD; // Set default.  Can be overridden to DC_CALL_CDECL and flags can be OR'd into it.
+	int struct_extra_size = 0;
 #endif
+	
+#ifdef UNICODE
+#define UorA_(u, a) u
+#else
+#define UorA_(u, a) a
+#endif // UNICODE
+	// for Unicode <-> ANSI charset conversion
+	UorA_(CStringA**, CStringW**) pStr;
+	struct _AutoFree {
+		HMODULE hmodule_to_free;
+		BufferObject* return_struct_obj;
+		UorA_(CStringA**, CStringW**) ptr;
+		int len;
+		~_AutoFree() {
+			for (int i = 0; i < len; i++)
+				if (ptr[i])
+					delete ptr[i];
+			if (return_struct_obj)
+				return_struct_obj->Release();
+			if (hmodule_to_free)
+				FreeLibrary(hmodule_to_free);
+		}
+	} free_after_exit{0};	// Avoid memory leaks when _f_throw_xxx
+#undef UorA_
+
 	if ( !(aParamCount % 2) ) // An even number of parameters indicates the return type has been omitted. aParamCount excludes DllCall's first parameter at this point.
 	{
 		return_attrib.type = DLL_ARG_INT;
@@ -587,8 +622,16 @@ BIF_DECL(BIF_DllCall)
 		}
 		else
 			ConvertDllArgType(return_type_string, return_attrib);
-		if (return_attrib.type == DLL_ARG_INVALID)
-			_f_throw_value(ERR_INVALID_RETURN_TYPE);
+		if (return_attrib.type == DLL_ARG_INVALID) {	// integer is considered structure size
+			int size;
+			if (TokenIsPureNumeric(token) != SYM_INTEGER || (size = (int)TokenToInt64(token)) < 1)
+				_f_throw_value(ERR_INVALID_RETURN_TYPE);
+			return_attrib.type = DLL_ARG_STRUCT;
+			return_struct_size = size;
+		}
+		else if (return_attrib.type == DLL_ARG_STRUCT)
+			return_struct_size = return_attrib.struct_size, return_attrib.struct_size = 0;
+
 has_valid_return_type:
 		--aParamCount;  // Remove the last parameter from further consideration.
 #ifdef WIN32_PLATFORM
@@ -600,6 +643,13 @@ has_valid_return_type:
 				dll_call_mode |= DC_RETVAL_MATH4;
 		}
 #endif
+	}
+
+	if (return_struct_size) {
+		if (return_struct_ptr = malloc(return_struct_size))
+			free_after_exit.return_struct_obj = BufferObject::Create(return_struct_ptr, return_struct_size);
+		else
+			_f_throw_oom;
 	}
 
 	// Using stack memory, create an array of dll args large enough to hold the actual number of args present.
@@ -614,14 +664,11 @@ has_valid_return_type:
 
 	LPTSTR arg_type_string;
 	int i = arg_count * sizeof(void *);
-	// for Unicode <-> ANSI charset conversion
-#ifdef UNICODE
-	CStringA **pStr = (CStringA **)
-#else
-	CStringW **pStr = (CStringW **)
-#endif
-	_alloca(i); // _alloca vs malloc can make a significant difference to performance in some cases.
+	
+	pStr = UorA(CStringA**, CStringW**)_alloca(i); // _alloca vs malloc can make a significant difference to performance in some cases.
 	memset(pStr, 0, i);
+	free_after_exit.ptr = pStr;
+	free_after_exit.len = arg_count;
 
 	// Above has already ensured that after the first parameter, there are either zero additional parameters
 	// or an even number of them.  In other words, each arg type will have an arg value to go with it.
@@ -633,11 +680,16 @@ has_valid_return_type:
 
 		arg_type_string = TokenToString(*aParam[i]); // aBuf not needed since numbers and "" are equally invalid.
 		ConvertDllArgType(arg_type_string, this_dyna_param);
-		if (this_dyna_param.type == DLL_ARG_INVALID)
-			_f_throw_value(ERR_INVALID_ARG_TYPE);
+		if (this_dyna_param.type == DLL_ARG_INVALID) {
+			int size;
+			if (TokenIsPureNumeric(*aParam[i]) != SYM_INTEGER || (size = (int)TokenToInt64(*aParam[i])) < 1)
+				_f_throw_value(ERR_INVALID_ARG_TYPE);
+			this_dyna_param.type = DLL_ARG_STRUCT;
+			this_dyna_param.struct_size = size;
+		}
 
 		IObject *this_param_obj = TokenToObject(*aParam[i + 1]);
-		if (this_param_obj)
+		if (this_param_obj && this_dyna_param.type != DLL_ARG_STRUCT)
 		{
 			if ((this_dyna_param.passed_by_address || this_dyna_param.type == DLL_ARG_STR)
 				&& dynamic_cast<VarRef*>(this_param_obj))
@@ -722,6 +774,43 @@ has_valid_return_type:
 			if (this_dyna_param.type == DLL_ARG_FLOAT)
 				this_dyna_param.value_float = (float)this_dyna_param.value_double;
 			break;
+			
+		case DLL_ARG_STRUCT: {
+			if (this_param_obj) {
+				GetDllArgObjectPtr(aResultToken, this_param_obj, this_dyna_param.value_uintptr);
+				if (aResultToken.Exited())
+					return;
+			}
+			else if (TokenIsPureNumeric(this_param) == SYM_INTEGER)
+				this_dyna_param.value_int64 = TokenToInt64(this_param);
+			else
+				_o_throw_type(_T("Integer"), this_param);
+			if (this_dyna_param.value_uintptr < 65536)
+				_o_throw_value(ERR_INVALID_VALUE);
+
+			int& size = this_dyna_param.struct_size;
+#ifdef _WIN64
+			this_dyna_param.type = DLL_ARG_INT64;
+			if (size <= 8)
+				this_dyna_param.value_int64 = *(__int64*)this_dyna_param.ptr;
+			size = 0;
+#else
+			size = (size + sizeof(void*) - 1) & -(int)sizeof(void*);
+			if (size > 8)
+				struct_extra_size += size - 8;
+			else if (size > 4) {
+				this_dyna_param.type = DLL_ARG_INT64;
+				this_dyna_param.value_int64 = *(__int64*)this_dyna_param.ptr;
+				size = 0;
+			}
+			else {
+				this_dyna_param.type = DLL_ARG_INT;
+				this_dyna_param.value_int = *(int*)this_dyna_param.ptr;
+				size = 0;
+			}
+#endif // _WIN64
+			break;
+		}
 
 		default: // Namely:
 		//case DLL_ARG_INT:
@@ -750,12 +839,12 @@ has_valid_return_type:
 	}
 	else if (!function) // The function's address hasn't yet been determined.
 	{
-		function = GetDllProcAddress(function_name, &hmodule_to_free);
+		function = GetDllProcAddress(function_name, &free_after_exit.hmodule_to_free);
 		if (!function)
 		{
 			// GetDllProcAddress has thrown the appropriate exception.
 			aResultToken.SetExitResult(FAIL);
-			goto end;
+			return;
 		}
 	}
 
@@ -765,10 +854,11 @@ has_valid_return_type:
 	DWORD exception_occurred; // Must not be named "exception_code" to avoid interfering with MSVC macros.
 	DYNARESULT return_value;  // Doing assignment (below) as separate step avoids compiler warning about "goto end" skipping it.
 #ifdef WIN32_PLATFORM
-	return_value = DynaCall(dll_call_mode, function, dyna_param, arg_count, exception_occurred, NULL, 0);
+	return_value = DynaCall(dll_call_mode, function, dyna_param, arg_count, exception_occurred
+		, return_struct_ptr, return_struct_size, struct_extra_size + (return_struct_ptr ? 4 : 0));
 #endif
 #ifdef _WIN64
-	return_value = DynaCall(function, dyna_param, arg_count, exception_occurred);
+	return_value = DynaCall(function, dyna_param, arg_count, exception_occurred, return_struct_ptr, return_struct_size);
 #endif
 
 	if (*Var::sEmptyString)
@@ -922,6 +1012,11 @@ has_valid_return_type:
 			aResultToken.symbol = SYM_FLOAT; // There is no SYM_DOUBLE since all floats are stored as doubles.
 			aResultToken.value_double = return_value.Double;
 			break;
+		case DLL_ARG_STRUCT:
+			if (!return_struct_ptr)
+				memcpy(free_after_exit.return_struct_obj->Data(), &return_value.Int64, return_struct_size);
+			aResultToken.SetValue(free_after_exit.return_struct_obj);
+			break;
 		//default: // Should never be reached unless there's a bug.
 		//	aResultToken.symbol = SYM_STRING;
 		//	aResultToken.marker = "";
@@ -1013,12 +1108,8 @@ has_valid_return_type:
 		}
 	}
 
-end:
-	for (arg_count = (aParamCount / 2) - 1; arg_count >= 0; --arg_count)
-		if (pStr[arg_count])
-			delete pStr[arg_count];
-	if (hmodule_to_free)
-		FreeLibrary(hmodule_to_free);
+	if (aResultToken.symbol == SYM_OBJECT)
+		free_after_exit.return_struct_obj = nullptr;	// Avoid buffer obj be released
 }
 
 #endif
