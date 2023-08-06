@@ -727,6 +727,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			if (token_for_recursion.symbol == SYM_OBJECT)
 				token_for_recursion.object->AddRef();
 		}
+		token_for_recursion.mem_to_free = nullptr;
 	}
 	else if (etter) // Property with getter/setter.
 	{
