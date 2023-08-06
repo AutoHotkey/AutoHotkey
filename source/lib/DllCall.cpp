@@ -374,6 +374,7 @@ void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
 	aDynaParam.type = DLL_ARG_INVALID; 
 }
 
+
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
 {
 	int i;
@@ -466,6 +467,21 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 	return function;
 }
 
+
+void GetDllArgObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr)
+{
+	if (BufferObject::IsInstanceExact(obj))
+	{
+		aPtr = (size_t)((BufferObject *)obj)->Data();
+		return;
+	}
+	auto result = GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken, obj->IsOfType(Object::sPrototype));
+	if (result != INVOKE_NOT_HANDLED)
+		return;
+	Object *b = (Object *)obj;
+	if (b->GetDataPtr(aPtr) != OK)
+		aResultToken.UnknownMemberError(ExprTokenType(obj), IT_GET, _T("Ptr"));
+}
 
 
 BIF_DECL(BIF_DllCall)
@@ -635,7 +651,7 @@ has_valid_return_type:
 				// Support Buffer.Ptr, but only for "Ptr" type.  All other types are reserved for possible
 				// future use, which might be general like obj.ToValue(), or might be specific to DllCall
 				// or the particular type of this arg (Int, Float, etc.).
-				GetBufferObjectPtr(aResultToken, this_param_obj, this_dyna_param.value_uintptr);
+				GetDllArgObjectPtr(aResultToken, this_param_obj, this_dyna_param.value_uintptr);
 				if (aResultToken.Exited())
 					return;
 				continue;
