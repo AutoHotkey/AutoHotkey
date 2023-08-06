@@ -497,7 +497,6 @@ BIF_DECL(BIF_DllCall)
 // It has also ensured that the array has exactly aParamCount items in it.
 // Author: Marcus Sonntag (Ultra)
 {
-	HMODULE hmodule_to_free = NULL; // Set default in case of early goto; mostly for maintainability.
 	LPTSTR function_name = NULL;
 	void *function = NULL; // Will hold the address of the function to be called.
 	int vf_index = -1; // Set default: not ComCall.
