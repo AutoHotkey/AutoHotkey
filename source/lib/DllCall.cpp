@@ -620,17 +620,22 @@ BIF_DECL(BIF_DllCall)
 			return_attrib.is_hresult = true;
 			//return_attrib.is_unsigned = true; // Not relevant since an exception is thrown for any negative value.
 		}
-		else
-			ConvertDllArgType(return_type_string, return_attrib);
-		if (return_attrib.type == DLL_ARG_INVALID) {	// integer is considered structure size
-			int size;
-			if (TokenIsPureNumeric(token) != SYM_INTEGER || (size = (int)TokenToInt64(token)) < 1)
-				_f_throw_value(ERR_INVALID_RETURN_TYPE);
-			return_attrib.type = DLL_ARG_STRUCT;
-			return_struct_size = size;
+		else if (TokenIsPureNumeric(token) == SYM_INTEGER)
+		{
+			__int64 size = TokenToInt64(token);
+			// See the arg processing section below for comments.
+			return_attrib.type = (size >= 1 && size < 65536) ? DLL_ARG_STRUCT : DLL_ARG_INVALID;
+			return_struct_size = (int)size;
+			return_type_string = nullptr; // To help detect errors.
 		}
-		else if (return_attrib.type == DLL_ARG_STRUCT)
-			return_struct_size = return_attrib.struct_size, return_attrib.struct_size = 0;
+		else
+		{
+			ConvertDllArgType(return_type_string, return_attrib);
+			if (return_attrib.type == DLL_ARG_STRUCT)
+				return_struct_size = return_attrib.struct_size, return_attrib.struct_size = 0;
+		}
+		if (return_attrib.type == DLL_ARG_INVALID)
+			_f_throw_value(ERR_INVALID_RETURN_TYPE);
 
 has_valid_return_type:
 		--aParamCount;  // Remove the last parameter from further consideration.
@@ -678,15 +683,23 @@ has_valid_return_type:
 		// Store each arg into a dyna_param struct, using its arg type to determine how.
 		DYNAPARM &this_dyna_param = dyna_param[arg_count];
 
-		arg_type_string = TokenToString(*aParam[i]); // aBuf not needed since numbers and "" are equally invalid.
-		ConvertDllArgType(arg_type_string, this_dyna_param);
-		if (this_dyna_param.type == DLL_ARG_INVALID) {
-			int size;
-			if (TokenIsPureNumeric(*aParam[i]) != SYM_INTEGER || (size = (int)TokenToInt64(*aParam[i])) < 1)
-				_f_throw_value(ERR_INVALID_ARG_TYPE);
-			this_dyna_param.type = DLL_ARG_STRUCT;
-			this_dyna_param.struct_size = size;
+		if (TokenIsPureNumeric(*aParam[i]) == SYM_INTEGER)
+		{
+			__int64 size = TokenToInt64(*aParam[i]);
+			// Prohibiting size >= 64KB should detect any cases where a pointer value is unintentionally
+			// being passed as an arg type, while not actually imposing a hard limit since larger numbers
+			// can be passed as strings.  Note that the stack itself has a limit of 1-8MB.
+			this_dyna_param.type = (size >= 1 && size < 65536) ? DLL_ARG_STRUCT : DLL_ARG_INVALID;
+			this_dyna_param.struct_size = (int)size;
+			arg_type_string = nullptr; // To help detect errors.
 		}
+		else
+		{
+			arg_type_string = TokenToString(*aParam[i]); // aBuf not needed since floating-point and "" are equally invalid.
+			ConvertDllArgType(arg_type_string, this_dyna_param);
+		}
+		if (this_dyna_param.type == DLL_ARG_INVALID)
+			_f_throw_value(ERR_INVALID_ARG_TYPE);
 
 		IObject *this_param_obj = TokenToObject(*aParam[i + 1]);
 		if (this_param_obj && this_dyna_param.type != DLL_ARG_STRUCT)
