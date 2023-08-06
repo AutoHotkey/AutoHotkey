@@ -280,7 +280,10 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 
 #ifdef WIN32_PLATFORM
 	esp_delta = esp_start - esp_end; // Positive number means too many args were passed, negative means too few.
-	if (esp_delta && (aFlags & DC_CALL_STD))
+	// For v2.1, DC_CALL_STD is omitted from aFlags by default so CDecl can be omitted in all cases.
+	// Errors are still detected for stdcall functions that accept at least 1 parameter.  aFlags is
+	// ignored when esp_end != (DWORD)our_stack since that means it really isn't CDecl.
+	if (esp_delta && ((aFlags & DC_CALL_STD) || esp_end != (DWORD)our_stack))
 	{
 		_itot(esp_delta, buf, 10);
 		if (esp_delta > 0)
@@ -562,7 +565,7 @@ BIF_DECL(BIF_DllCall)
 	void* return_struct_ptr = nullptr;
 	int return_struct_size = 0;
 #ifdef WIN32_PLATFORM
-	int dll_call_mode = DC_CALL_STD; // Set default.  Can be overridden to DC_CALL_CDECL and flags can be OR'd into it.
+	int dll_call_mode = 0; // Set default.  Can be overridden to DC_CALL_CDECL and flags can be OR'd into it.
 	int struct_extra_size = 0;
 #endif
 	
