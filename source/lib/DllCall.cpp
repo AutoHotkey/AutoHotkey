@@ -118,7 +118,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	DWORD *our_stack;
 	// Used to read the structure
 	DWORD *pdword;
-	DWORD esp_start, esp_end; // , dwEAX, dwEDX;
+	DWORD esp_start, esp_end, dwEAX, dwEDX;
 	int i, esp_delta; // Declare this here rather than later to prevent C code from interfering with esp.
 
 	// Reserve enough space on the stack to handle the worst case of our args (which is currently a
@@ -200,6 +200,8 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		// and even for CDECL, the following line restores esp to what it was before we pushed the
 		// function's args onto the stack, which in the case of DC_CALL_STD helps prevent crashes
 		// due to too many or to few args having been passed.
+		mov dwEAX, eax          // eax/edx must be saved because the compiler may reuse them for the checks below.
+		mov dwEDX, edx
 	}
 
 	// Possibly adjust stack and read return values.
@@ -214,7 +216,9 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	{
 		_asm
 		{
+			mov  eax, [dwEAX]
 			mov  DWORD PTR [Res], eax
+			mov  edx, [dwEDX]
 			mov  DWORD PTR [Res + 4], edx
 		}
 	}
