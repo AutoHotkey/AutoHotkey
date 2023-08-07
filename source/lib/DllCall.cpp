@@ -96,10 +96,10 @@ static inline UINT_PTR DynaParamToElement(DYNAPARM& parm)
 #endif
 
 #ifdef WIN32_PLATFORM
-DYNARESULT DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException
-	, void *&aRet, int aRetSize, DWORD aExtraStackSize = 0)
+void DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException
+	, void *aRet, int aRetSize, DWORD aExtraStackSize = 0)
 #elif defined(_WIN64)
-DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException, void*& aRet, int aRetSize)
+void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException, void *aRet, int aRetSize)
 #else
 #error DllCall not supported on this platform
 #endif
@@ -110,7 +110,8 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	aException = 0;  // Set default output parameter for caller.
 	SetLastError(g->LastError); // v1.0.46.07: In case the function about to be called doesn't change last-error, this line serves to retain the script's previous last-error rather than some arbitrary one produced by AutoHotkey's own internal API calls.  This line has no measurable impact on performance.
 
-    DYNARESULT Res = {0}; // This struct is to be returned to caller by value.
+	DYNARESULT Res = {0};
+	bool register_return = (aRetSize < 3 || aRetSize == 4 || aRetSize == 8); // i.e. 0, 1, 2, 4 or 8.
 
 #ifdef WIN32_PLATFORM
 
@@ -118,7 +119,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	DWORD *our_stack;
 	// Used to read the structure
 	DWORD *pdword;
-	DWORD esp_start, esp_end, dwEAX, dwEDX;
+	DWORD esp_start, esp_end;
 	int i, esp_delta; // Declare this here rather than later to prevent C code from interfering with esp.
 
 	// Reserve enough space on the stack to handle the worst case of our args (which is currently a
@@ -159,16 +160,11 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		}
     }
 
-	if (aRet)
+	if (!register_return)
 	{
-		if (aRetSize == 1 || aRetSize == 2 || aRetSize == 4 || aRetSize == 8)
-			aRet = NULL;
-		else
-		{
-			// Return value isn't passed through registers, memory copy
-			// is performed instead. Pass the pointer as hidden arg.
-			*--our_stack = (DWORD)aRet;	// ESP = ESP - 4, SS:[ESP] = pMem
-		}
+		// Return value isn't passed through registers, memory copy
+		// is performed instead. Pass the pointer as hidden arg.
+		*--our_stack = (DWORD)aRet;	// ESP = ESP - 4, SS:[ESP] = pMem
 	}
 
 	// Call the function.
@@ -200,8 +196,8 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		// and even for CDECL, the following line restores esp to what it was before we pushed the
 		// function's args onto the stack, which in the case of DC_CALL_STD helps prevent crashes
 		// due to too many or to few args having been passed.
-		mov dwEAX, eax          // eax/edx must be saved because the compiler may reuse them for the checks below.
-		mov dwEDX, edx
+		mov DWORD PTR [Res], eax // These will be overwritten if return type is floating-point.
+		mov DWORD PTR [Res + 4], edx // Note that eax/edx might be reused by the if()s below.
 	}
 
 	// Possibly adjust stack and read return values.
@@ -212,16 +208,6 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		_asm fstp dword ptr [Res]
 	else if (aFlags & DC_RETVAL_MATH8)
 		_asm fstp qword ptr [Res]
-	else if (!aRet)
-	{
-		_asm
-		{
-			mov  eax, [dwEAX]
-			mov  DWORD PTR [Res], eax
-			mov  edx, [dwEDX]
-			mov  DWORD PTR [Res + 4], edx
-		}
-	}
 
 #endif // WIN32_PLATFORM
 #ifdef _WIN64
@@ -231,16 +217,11 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	DWORD_PTR* stackArgs = NULL;
 	size_t stackArgsSize = 0;
 
-	if (aRet)
+	if (!register_return)
 	{
-		if (aRetSize == 1 || aRetSize == 2 || aRetSize == 4 || aRetSize == 8)
-			aRet = NULL;
-		else
-		{
-			// Return value isn't passed through registers, memory copy
-			// is performed instead. Pass the pointer as hidden arg.
-			regArgs[i++] = (DWORD_PTR)aRet;
-		}
+		// Return value isn't passed through registers, memory copy
+		// is performed instead. Pass the pointer as hidden arg.
+		regArgs[i++] = (DWORD_PTR)aRet;
 	}
 	// The first four parameters are passed in x64 through registers... like ARM :D
 	for(; (i < 4) && params_left; i++, params_left--)
@@ -267,6 +248,9 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	}
 
 #endif
+
+	if (register_return) // aRet wasn't passed as a "hidden" parameter.
+		memcpy(aRet, &Res, aRetSize ? aRetSize : 8); // aRetSize == 0 indicates aRet points to a DYNARESULT.
 
 	// v1.0.42.03: The following supports A_LastError. It's called even if an exception occurred because it
 	// might add value in some such cases.  Benchmarks show that this has no measurable impact on performance.
@@ -303,8 +287,6 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		_ultot(aException, buf + 2, 16);
 		g_script.ThrowRuntimeException(ERR_EXCEPTION, buf);
 	}
-
-	return Res;
 }
 
 
@@ -873,11 +855,11 @@ has_valid_return_type:
 	DWORD exception_occurred; // Must not be named "exception_code" to avoid interfering with MSVC macros.
 	DYNARESULT return_value;  // Doing assignment (below) as separate step avoids compiler warning about "goto end" skipping it.
 #ifdef WIN32_PLATFORM
-	return_value = DynaCall(dll_call_mode, function, dyna_param, arg_count, exception_occurred
-		, return_struct_ptr, return_struct_size, struct_extra_size + (return_struct_ptr ? 4 : 0));
+	DynaCall(dll_call_mode, function, dyna_param, arg_count, exception_occurred
+		, return_struct_size ? return_struct_ptr : &return_value, return_struct_size, struct_extra_size + (return_struct_ptr ? 4 : 0));
 #endif
 #ifdef _WIN64
-	return_value = DynaCall(function, dyna_param, arg_count, exception_occurred, return_struct_ptr, return_struct_size);
+	DynaCall(function, dyna_param, arg_count, exception_occurred, return_struct_size ? return_struct_ptr : &return_value, return_struct_size);
 #endif
 
 	if (*Var::sEmptyString)
@@ -1032,8 +1014,6 @@ has_valid_return_type:
 			aResultToken.value_double = return_value.Double;
 			break;
 		case DLL_ARG_STRUCT:
-			if (!return_struct_ptr)
-				memcpy(free_after_exit.return_struct_obj->Data(), &return_value.Int64, return_struct_size);
 			aResultToken.SetValue(free_after_exit.return_struct_obj);
 			break;
 		//default: // Should never be reached unless there's a bug.
