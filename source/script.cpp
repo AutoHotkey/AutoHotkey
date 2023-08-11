@@ -5868,7 +5868,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 						this_param.default_double = _tstof(buf); // _tstof() vs. ATOF() because PURE_FLOAT is never hexadecimal.
 						break;
 					default: // Not numeric (and also not a quoted string because that was handled earlier).
-						sntprintf(buf, _countof(buf), _T("%s ?? %s := %.*s"), this_param.var->mName, this_param.var->mName, value_length, param_start);
+						sntprintf(buf, _countof(buf), _T("%s ??= %.*s"), this_param.var->mName, value_length, param_start);
 						if (!at_least_one_default_expr)
 						{
 							at_least_one_default_expr = true;
