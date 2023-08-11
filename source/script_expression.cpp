@@ -920,7 +920,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_ASSIGN: // Listed first for performance (it's probably the most common because things like ++ and += aren't expressions when they're by themselves on a line).
 					if (!left.var->Assign(right)) // left.var can be VAR_VIRTUAL in this case.
 						goto abort;
-					if (left.var->Type() != VAR_NORMAL) // VAR_VIRTUAL should not yield SYM_VAR (as some sections of the code wouldn't handle it correctly).
+					if (left.var->Type() != VAR_NORMAL // VAR_VIRTUAL should not yield SYM_VAR (as some sections of the code wouldn't handle it correctly).
+						|| right.symbol == SYM_MISSING) // Subsequent operators/calls (confirmed at load-time as being able to handle `unset`) need SYM_MISSING.
 						this_token.CopyValueFrom(right); // Doing it this way is more maintainable than other methods, and is unlikely to perform much worse.
 					else
 						this_token.SetVar(left.var);
