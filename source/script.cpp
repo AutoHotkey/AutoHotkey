@@ -5720,7 +5720,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 			// so that we can make it automatic here and make variadic properties easier.
 			if (  !(param[1].var = AddVar(_T("value"), 5, &func.mVars, 1, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))  )
 				return FAIL;
-			param[1].default_type = PARAM_DEFAULT_NONE;
+			param[1].default_type = PARAM_DEFAULT_UNSET;
 			param[1].is_byref = false;
 			++param_count;
 			++func.mMinParams;
