@@ -1240,6 +1240,7 @@ ResultType UserMenu::Display(int aX, int aY, optl<BOOL> aWait)
 	mi.dwStyle = 0;
 	GetMenuInfo(mMenu, &mi);
 	bool temp_topmost = false;
+	bool own_by_fore = false;
 	// Temporarily make the menu modeless to allow new threads to launch without preventing the menu from
 	// accepting user input.  If it was already modeless, don't wait for it to close before returning.
 	bool temp_modeless = !(mi.dwStyle & MNS_MODELESS);
@@ -1258,13 +1259,18 @@ ResultType UserMenu::Display(int aX, int aY, optl<BOOL> aWait)
 		// is shown, the menu windows are reordered, and WM_INITMENUPOPUP for the submenu is received
 		// before its window is created.  Making g_hWnd topmost shouldn't be too disruptive because
 		// SetForegroundWindow() already brought it to the front if it was visible.
-		temp_topmost = this == g_script.mTrayMenu && change_fore
+		// Only g_hWnd and GUI windows can own the menu, otherwise WM_(UN)INITPOPUPMENU won't be caught.
+		// Allowing an active GUI window to own the menu ensures the menu appears on top even if the GUI
+		// is topmost, without making g_hWnd topmost.
+		own_by_fore = !change_fore && GuiType::FindGui(fore_win);
+		temp_topmost = !own_by_fore
+			&& (GetWindowLong(fore_win, GWL_EXSTYLE) & WS_EX_TOPMOST)
 			&& !(GetWindowLong(g_hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST);
 		if (temp_topmost)
 			SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 	}
 	g_MenuIsTempTopmost = temp_topmost;
-	TrackPopupMenuEx(mMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y, g_hWnd, NULL);
+	TrackPopupMenuEx(mMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y, own_by_fore ? fore_win : g_hWnd, NULL);
 	if (mi.dwStyle & MNS_MODELESS)
 	{
 		// Default to waiting if the menu was modal upon entry to this function, else not waiting.
