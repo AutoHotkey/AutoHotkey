@@ -3810,6 +3810,19 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return RequirementError(parameter);
 #endif
 	}
+	
+	if (IS_DIRECTIVE_MATCH(_T("#DefaultReturn")))
+	{
+		if (!parameter)
+			return ScriptError(ERR_PARAM1_REQUIRED);
+		if (!_tcsicmp(parameter, _T("unset")))
+			mDefaultReturn = SYM_MISSING;
+		else if (!_tcsicmp(parameter, _T("\"\""))) // Enforce consistency for this back-compat switch; require "" and not ''.
+			mDefaultReturn = SYM_STRING;
+		else
+			return ScriptError(ERR_PARAM1_INVALID, parameter);
+		return CONDITION_TRUE;
+	}
 
 	// Otherwise, report that this line isn't a directive:
 	return CONDITION_FALSE;
@@ -4898,6 +4911,20 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	{
 		mIgnoreNextBlockBegin = false;
 		return OK;
+	}
+	if (aActionType == ACT_RETURN && !aArgc && g->CurrentFunc && mDefaultReturn == SYM_MISSING) // SYM_STRING needs no handling as it is the real default, for now.
+	{
+		aArg = (LPTSTR*)_alloca(sizeof(LPTSTR*));
+		*aArg = _T("unset");
+		aArgc = 1;
+	}
+	else if (aActionType == ACT_BLOCK_END && g->CurrentFunc && mOpenBlock && g->CurrentFunc == mOpenBlock->mAttribute // This is the block-end of a function.
+		&& mDefaultReturn == SYM_MISSING // It should default to unset, and doesn't end with a return.
+		&& !mPendingParentLine // There's no misplaced IF/LOOP/etc. at the end of the function.
+		&& (!(mLastLine->mActionType == ACT_RETURN || mLastLine->mActionType == ACT_THROW) || mLastLine->mParentLine != mOpenBlock)) // It wouldn't be "unreachable".
+	{
+		if (!AddLine(ACT_RETURN, nullptr, 0, nullptr, true)) // The recursive call will detect that this needs to be `return unset`.
+			return FAIL;
 	}
 
 	DerefList deref;  // Will be used to temporarily store the var-deref locations in each arg.

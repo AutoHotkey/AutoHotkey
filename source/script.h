@@ -2814,6 +2814,7 @@ private:
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 	Line *mPendingParentLine, *mPendingRelatedLine;
+	SymbolType mDefaultReturn = SYM_STRING;
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;
 	bool mIgnoreNextBlockBegin;
