@@ -196,7 +196,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_OR_MAYBE, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE for the range checks below.
 #define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && ((symbol) >= SYM_IFF_THEN || (symbol) == SYM_MAYBE)) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
 #define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && ((symbol) >= SYM_IFF_ELSE || (symbol) == SYM_MAYBE))
-#define SYM_MAYBE_IGNORES_ON_STACK(symbol) (SYM_USES_CIRCUIT_TOKEN(symbol) && (symbol) != SYM_IFF_THEN)
+#define SYM_MAYBE_IGNORES_ON_STACK(symbol) (SYM_USES_CIRCUIT_TOKEN(symbol) && (symbol) != SYM_IFF_THEN || (symbol) == SYM_ASSIGN)
 	, SYM_IS
 	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL, SYM_NOTEQUALCASE // =, ==, !=, !==... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 #define IS_EQUALITY_OPERATOR(symbol) (symbol >= SYM_EQUAL && symbol <= SYM_NOTEQUALCASE)

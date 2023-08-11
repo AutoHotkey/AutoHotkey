@@ -9232,7 +9232,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				continue; // Let its own error-checking flag this.
 			if (stack_symbol == SYM_POST_INCREMENT || stack_symbol == SYM_POST_DECREMENT)
 				return LineError(ERR_INVALID_ASSIGNMENT, FAIL, (*stk)->error_reporting_marker);
-			if (  !(stack_symbol == SYM_FUNC || stack_symbol == SYM_ASSIGN || stack_symbol == SYM_MAYBE
+			if (  !(stack_symbol == SYM_FUNC || stack_symbol == SYM_MAYBE
 				|| IS_OPAREN_LIKE(stack_symbol) || stack_symbol == SYM_BEGIN)  )
 				return LineError(_T("This operator's right operand must not be unset."), FAIL, (*stk)->error_reporting_marker);
 			this_postfix->circuit_token = postfix[postfix_count - 1]; // Update the final jump target (has no effect unless chain_end is followed by the else branch of a ternary).
