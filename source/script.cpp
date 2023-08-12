@@ -9252,12 +9252,12 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				}
 			}
 			else if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
-				continue; // Let its own error-checking flag this.
+				//continue; // Relying on the assignment's own error-checking is insufficient for (x := unset) := y.
+				return LineError(ERR_INVALID_ASSIGNMENT, FAIL, inf->error_reporting_marker);
 			else if (  !((infix_symbol == SYM_FUNC || infix_symbol == SYM_DOT) && (inf->callsite->flags & EIF_STACK_MEMBER))  ) // x.%a?.b%
 				return LineError(_T("This operator's left operand must not be unset."), FAIL, infix_symbol == SYM_DYNAMIC ? inf->marker : inf->error_reporting_marker);
-			if (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)
-				continue; // Let its own error-checking flag this.
-			if (stack_symbol == SYM_POST_INCREMENT || stack_symbol == SYM_POST_DECREMENT)
+			if (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT
+				|| stack_symbol == SYM_POST_INCREMENT || stack_symbol == SYM_POST_DECREMENT)
 				return LineError(ERR_INVALID_ASSIGNMENT, FAIL, (*stk)->error_reporting_marker);
 			if (  !(stack_symbol == SYM_FUNC || stack_symbol == SYM_MAYBE
 				|| IS_OPAREN_LIKE(stack_symbol) || stack_symbol == SYM_BEGIN)  )
