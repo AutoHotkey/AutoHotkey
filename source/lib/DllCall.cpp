@@ -545,6 +545,7 @@ BIF_DECL(BIF_DllCall)
 	// Determine the type of return value.
 	DYNAPARM return_attrib = {0}; // Init all to default in case ConvertDllArgType() isn't called below. This struct holds the type and other attributes of the function's return value.
 	void* return_struct_ptr = nullptr;
+	Object *return_class = nullptr, *return_proto = nullptr;
 	int return_struct_size = 0;
 #ifdef WIN32_PLATFORM
 	int dll_call_mode = 0; // Set default.  Can be overridden to DC_CALL_CDECL and flags can be OR'd into it.
@@ -556,24 +557,30 @@ BIF_DECL(BIF_DllCall)
 #else
 #define UorA_(u, a) a
 #endif // UNICODE
-	// for Unicode <-> ANSI charset conversion
-	UorA_(CStringA**, CStringW**) pStr;
 	struct _AutoFree {
 		HMODULE hmodule_to_free;
-		BufferObject* return_struct_obj;
-		UorA_(CStringA**, CStringW**) ptr;
-		int len;
+		IObject** pObj;
+		UorA_(CStringA**, CStringW**) pStr;
+		int nStr, nObj;
 		~_AutoFree() {
-			for (int i = 0; i < len; i++)
-				if (ptr[i])
-					delete ptr[i];
-			if (return_struct_obj)
-				return_struct_obj->Release();
+			for (int i = 0; i < nStr; ++i)
+				if (pStr[i])
+					delete pStr[i];
+			while (nObj)
+				if (pObj[--nObj])
+					pObj[nObj]->Release();
 			if (hmodule_to_free)
 				FreeLibrary(hmodule_to_free);
 		}
 	} free_after_exit{0};	// Avoid memory leaks when _f_throw_xxx
 #undef UorA_
+	int arg_count = aParamCount/2;
+	auto pStr = UorA(CStringA**, CStringW**)_alloca(arg_count * sizeof(void*)); // _alloca vs malloc can make a significant difference to performance in some cases.
+	auto pObj = (IObject**)_alloca((arg_count + 1) * sizeof(IObject*)); // The complexity of combining this with pStr to reduce stack usage doesn't seem worth it.
+	free_after_exit.pStr = pStr;
+	free_after_exit.pObj = pObj;
+	auto &nStr = free_after_exit.nStr;
+	auto &nObj = free_after_exit.nObj;
 
 	if ( !(aParamCount % 2) ) // An even number of parameters indicates the return type has been omitted. aParamCount excludes DllCall's first parameter at this point.
 	{
@@ -616,6 +623,20 @@ BIF_DECL(BIF_DllCall)
 			return_struct_size = (int)size;
 			return_type_string = nullptr; // To help detect errors.
 		}
+		else if (IObject *obj = TokenToObject(token))
+		{
+			if (obj->IsOfType(Object::sPrototype))
+			{
+				return_class = (Object*)obj;
+				obj = return_class->GetOwnPropObj(_T("Prototype"));
+				if (obj && obj->IsOfType(Object::sPrototype))
+				{
+					return_proto = (Object*)obj;
+					if (return_struct_size = (int)return_proto->LockStructSize())
+						return_attrib.type = DLL_ARG_STRUCT;
+				}
+			}
+		}
 		else
 		{
 			ConvertDllArgType(return_type_string, return_attrib);
@@ -638,15 +659,26 @@ has_valid_return_type:
 #endif
 	}
 
-	if (return_struct_size) {
-		if (return_struct_ptr = malloc(return_struct_size))
-			free_after_exit.return_struct_obj = BufferObject::Create(return_struct_ptr, return_struct_size);
+	if (return_struct_size)
+	{
+		if (return_class)
+		{
+			aResultToken.symbol = SYM_STRING; // Set default for Invoke.
+			aResultToken.marker = _T("");
+			auto obj = Object::Create();
+			if (obj->New(aResultToken, aParam + aParamCount, 1) != OK)
+				return; // New releases obj on failure.
+			return_struct_ptr = (void*)obj->DataPtr();
+			pObj[nObj++] = obj;
+			aResultToken.symbol = SYM_INTEGER; // Ensure it is not SYM_OBJECT, for maintainability (in case of early exit due to an error).
+		}
+		else if (return_struct_ptr = malloc(return_struct_size))
+			pObj[nObj++] = BufferObject::Create(return_struct_ptr, return_struct_size);
 		else
 			_f_throw_oom;
 	}
 
 	// Using stack memory, create an array of dll args large enough to hold the actual number of args present.
-	int arg_count = aParamCount/2;
 	DYNAPARM *dyna_param = arg_count ? (DYNAPARM *)_alloca(arg_count * sizeof(DYNAPARM)) : NULL;
 	// Above: _alloca() has been checked for code-bloat and it doesn't appear to be an issue.
 	// Above: Fix for v1.0.36.07: According to MSDN, on failure, this implementation of _alloca() generates a
@@ -654,15 +686,8 @@ has_valid_return_type:
 	// nor is an exception block used since stack overflow in this case should be exceptionally rare (if it
 	// does happen, it would probably mean the script or the program has a design flaw somewhere, such as
 	// infinite recursion).
-
 	LPTSTR arg_type_string;
-	int i = arg_count * sizeof(void *);
-	
-	pStr = UorA(CStringA**, CStringW**)_alloca(i); // _alloca vs malloc can make a significant difference to performance in some cases.
-	memset(pStr, 0, i);
-	free_after_exit.ptr = pStr;
-	free_after_exit.len = arg_count;
-
+	int i;
 	// Above has already ensured that after the first parameter, there are either zero additional parameters
 	// or an even number of them.  In other words, each arg type will have an arg value to go with it.
 	// It has also verified that the dyna_param array is large enough to hold all of the args.
@@ -670,6 +695,7 @@ has_valid_return_type:
 	{
 		// Store each arg into a dyna_param struct, using its arg type to determine how.
 		DYNAPARM &this_dyna_param = dyna_param[arg_count];
+		Object *param_class = nullptr, *param_proto = nullptr;
 
 		if (TokenIsPureNumeric(*aParam[i]) == SYM_INTEGER)
 		{
@@ -680,6 +706,20 @@ has_valid_return_type:
 			this_dyna_param.type = (size >= 1 && size < 65536) ? DLL_ARG_STRUCT : DLL_ARG_INVALID;
 			this_dyna_param.struct_size = (int)size;
 			arg_type_string = nullptr; // To help detect errors.
+		}
+		else if (IObject *obj = TokenToObject(*aParam[i]))
+		{
+			if (obj->IsOfType(Object::sPrototype))
+			{
+				param_class = (Object*)obj;
+				obj = param_class->GetOwnPropObj(_T("Prototype"));
+				if (obj && obj->IsOfType(Object::sPrototype))
+				{
+					param_proto = (Object*)obj;
+					if (this_dyna_param.struct_size = (int)param_proto->LockStructSize())
+						this_dyna_param.type = DLL_ARG_STRUCT;
+				}
+			}
 		}
 		else
 		{
@@ -761,8 +801,8 @@ has_valid_return_type:
 			if (IS_NUMERIC(this_param.symbol) || this_param_obj)
 				_f_throw_type(_T("String"), this_param);
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
-			pStr[arg_count] = new UorA(CStringCharFromWChar,CStringWCharFromChar)(TokenToString(this_param));
-			this_dyna_param.ptr = pStr[arg_count]->GetBuffer();
+			pStr[nStr++] = new UorA(CStringCharFromWChar,CStringWCharFromChar)(TokenToString(this_param));
+			this_dyna_param.ptr = pStr[nStr-1]->GetBuffer();
 			break;
 
 		case DLL_ARG_DOUBLE:
@@ -777,7 +817,38 @@ has_valid_return_type:
 			break;
 			
 		case DLL_ARG_STRUCT: {
-			if (this_param_obj) {
+			if (param_class)
+			{
+				if (!this_param_obj || !this_param_obj->IsOfType(param_proto))
+				{
+					aResultToken.symbol = SYM_STRING; // Set default for Invoke.
+					aResultToken.marker = _T("");
+					auto obj = Object::Create();
+					if (!obj->New(aResultToken, aParam + i, 1))
+						return; // New releases obj on failure.
+					pObj[nObj++] = this_param_obj = obj;
+					aResultToken.symbol = SYM_STRING; // Set default for Invoke (New set aResultToken to obj without calling AddRef).
+					aResultToken.marker = _T("");
+					auto result = obj->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS
+						, _T("__value"), ExprTokenType(obj), aParam + i + 1, 1);
+					if (result == INVOKE_NOT_HANDLED)
+					{
+						ExprTokenType tn;
+						_f_throw_type(param_proto->GetOwnProp(tn, _T("__Class")) && tn.symbol == SYM_STRING
+							? tn.marker : _T("Object"), *aParam[i + 1]);
+					}
+					if (aResultToken.Exited())
+						return;
+					aResultToken.Free(); // It shouldn't have returned anything, but it could.
+					aResultToken.symbol = SYM_INTEGER; // Revert to the BIF default in case return type is integer, and to ensure Free() won't Release().
+					aResultToken.mem_to_free = nullptr;
+				}
+				// The parameter size is based on the struct itself, so there's little sense
+				// in querying a Ptr property; we always want the struct's own address.
+				this_dyna_param.value_uintptr = ((Object*)this_param_obj)->DataPtr();
+			}
+			else if (this_param_obj)
+			{
 				GetDllArgObjectPtr(aResultToken, this_param_obj, this_dyna_param.value_uintptr);
 				if (aResultToken.Exited())
 					return;
@@ -1013,9 +1084,9 @@ has_valid_return_type:
 			aResultToken.symbol = SYM_FLOAT; // There is no SYM_DOUBLE since all floats are stored as doubles.
 			aResultToken.value_double = return_value.Double;
 			break;
-		case DLL_ARG_STRUCT:
-			aResultToken.SetValue(free_after_exit.return_struct_obj);
-			break;
+		//case DLL_ARG_STRUCT: // This case is handled once successful return is certain.
+		//	aResultToken.SetValue(pObj[0]);
+		//	break;
 		//default: // Should never be reached unless there's a bug.
 		//	aResultToken.symbol = SYM_STRING;
 		//	aResultToken.marker = "";
@@ -1107,8 +1178,17 @@ has_valid_return_type:
 		}
 	}
 
-	if (aResultToken.symbol == SYM_OBJECT)
-		free_after_exit.return_struct_obj = nullptr;	// Avoid buffer obj be released
+	if (return_struct_size && !aResultToken.Exited()) // This is done late in case of error.
+	{
+		aResultToken.symbol = SYM_STRING; // Set default for Invoke.
+		aResultToken.marker = _T("");
+		auto result = pObj[0]->Invoke(aResultToken, IT_GET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(pObj[0]), nullptr, 0);
+		if (result == INVOKE_NOT_HANDLED)
+		{
+			aResultToken.SetValue(pObj[0]);
+			pObj[0]->AddRef();
+		}
+	}
 }
 
 #endif
