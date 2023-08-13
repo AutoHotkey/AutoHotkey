@@ -320,7 +320,6 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IF_SUBSTITUTE_THIS	0x000020 // Target is a substitute object (i.e. ValueBase()), so refer to "aThisToken" instead of "this".
 #define IF_SUPER			0x000040 // super.something invocation.
 #define IF_NO_NEW_PROPS		0x000080 // Don't permit new properties.
-#define IF_DEFAULT			0x000100 // Invoke the default member (call a function object, array indexing, etc.).
 #define IF_NEWENUM			0x000200 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
 
 #define EIF_VARIADIC		0x010000
