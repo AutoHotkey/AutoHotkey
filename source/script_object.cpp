@@ -797,7 +797,7 @@ void Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aPar
 
 ObjectMember Map::sMembers[] =
 {
-	Object_Member(__Item, __Item, 0, IT_SET, 1, 1),
+	Object_Member(__Item, __Item, 0, IT_SET | BIMF_UNSET_ARG_1, 1, 1),
 	Object_Member(Capacity, Capacity, 0, IT_SET),
 	Object_Member(CaseSense, CaseSense, 0, IT_SET),
 	Object_Member(Count, Count, 0, IT_GET),
@@ -834,6 +834,8 @@ void Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *
 	}
 	else
 	{
+		if (aParam[0]->symbol == SYM_MISSING)
+			return Delete(aResultToken, aID, aFlags, aParam + 1, 1);
 		if (!SetItem(*aParam[1], *aParam[0]))
 			_o_throw_oom;
 	}
@@ -1114,13 +1116,13 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 			prop->SetGetter(func);
 			func->Release();
 			
-			if (member.invokeType == IT_SET)
+			if ((member.invokeType & IT_BITMASK) == IT_SET) // & allows for additional flags.
 			{
 				_tcscpy(op_name, _T(".Set"));
 				func = new BuiltInMethod(SimpleHeap::Alloc(full_name));
 				func->mBIM = member.method;
 				func->mMID = member.id;
-				func->mMIT = IT_SET;
+				func->mMIT = member.invokeType;
 				func->mMinParams = member.minParams + 2; // Includes `this` and `value`.
 				func->mParamCount = member.maxParams + 2;
 				func->mIsVariadic = member.maxParams == MAXP_VARIADIC;
@@ -1947,7 +1949,7 @@ bool Array::ItemToToken(index_t aIndex, ExprTokenType &aToken)
 
 ObjectMember Array::sMembers[] =
 {
-	Object_Property_get_set(__Item, 1, 1),
+	Object_Member(__Item, Invoke, P___Item, IT_SET | BIMF_UNSET_ARG_1, 1, 1),
 	Object_Property_get_set(Capacity),
 	Object_Property_get_set(Length),
 	Object_Member(__New, Invoke, M_Push, IT_CALL, 0, MAXP_VARIADIC),

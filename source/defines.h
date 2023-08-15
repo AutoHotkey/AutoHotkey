@@ -317,6 +317,8 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IT_CALL				2
 #define IT_BITMASK			3 // bit-mask for the above.
 
+#define BIMF_UNSET_ARG_1	8 // Flag used by BuiltInMethod.
+
 #define IF_BYPASS_METAFUNC	0x000010 // Skip invocation of meta-functions, such as when calling __Init or __Delete.
 #define IF_SUBSTITUTE_THIS	0x000020 // "this" is a substitute object (i.e. ValueBase()), so prohibit new value properties.
 #define IF_SUPER			0x000040 // super.something invocation.

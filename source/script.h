@@ -1790,6 +1790,7 @@ public:
 	BuiltInMethod(LPTSTR aName) : NativeFunc(aName) {}
 
 	bool ArgIsOutputVar(int aArg) override { return false; }
+	bool ArgIsOptional(int aArg) override { return aArg >= mMinParams || aArg == 1 && (mMIT & BIMF_UNSET_ARG_1); }
 
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 };

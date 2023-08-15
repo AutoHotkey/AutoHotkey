@@ -1743,7 +1743,8 @@ bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aP
 		
 		for (int i = 0; i < mMinParams; ++i)
 		{
-			if (aParam[i]->symbol == SYM_MISSING)
+			if (aParam[i]->symbol == SYM_MISSING
+				&& !ArgIsOptional(i)) // BuiltInMethod requires this exception for some setters.
 			{
 				aResultToken.Error(ERR_PARAM_REQUIRED);
 				return false; // Abort expression.
