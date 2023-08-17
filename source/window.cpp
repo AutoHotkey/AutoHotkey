@@ -1084,11 +1084,9 @@ BOOL CALLBACK EnumDialog(HWND aWnd, LPARAM lParam)
 	GetWindowThreadProcessId(aWnd, &pid);
 	if (pid == pah.pid)
 	{
-		TCHAR buf[32];
-		GetClassName(aWnd, buf, _countof(buf));
-		// This is the class name for windows created via MessageBox(), GetOpenFileName(), and probably
-		// other things that use modal dialogs:
-		if (!_tcscmp(buf, _T("#32770")))
+		// This checks for the standard dialog window class (#32770), for windows created via MessageBox(),
+		// GetOpenFileName(), and other things that use modal dialogs:
+		if (IsWindowStandardDialog(aWnd))
 		{
 			pah.hwnd = aWnd;  // An output value for the caller.
 			return FALSE;  // We're done.
@@ -1229,6 +1227,15 @@ bool IsWindowCloaked(HWND aWnd)
 bool ScriptThreadSettings::DetectWindow(HWND aWnd)
 {
 	return DetectHiddenWindows || (IsWindowVisible(aWnd) && !IsWindowCloaked(aWnd));
+}
+
+
+
+bool IsWindowStandardDialog(HWND aWnd)
+{
+	// This only checks for the standard dialog window class (#32770), which is enough
+	// for our purposes, although dialogs in general can have other window classes.
+	return (LPTSTR)(ULONG_PTR)GetClassLong(aWnd, GCW_ATOM) == WC_DIALOG;
 }
 
 

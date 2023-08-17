@@ -80,8 +80,10 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Ob
 	obj->SetBase(aPrototype);
 	FuncResult rt;
 	g_script.mCurrLine = this;
+	g_script.mNewRuntimeException = obj;
 	if (!obj->Construct(rt, aParam, aParamCount))
-		return nullptr;
+		obj = nullptr; // Construct released it.
+	g_script.mNewRuntimeException = nullptr;
 	return obj;
 }
 
@@ -745,7 +747,7 @@ ResultType Line::ValidateVarUsage(Var *aVar, int aUsage)
 	if (   VARREF_IS_WRITE(aUsage)
 		&& (aUsage == VARREF_REF
 			? aVar->Type() != VAR_NORMAL // Aliasing VAR_VIRTUAL is currently unsupported.
-			: aVar->IsReadOnly())   )
+			: aVar->IsReadOnly() && aUsage != VARREF_LVALUE_MAYBE)   )
 		return VarIsReadOnlyError(aVar, aUsage);
 	return OK;
 }
@@ -1020,6 +1022,8 @@ ResultType FResultToError(ResultToken &aResultToken, ExprTokenType *aParam[], in
 			ASSERT(!code);
 			return aResultToken.SetExitResult(FAIL);
 		case FR_FACILITY_ARG:
+			if (aResult == FR_E_ARGS)
+				return aResultToken.Error(ERR_PARAM_INVALID);
 			return aResultToken.ParamError(code, code + aFirstParam < aParamCount ? aParam[code + aFirstParam] : nullptr);
 		case FACILITY_WIN32:
 			if (!code)

@@ -516,6 +516,7 @@ public:
 	static ObjectMember sClassMembers[];
 	static ObjectMember sErrorMembers[], sOSErrorMembers[];
 	static Object *sPrototype, *sClass, *sClassPrototype;
+	static IObject *sObjectCall;
 
 	static void CreateRootPrototypes();
 	static Object *CreateClass(Object *aPrototype);

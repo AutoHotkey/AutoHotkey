@@ -19,7 +19,10 @@
     <DisplayString Condition="symbol == SYM_INTEGER">{value_int64}</DisplayString>
     <DisplayString Condition="symbol == SYM_FLOAT">{value_double}</DisplayString>
     <DisplayString Condition="symbol == SYM_OBJECT">{object}</DisplayString>
-    <DisplayString Condition="symbol == SYM_VAR">{var}</DisplayString>
+    <DisplayString Condition="symbol == SYM_VAR &amp;&amp; (*(UINT*)var->mName &amp; 0xffffff00) != 0xcdcdcd00">{*var}</DisplayString>
+    <DisplayString Condition="symbol == SYM_VAR &amp;&amp; var_deref->type == 0 &amp;&amp; (UINT)var_deref->marker != 0xcdcdcdcd">{*var_deref}</DisplayString>
+    <DisplayString Condition="symbol == SYM_COUNT">(end marker)</DisplayString>
+    <DisplayString Condition="symbol &gt;= SYM_OPERAND_END">{symbol,en}  {error_reporting_marker,sub}</DisplayString>
     <DisplayString>{symbol,en}</DisplayString>
     <Expand>
       <Item Name="value" Condition="symbol == SYM_STRING">marker</Item>
@@ -27,11 +30,10 @@
       <Item Name="value" Condition="symbol == SYM_INTEGER">value_int64</Item>
       <Item Name="value" Condition="symbol == SYM_FLOAT">value_double</Item>
       <Item Name="object" Condition="symbol == SYM_OBJECT">object</Item>
-      <Item Name="var" Condition="symbol == SYM_VAR">var</Item>
-      <Item Name="var_deref" Condition="symbol == SYM_VAR">var_deref</Item>
+      <Item Name="var" Condition="symbol == SYM_VAR &amp;&amp; (*(UINT*)var->mName &amp; 0xffffff00) != 0xcdcdcd00">var</Item>
+      <Item Name="var_deref" Condition="symbol == SYM_VAR &amp;&amp; var_deref->type == 0 &amp;&amp; (UINT)var_deref->marker != 0xcdcdcdcd">var_deref</Item>
       <Item Name="callsite" Condition="symbol == SYM_FUNC">callsite</Item>
       <Item Name="marker" Condition="symbol == SYM_OPAREN">marker</Item>
-      <Item Name="outer" Condition="symbol == SYM_OPAREN">outer_param_list</Item>
     </Expand>
   </Type>
   <Type Name="Var">
@@ -44,6 +46,9 @@
     <Expand>
       <Item Name="object" Condition="mAttrib &amp; 0x40">mObject</Item>
     </Expand>
+  </Type>
+  <Type Name="DerefType">
+    <DisplayString>{marker,[length]sub}</DisplayString>
   </Type>
   <Type Name="Func">
     <DisplayString>{mName,sub}()</DisplayString>

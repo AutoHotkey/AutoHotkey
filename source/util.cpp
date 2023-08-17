@@ -2945,9 +2945,25 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 			// since aDelimiter should be ]/)/}, not :.
 			if (aDelimiter && aDelimiter != ':')
 				continue; // The following isn't needed in this case.
+			if (aBuf[mark + 1] == '.') // Check for ?.property (which is not ternary).
+			{
+				LPTSTR d_end;
+				auto id = aBuf + mark + 2, id_end = find_identifier_end(id);
+				_tcstod(id, &d_end); // This accounts for scientific notation.
+				if (id_end > d_end || id_end == d_end && (*id_end == '(' || *id_end == '['))
+					continue;
+			}
+			do
+				mark++;
+			while (IS_SPACE_OR_TAB(aBuf[mark]));
+			if (_tcschr(EXPR_SYMBOLS_AFTER_MAYBE, aBuf[mark]))
+			{
+				mark--; // Counter the loop's increment.
+				continue; // It's SYM_MAYBE, so don't scan for ':'.
+			}
 			// Scan for the corresponding ':' (or some other closing symbol if that's missing)
 			// so that it won't terminate the sub-expression.
-			mark = FindExprDelim(aBuf, ':', mark + 1, aLiteralMap);
+			mark = FindExprDelim(aBuf, ':', mark, aLiteralMap);
 			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
 				return mark; // See case '\0' for comments.
 			continue; // The colon is also skipped via the loop's increment.

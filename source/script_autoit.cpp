@@ -961,17 +961,19 @@ bif_impl FResult Download(StrArg aURL, StrArg aFilespec)
 	HINTERNET hFile = InternetOpenUrl(hInet, aURL, NULL, 0, flags_for_open_url, 0);
 	if (!hFile)
 	{
+		DWORD last_error = GetLastError(); // Save this before calling InternetCloseHandle, otherwise it is set to 0.
 		InternetCloseHandle(hInet);
-		return FR_E_WIN32;
+		return FR_E_WIN32(last_error);
 	}
 
 	// Open our output file (overwrite if necessary)
 	auto hOut = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
 	if (hOut == INVALID_HANDLE_VALUE)
 	{
+		DWORD last_error = GetLastError();
 		InternetCloseHandle(hFile);
 		InternetCloseHandle(hInet);
-		return FR_E_WIN32;
+		return FR_E_WIN32(last_error);
 	}
 
 	BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during Download.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.

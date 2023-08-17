@@ -227,7 +227,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_TYPE_MISMATCH _T("Type mismatch.")
 #define ERR_NOT_ENUMERABLE _T("Value not enumerable.")
 #define ERR_PROPERTY_READONLY _T("Property is read-only.")
-#define ERR_ITEM_UNSET _T("Item has no value.")
 #define ERR_NO_PROCESS _T("Target process not found.")
 #define ERR_NO_WINDOW _T("Target window not found.")
 #define ERR_NO_CONTROL _T("Target control not found.")
@@ -374,6 +373,7 @@ struct DerefType
 		bool terminal; // DT_STRING
 		SymbolType symbol; // DT_WORDOP
 		int int_value; // DT_CONST_INT
+		LPCTSTR error_marker; // DT_DOUBLE, DT_DOTPERCENT
 	};
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
@@ -467,6 +467,7 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _o_return_FAIL			_f_return_FAIL
 #define _o_return_retval		_f_return_retval
 #define _o_return_empty			_o_return_retval  // Default return value for Invoke is "".
+#define _o_return_unset			return (void)(aResultToken.symbol = SYM_MISSING)
 
 
 struct LoopFilesStruct : WIN32_FIND_DATA
@@ -869,6 +870,7 @@ public:
 	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("%+-\n") // L31: Used in a few places where '.' needs special treatment.
 	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT _T(".") // L31: Used in expressions where '.' is always an operator.
 	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS _T("\"'")
+	#define EXPR_SYMBOLS_AFTER_MAYBE _T("),]}:?") // Excludes '.', which needs more complicated logic.
 	// The following HOTSTRING option recognizer is kept somewhat forgiving/non-specific for backward compatibility
 	// (e.g. scripts may have some invalid hotstring options, which are simply ignored).  This definition is here
 	// because it's related to continuation line symbols. Also, avoid ever adding "&" to hotstring options because
@@ -1789,6 +1791,7 @@ public:
 	BuiltInMethod(LPTSTR aName) : NativeFunc(aName) {}
 
 	bool ArgIsOutputVar(int aArg) override { return false; }
+	bool ArgIsOptional(int aArg) override { return aArg >= mMinParams || aArg == 1 && (mMIT & BIMF_UNSET_ARG_1); }
 
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 };
@@ -2813,6 +2816,7 @@ private:
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 	Line *mPendingParentLine, *mPendingRelatedLine;
+	SymbolType mDefaultReturn = SYM_STRING;
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;
 	bool mIgnoreNextBlockBegin;
@@ -2890,6 +2894,7 @@ private:
 
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.
+	Object *mNewRuntimeException = nullptr; // Lets Error__New detect that it's being called by CreateRuntimeException.
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
 	MsgMonitorList mOnExit, mOnClipboardChange, mOnError; // Event handlers for OnExit(), OnClipboardChange() and OnError().
 	bool mOnClipboardChangeIsRunning;

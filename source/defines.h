@@ -176,8 +176,9 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_BEGIN = SYM_OPERAND_END  // SYM_BEGIN is a special marker to simplify the code.
 #define IS_OPERAND(symbol) ((symbol) < SYM_OPERAND_END)
 	, SYM_POST_INCREMENT, SYM_POST_DECREMENT // Kept in this position for use by YIELDS_AN_OPERAND() [helps performance].
-#define IS_POSTFIX_OPERATOR(symbol) ((symbol) == SYM_POST_INCREMENT || (symbol) == SYM_POST_DECREMENT)
-	, SYM_DOT // DOT must precede SYM_OPAREN so YIELDS_AN_OPERAND(SYM_GET) == TRUE, allowing auto-concat to work for it even though it is positioned after its second operand.
+	, SYM_MAYBE
+#define IS_POSTFIX_OPERATOR(symbol) ((symbol) <= SYM_MAYBE && (symbol) >= SYM_POST_INCREMENT)
+	, SYM_DOT // DOT must precede SYM_OPAREN so YIELDS_AN_OPERAND(SYM_DOT) to get the right result (TRUE), since its RHS operand is embedded in the operator itself.
 	, SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE, SYM_COMMA  // CPAREN (close-paren)/CBRACKET/CBRACE must come right before OPAREN for YIELDS_AN_OPERAND.
 #define IS_OPAREN_LIKE(symbol) ((symbol) <= SYM_OBRACE && (symbol) >= SYM_OPAREN)
 #define IS_CPAREN_LIKE(symbol) ((symbol) <= SYM_CBRACE && (symbol) >= SYM_CPAREN)
@@ -187,13 +188,15 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define YIELDS_AN_OPERAND(symbol) ((symbol) < SYM_OPAREN) // CPAREN also covers the tail end of a function call.  Post-inc/dec yields an operand for things like Var++ + 2.  Definitely needs the parentheses around symbol.
 	, SYM_ASSIGN, SYM_ASSIGN_ADD, SYM_ASSIGN_SUBTRACT, SYM_ASSIGN_MULTIPLY, SYM_ASSIGN_DIVIDE, SYM_ASSIGN_INTEGERDIVIDE
 	, SYM_ASSIGN_BITOR, SYM_ASSIGN_BITXOR, SYM_ASSIGN_BITAND, SYM_ASSIGN_BITSHIFTLEFT, SYM_ASSIGN_BITSHIFTRIGHT, SYM_ASSIGN_BITSHIFTRIGHT_LOGICAL // SYM_ASSIGN_BITSHIFTLEFT_LOGICAL doesn't exist but <<<= is the same as <<=
+	, SYM_ASSIGN_MAYBE
 	, SYM_ASSIGN_CONCAT // THIS MUST BE KEPT AS THE LAST (AND SYM_ASSIGN THE FIRST) BECAUSE THEY'RE USED IN A RANGE-CHECK.
 #define IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) (symbol <= SYM_ASSIGN_CONCAT && symbol >= SYM_ASSIGN) // Check upper bound first for short-circuit performance.
 #define IS_ASSIGNMENT_OR_POST_OP(symbol) (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) || symbol == SYM_POST_INCREMENT || symbol == SYM_POST_DECREMENT)
 	, SYM_IFF_ELSE, SYM_IFF_THEN // THESE TERNARY OPERATORS MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE BELOW.
 	, SYM_OR_MAYBE, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE for the range checks below.
-#define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_THEN) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
-#define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_ELSE)
+#define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && ((symbol) >= SYM_IFF_THEN || (symbol) == SYM_MAYBE)) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
+#define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && ((symbol) >= SYM_IFF_ELSE || (symbol) == SYM_MAYBE))
+#define SYM_MAYBE_IGNORES_ON_STACK(symbol) (SYM_USES_CIRCUIT_TOKEN(symbol) && (symbol) != SYM_IFF_THEN || (symbol) == SYM_ASSIGN)
 	, SYM_IS
 	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL, SYM_NOTEQUALCASE // =, ==, !=, !==... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 #define IS_EQUALITY_OPERATOR(symbol) (symbol >= SYM_EQUAL && symbol <= SYM_NOTEQUALCASE)
@@ -236,9 +239,8 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	(IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(sym) \
 		|| sym == SYM_PRE_INCREMENT || sym == SYM_PRE_DECREMENT)
 
-
 enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET, VARREF_READ_MAYBE
-	, VARREF_REF, VARREF_LVALUE, VARREF_OUTPUT_VAR };
+	, VARREF_REF, VARREF_LVALUE, VARREF_LVALUE_MAYBE, VARREF_OUTPUT_VAR };
 #define VARREF_IS_WRITE(var_usage) ((var_usage) >= VARREF_REF)
 #define VARREF_IS_READ(var_usage) ((var_usage) == VARREF_READ || (var_usage) == VARREF_READ_MAYBE) // But not VARREF_ISSET.
 
@@ -316,6 +318,8 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IT_CALL				2
 #define IT_BITMASK			3 // bit-mask for the above.
 
+#define BIMF_UNSET_ARG_1	8 // Flag used by BuiltInMethod.
+
 #define IF_BYPASS_METAFUNC	0x000010 // Skip invocation of meta-functions, such as when calling __Init or __Delete.
 #define IF_SUBSTITUTE_THIS	0x000020 // Target is a substitute object (i.e. ValueBase()), so refer to "aThisToken" instead of "this".
 #define IF_SUPER			0x000040 // super.something invocation.
@@ -325,6 +329,8 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define EIF_VARIADIC		0x010000
 #define EIF_STACK_MEMBER	0x020000
 #define EIF_LEAVE_PARAMS	0x040000
+#define EIF_UNSET_RETURN	0x100000
+#define EIF_UNSET_PROP		0x200000
 
 
 // Helper function for event handlers and __Delete:
@@ -354,13 +360,12 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				CallSite *callsite;   // for SYM_FUNC, and (while parsing) SYM_ASSIGN etc.
 				DerefType *var_deref; // for SYM_VAR while parsing
 				Var *var;             // for SYM_VAR and SYM_DYNAMIC
-				LPTSTR marker;        // for SYM_STRING and (while parsing) SYM_OPAREN
+				LPTSTR marker;        // for SYM_STRING
 				ExprTokenType *circuit_token; // for short-circuit operators
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
-				CallSite *outer_param_list; // Used by ExpressionToPostfix().
-				LPTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
+				LPCTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
 				size_t marker_length;
 				VarRefUsageType var_usage; // for SYM_DYNAMIC and SYM_VAR (at load time)
 			};

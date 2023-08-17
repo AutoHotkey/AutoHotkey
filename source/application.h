@@ -84,6 +84,8 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 void ResumeUnderlyingThread();
 BOOL IsInterruptible();
 
+void MsgWaitUnpause();
+
 VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 VOID CALLBACK InputTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 VOID CALLBACK RefreshInterruptibility(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);

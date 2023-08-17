@@ -205,7 +205,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		if (arg_type == MdType::Params)
 		{
 			auto p = (VariantParams *)_alloca(sizeof(VariantParams));
-			p->count = aParamCount - pi;
+			p->count = pi < aParamCount ? aParamCount - pi : 0;
 			p->value = aParam + pi;
 			arg_value = (UINT_PTR)p;
 			continue; // Not break, since there might be a retval parameter after it.

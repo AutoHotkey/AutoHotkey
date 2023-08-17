@@ -22,6 +22,38 @@ GNU General Public License for more details.
 
 
 
+void MsgSleepWithListLines(int aSleepDuration, Line *waiting_line, DWORD start_time)
+{
+	if (MsgSleep(aSleepDuration))
+	{
+		// v1.0.30.02: Since MsgSleep() launched and returned from at least one new thread, put the
+		// current waiting line into the line-log again to make it easy to see what the current
+		// thread is doing.  This is especially useful for figuring out which subroutine is holding
+		// another thread interrupted beneath it.  For example, if a timer gets interrupted by
+		// a hotkey that has an indefinite WinWait, and that window never appears, this will allow
+		// the user to find out the culprit thread by showing its line in the log (and usually
+		// it will appear as the very last line, since usually the script is idle and thus the
+		// currently active thread is the one that's still waiting for the window).
+		if (g->ListLinesIsEnabled)
+		{
+			// ListLines is enabled in this thread, but if it was disabled in the interrupting thread,
+			// the very last log entry will be ours.  In that case, we don't want to duplicate it.
+			int previous_log_index = (Line::sLogNext ? Line::sLogNext : LINE_LOG_SIZE) - 1; // Wrap around if needed (the entry can be NULL in that case).
+			if (Line::sLog[previous_log_index] != waiting_line || Line::sLogTick[previous_log_index] != start_time) // The previously logged line was not this one, or it was added by the interrupting thread (different start_time).
+			{
+				Line::sLog[Line::sLogNext] = waiting_line;
+				Line::sLogTick[Line::sLogNext++] = start_time; // Store a special value so that Line::LogToText() can report that its "still waiting" from earlier.
+				if (Line::sLogNext >= LINE_LOG_SIZE)
+					Line::sLogNext = 0;
+				// The lines above are the similar to those used in ExecUntil(), so the two should be
+				// maintained together.
+			}
+		}
+	}
+}
+
+
+
 typedef bool (*WaitCompletedPredicate)(void *);
 
 static bool Wait(int aTimeout, void *aParam, WaitCompletedPredicate aWaitCompleted)
@@ -35,34 +67,7 @@ static bool Wait(int aTimeout, void *aParam, WaitCompletedPredicate aWaitComplet
 
 		// Must cast to int or any negative result will be lost due to DWORD type:
 		if (aTimeout < 0 || (aTimeout - (int)(GetTickCount() - start_time)) > SLEEP_INTERVAL_HALF)
-		{
-			if (MsgSleep(INTERVAL_UNSPECIFIED)) // INTERVAL_UNSPECIFIED performs better.
-			{
-				// v1.0.30.02: Since MsgSleep() launched and returned from at least one new thread, put the
-				// current waiting line into the line-log again to make it easy to see what the current
-				// thread is doing.  This is especially useful for figuring out which subroutine is holding
-				// another thread interrupted beneath it.  For example, if a timer gets interrupted by
-				// a hotkey that has an indefinite WinWait, and that window never appears, this will allow
-				// the user to find out the culprit thread by showing its line in the log (and usually
-				// it will appear as the very last line, since usually the script is idle and thus the
-				// currently active thread is the one that's still waiting for the window).
-				if (g->ListLinesIsEnabled)
-				{
-					// ListLines is enabled in this thread, but if it was disabled in the interrupting thread,
-					// the very last log entry will be ours.  In that case, we don't want to duplicate it.
-					int previous_log_index = (Line::sLogNext ? Line::sLogNext : LINE_LOG_SIZE) - 1; // Wrap around if needed (the entry can be NULL in that case).
-					if (Line::sLog[previous_log_index] != waiting_line || Line::sLogTick[previous_log_index] != start_time) // The previously logged line was not this one, or it was added by the interrupting thread (different start_time).
-					{
-						Line::sLog[Line::sLogNext] = waiting_line;
-						Line::sLogTick[Line::sLogNext++] = start_time; // Store a special value so that Line::LogToText() can report that its "still waiting" from earlier.
-						if (Line::sLogNext >= LINE_LOG_SIZE)
-							Line::sLogNext = 0;
-						// The lines above are the similar to those used in ExecUntil(), so the two should be
-						// maintained together.
-					}
-				}
-			}
-		}
+			MsgSleepWithListLines(INTERVAL_UNSPECIFIED, waiting_line, start_time);
 		else // Done waiting (timed out).
 			return false;
 	}
@@ -318,6 +323,7 @@ bif_impl FResult WinWaitNotActive(ExprTokenType *aWinTitle, optl<StrArg> aWinTex
 BIF_DECL(BIF_RunWait)
 {
 	Line *waiting_line = g_script.mCurrLine;
+	DWORD start_time = GetTickCount();
 
 	_f_param_string_opt(arg1, 0);
 	_f_param_string_opt(arg2, 1);
@@ -337,12 +343,15 @@ BIF_DECL(BIF_RunWait)
 	if (!running_process) // Nothing to wait for (rare?).
 		_f_return_i(0);
 
-	Wait(-1, (void*)running_process, [](void *p)
-		{
-			// Using WaitForSingleObject() rather than GetExitCodeProcess() avoids an
-			// infinite loop if a process returns 259 (STILL_ACTIVE) as its exit code.
-			return WaitForSingleObject((HANDLE)p, 0) != WAIT_TIMEOUT;
-		});
+	for (;;)
+	{
+		// The below call takes care of determining whether the process has exited,
+		// and is more reliable than GetExitCodeProcess() == STILL_ACTIVE because
+		// STILL_ACTIVE is also valid exit code.
+		if (MsgWaitForMultipleObjects(1, &running_process, FALSE, INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0)
+			break;
+		MsgSleepWithListLines(-1, waiting_line, start_time);
+	}
 
 	DWORD exit_code = 0;
 	GetExitCodeProcess(running_process, &exit_code);

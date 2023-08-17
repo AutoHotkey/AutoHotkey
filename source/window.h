@@ -260,6 +260,7 @@ HWND GetNonChildParent(HWND aWnd);
 HWND GetTopChild(HWND aParent);
 bool IsWindowHung(HWND aWnd);
 bool IsWindowCloaked(HWND aWnd);
+bool IsWindowStandardDialog(HWND aWnd);
 
 // Defaults to a low timeout because a window may have hundreds of controls, and if the window
 // is hung, each control might result in a delay of size aTimeout during an EnumWindows.
