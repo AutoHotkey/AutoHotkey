@@ -212,7 +212,7 @@ void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aExcep
 #endif // WIN32_PLATFORM
 #ifdef _WIN64
 
-	int params_left = aParamCount, i = 0;
+	int params_left = aParamCount, i = 0, r = 0;
 	DWORD_PTR regArgs[4];
 	DWORD_PTR* stackArgs = NULL;
 	size_t stackArgsSize = 0;
@@ -221,11 +221,11 @@ void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aExcep
 	{
 		// Return value isn't passed through registers, memory copy
 		// is performed instead. Pass the pointer as hidden arg.
-		regArgs[i++] = (DWORD_PTR)aRet;
+		regArgs[r++] = (DWORD_PTR)aRet;
 	}
 	// The first four parameters are passed in x64 through registers... like ARM :D
-	for(; (i < 4) && params_left; i++, params_left--)
-		regArgs[i] = DynaParamToElement(aParam[i]);
+	for (; r < 4 && params_left; --params_left)
+		regArgs[r++] = DynaParamToElement(aParam[i++]);
 
 	// Copy the remaining parameters
 	if(params_left)
