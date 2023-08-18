@@ -271,7 +271,7 @@ void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aExcep
 	{
 		_itot(esp_delta, buf, 10);
 		if (esp_delta > 0)
-			g_script.ThrowRuntimeException(_T("Parameter list too large, or call requires CDecl."), buf);
+			g_script.ThrowRuntimeException(_T("Parameter list too large."), buf);
 		else
 			g_script.ThrowRuntimeException(_T("Parameter list too small."), buf);
 	}
