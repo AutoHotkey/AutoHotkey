@@ -1627,7 +1627,9 @@ public:
 		if (result == EARLY_RETURN)
 		{
 #ifdef CONFIG_DEBUGGER
-			if (g_Debugger.IsConnected())
+			// Don't do this for fat-arrow functions because they're only (part of) a single line,
+			// and they are removed from the linked list of Lines (which would be relied upon below).
+			if (g_Debugger.IsConnected() && !mIsFuncExpression)
 			{
 				// Find the end of this function.
 				//Line *line;

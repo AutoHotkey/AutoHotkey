@@ -1234,13 +1234,35 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 		}
 	}
 
-	if (SUCCEEDED(hr)
-		// For obj.x:=y where y is a ComObject, invoke PROPERTYPUTREF first:
-		&& !(IS_INVOKE_SET && rgvarg[0].vt == VT_DISPATCH && SUCCEEDED(mDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_PROPERTYPUTREF, &dispparams, NULL, NULL, NULL))
-		// For obj.x(), invoke METHOD first since PROPERTYGET|METHOD is ambiguous and gets undesirable results in some known cases; but re-invoke with PROPERTYGET only if DISP_E_MEMBERNOTFOUND is returned:
-		  || IS_INVOKE_CALL && !aParamCount && DISP_E_MEMBERNOTFOUND != (hr = mDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &dispparams, &varResult, &excepinfo, NULL))))
-		// Invoke PROPERTYPUT or PROPERTYGET|METHOD as appropriate:
-		hr = mDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, IS_INVOKE_SET ? DISPATCH_PROPERTYPUT : DISPATCH_PROPERTYGET | DISPATCH_METHOD, &dispparams, &varResult, &excepinfo, NULL);
+	if (SUCCEEDED(hr))
+	{
+		WORD flags[2] {0};
+		if (IS_INVOKE_SET)
+		{
+			// Use PROPERTYPUTREF when assigning an object, but fall back to PROPERTYPUT if DISP_E_MEMBERNOTFOUND is
+			// returned.  In the fallback case, the COM server might invoke the object's DISPID_VALUE member to get
+			// a value to assign; e.g. r.Pattern := {__item: "hello"} is the same as r.Pattern := "hello" when r is
+			// a VBScript RegExp object.
+			if (rgvarg[0].vt == VT_DISPATCH)
+				flags[0] = DISPATCH_PROPERTYPUTREF, flags[1] = DISPATCH_PROPERTYPUT;
+			else
+				flags[0] = DISPATCH_PROPERTYPUT;
+		}
+		else
+		{
+			// Make a first attempt using only the one flag matching the local syntax, so that COM servers which
+			// support retrieving or calling the same member (like AutoHotkey) will perform the correct operation.
+			flags[0] = IS_INVOKE_CALL ? DISPATCH_METHOD : DISPATCH_PROPERTYGET;
+			// For backward-compatibility and to account for inconsistencies (like _NewEnum being a property or a
+			// method), let there be a second attempt using the combined flags.  This is probably the same as just
+			// swapping METHOD and PROPERTYGET, but might not be in all cases (i.e. for objects that don't use the
+			// system-provided IDispatch implementation).
+			flags[1] = DISPATCH_METHOD | DISPATCH_PROPERTYGET;
+		}
+		hr = mDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, flags[0], &dispparams, &varResult, &excepinfo, NULL);
+		if (hr == DISP_E_MEMBERNOTFOUND && flags[1]) // Only this particular HRESULT.
+			hr = mDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, flags[1], &dispparams, &varResult, &excepinfo, NULL);
+	}
 
 	for (int i = 0; i < aParamCount; i++)
 	{

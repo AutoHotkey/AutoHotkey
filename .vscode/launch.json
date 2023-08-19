@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug x64w",
+            "name": "Debug x64w C++",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "bin_debug/AutoHotkey64.exe",
@@ -13,6 +13,57 @@
             "stopAtEntry": false,
             "cwd": "${workspaceRoot}",
             "preLaunchTask": "build-debug"
+        },
+        {
+            "name": "Debug x64w AHK",
+            "type": "autohotkey",
+            "request": "launch",
+            "program": "${file}",
+            "runtime": "${workspaceRoot}/bin_debug/AutoHotkey64.exe",
+            "useDebugDirective": true,
+            "args": [],
+            "variableCategories": [
+                {
+                    "label": "Local",
+                    "source": "Local",
+                },
+                {
+                    "label": "Static",
+                    "source": "Static",
+                },
+                {
+                    "label": "Global",
+                    "source": "Global",
+                    "noduplicate": true,
+                },
+                {
+                    "label": "Global Classes",
+                    "source": "Global",
+                    "matchers": [
+                        {
+                            "className": "Class",
+                        },
+                    ],
+                },
+                {
+                    "label": "Global Functions",
+                    "source": "Global",
+                    "matchers": [
+                        {
+                            "className": "Func",
+                        },
+                    ],
+                },
+                {
+                    "label": "Built-in Global",
+                    "source": "Global",
+                    "matchers": [
+                        {
+                            "builtin": true
+                        },
+                    ],
+                },
+            ]
         }
     ]
 }
