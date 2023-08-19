@@ -497,7 +497,7 @@ void Object::CallNestedDelete()
 			FuncResult rt;
 			++mRefCount;
 			++mNested[i]->mRefCount;
-			CallMeta(_T("__Delete"), rt, ExprTokenType(mNested[i]), nullptr, 0);
+			mNested[i]->CallMeta(_T("__Delete"), rt, ExprTokenType(mNested[i]), nullptr, 0);
 			rt.Free();
 			if (mNested[i]->mNested && mNested[i]->mNested[0])
 				mNested[i]->CallNestedDelete();
