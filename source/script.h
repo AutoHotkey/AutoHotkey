@@ -2876,7 +2876,7 @@ private:
 	ResultType ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref
 		, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd);
 	ResultType ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap);
-	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
+	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
 	void RemoveLabel(Label *aLabel);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, LPTSTR aArgMap[] = NULL, bool aAllArgsAreExpressions = false);

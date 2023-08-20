@@ -4076,246 +4076,42 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	size_t line_length = _tcslen(aLineText); // Length is needed in a couple of places.
 
 	TCHAR action_name[MAX_VAR_NAME_LENGTH + 1], *end_marker;
-	if (aActionType) // Currently can be ACT_EXPRESSION or ACT_HOTKEY_IF.
+	LPTSTR action_args;
+
+	if (aActionType)
 	{
 		*action_name = '\0';
 		end_marker = NULL; // Indicate that there is no action to mark the end of.
 	}
-	else // We weren't called recursively from self, nor is it ACT_EXPRESSION, so set action_name and end_marker the normal way.
+	else // Action type was not determined by caller.
 	{
-		for (;;) // A loop with only one iteration so that "break" can be used instead of a lot of nested if's.
-		{
-			int declare_type;
-			LPTSTR cp;
-			if (!_tcsnicmp(aLineText, _T("global"), 6))
-			{
-				cp = aLineText + 6; // The character after the declaration word.
-				declare_type = VAR_DECLARE_GLOBAL;
-			}
-			else
-			{
-				if (!_tcsnicmp(aLineText, _T("local"), 5))
-				{
-					cp = aLineText + 5; // The character after the declaration word.
-					declare_type = VAR_DECLARE_LOCAL;
-				}
-				else if (!_tcsnicmp(aLineText, _T("static"), 6)) // Static also implies local (for functions that default to global).
-				{
-					cp = aLineText + 6; // The character after the declaration word.
-					declare_type = VAR_DECLARE_STATIC;
-				}
-				else // It's not the word "global", "local", or static, so no further checking is done.
-					break;
-			}
-
-			if (*cp && !IS_SPACE_OR_TAB(*cp)) // There is a character following the word local but it's not a space or tab.
-				break; // It doesn't qualify as being the global or local keyword because it's something like global2.
-			if (*cp && *(cp = omit_leading_whitespace(cp))) // Second *cp is probably always non-null since caller rtrimmed it, but even if not it's handled correctly.
-			{
-				if (!IS_IDENTIFIER_CHAR(*cp))
-					break;
-			}
-			else // It's the word "global", "local", "static" by itself.
-			{
-				// Any combination of declarations is allowed here for simplicity, but only declarations can
-				// appear above this line:
-				if (mNextLineIsFunctionBody && declare_type != VAR_DECLARE_LOCAL)
-				{
-					g->CurrentFunc->mDefaultVarType = declare_type;
-					// No further action is required.
-					return OK;
-				}
-				// Otherwise, it occurs too far down in the body.
-				return ScriptError(ERR_UNEXPECTED_DECL, aLineText);
-			}
-			
-			// Since above didn't break or return, a variable is being declared.
-
-			if (!g->CurrentFunc && (declare_type & VAR_LOCAL))
-				return ScriptError(ERR_UNEXPECTED_DECL, aLineText);
-
-			bool open_brace_was_added, belongs_to_line_above;
-			size_t var_name_length;
-			LPTSTR item;
-
-			for (belongs_to_line_above = mPendingParentLine
-				, open_brace_was_added = false, item = cp
-				; *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
-			{
-				LPTSTR item_end = find_identifier_end(item + 1);
-				var_name_length = (VarSizeType)(item_end - item);
-
-				Var *var = nullptr;
-				Var *global_var = nullptr;
-				if (declare_type & VAR_GLOBAL)
-				{
-					// This is done separately since it may also need to be added to mStaticVars:
-					if (  !(global_var = FindOrAddVar(item, var_name_length, declare_type))  )
-						return FAIL; // It already displayed the error.
-				}
-
-				if (g->CurrentFunc)
-				{
-					int insert_pos;
-					VarList *varlist;
-					ResultType result = OK;
-					// Search both locals and statics so any conflicts are detected, but set insert_pos
-					// according to which list we want to insert into.  For "global", we want to insert
-					// into the static list to make it accessible to the function.
-					int insert_into = global_var ? (VAR_LOCAL_STATIC | VAR_LOCAL) : declare_type;
-					var = FindVar(item, var_name_length, insert_into, &varlist, &insert_pos, &result);
-					if (!var)
-					{
-						if (!result)
-							return result;
-						if (global_var) // Implies (declare_type & VAR_GLOBAL) != 0.
-						{
-							// Insert could be skipped if the function is assume-global, but isn't because:
-							//  - When !mNextLineIsFunctionBody, mDefaultVarType might still be changed.
-							//  - It seems harmless to add any explicitly declared globals here.
-							//  - There might be some reason to refer to the declared globals in future.
-							if (!varlist->Insert(global_var, insert_pos))
-								return ScriptError(ERR_OUTOFMEM);
-							var = global_var;
-						}
-						else
-						{
-							var = AddVar(item, var_name_length, varlist, insert_pos, declare_type);
-							if (!var)
-								return FAIL; // It already displayed the error.
-						}
-					}
-					// Detect the following conflicts:
-					//  - Declaring local but found a static/global in conflicts, or vice versa.
-					//  - Declaring static but found a global in varlist, or vice versa.
-					//  - Declaring local but found a parameter in varlist.
-					//  - Declaring a built-in variable as local or static.
-					// But permit the following:
-					//  - Exact duplicate declarations, such as for two different code paths.
-					if (var->Scope() != declare_type)
-						return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
-				}
-				else
-					var = global_var;
-
-				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
-
-				LPTSTR the_operator = item_end;
-				switch(*item_end)
-				{
-				case ',':  // No initializer is present for this variable, so move on to the next one.
-					item = omit_leading_whitespace(item_end + 1); // Set "item" for use by the next iteration.
-					continue; // No further processing needed below.
-				case '\0': // No initializer is present for this variable, so move on to the next one.
-					item = item_end; // Set "item" for use by the next iteration.
-					continue;
-				case ':':
-					if (item_end[1] == '=')
-					{
-						item_end += 2; // Point to the character after the ":=".
-						break;
-					}
-					// Colon with no following '='. Fall through to the default case.
-				default:
-					// Since this variable might already have a value, compound assignments are
-					// permitted (although not very conventional).  This is mostly for globals,
-					// which might only be referenced on this one line (and outside the function),
-					// but might have some utility with "static" due to its once-only nature.
-					// += -= *= /= .= |= &= ^=
-					if (_tcschr(_T("+-*/.|&^"), *item_end) && item_end[1] == '=')
-						break;
-					// //= <<= >>= >>>=
-					if (_tcschr(_T("/<>"), *item_end) && item_end[1] == *item_end && (item_end[2] == '=' // //= <<= >>=
-						|| (*item_end == '>' && item_end[2] == *item_end && item_end[3] == '='))) // >>>=
-						break;
-					return ScriptError(ERR_INVALID_VARDECL, item);
-				}
-
-				// Since above didn't "continue", this declared variable also has an initializer.
-				// Add that initializer as a separate line to be executed at runtime. Separate lines
-				// might actually perform better at runtime because most initializers tend to be simple
-				// literals or variables that are simplified into non-expressions at runtime. In addition,
-				// items without an initializer are omitted, further improving runtime performance.
-				// However, the following must be done ONLY after having done the FindOrAddVar()
-				// above, since that may have changed this variable to a non-default type (local or global).
-				// But what about something like "global x, y=x"? Even that should work as long as x
-				// appears in the list prior to initializers that use it.
-				// Now, find the comma (or terminator) that marks the end of this sub-statement.
-				// The search must exclude commas that are inside quoted/literal strings and those that
-				// are inside parentheses (chiefly those of function-calls, but possibly others).
-
-				item_end += FindExprDelim(item_end); // FIND THE NEXT "REAL" COMMA (or the end of the string).
-				
-				// Above has now found the final comma of this sub-statement (or the terminator if there is no comma).
-				LPTSTR terminate_here = omit_trailing_whitespace(item, item_end-1) + 1; // v1.0.47.02: Fix the fact that "x=5 , y=6" would preserve the whitespace at the end of "5".  It also fixes wrongly showing a syntax error for things like: static d="xyz"  , e = 5
-				TCHAR orig_char = *terminate_here;
-				*terminate_here = '\0'; // Temporarily terminate (it might already be the terminator, but that's harmless).
-
-				// Performance note: Simple assignments of a literal number or string to a variable currently
-				// perform better standalone than combined with the comma operator.  This is almost certainly
-				// due to optimizations which avoid the need to call ExpandExpression for those cases.
-				// If this ever changes, note that the braces added below are needed for ACT_STATIC regardless
-				// of how many initializers there are, due to the way it removes its own Line after execution.
-				if (belongs_to_line_above && !open_brace_was_added) // v1.0.46.01: Put braces to allow initializers to work even directly under an IF/ELSE/LOOP.
-				{
-					if (!AddLine(ACT_BLOCK_BEGIN))
-						return FAIL;
-					open_brace_was_added = true;
-				}
-				// Call Parse() vs. AddLine() because it detects and optimizes simple assignments into
-				// non-expressions for faster runtime execution.
-				if (!ParseAndAddLine(item, declare_type == VAR_DECLARE_STATIC ? ACT_STATIC : ACT_INVALID))
-					return FAIL; // Above already displayed the error.
-
-				*terminate_here = orig_char; // Undo the temporary termination.
-				// Set "item" for use by the next iteration:
-				item = (*item_end == ',') // i.e. it's not the terminator and thus not the final item in the list.
-					? omit_leading_whitespace(item_end + 1)
-					: item_end; // It's the terminator, so let the loop detect that to finish.
-			} // for() each item in the declaration list.
-			if (open_brace_was_added)
-				if (!AddLine(ACT_BLOCK_END))
-					return FAIL;
-
-			return OK;
-		} // single-iteration for-loop
-
-		// Since above didn't return, it's not a declaration such as "global MyVar".
-		end_marker = ParseActionType(action_name, aLineText, true);
+		// Find the name, if any, at the start of the line.
+		end_marker = ParseActionType(action_name, aLineText);
 	}
 	
-	// Above has ensured that end_marker is the address of the last character of the action name,
+	// Above has ensured that end_marker is the address of the first character after the action name,
 	// or NULL if there is no action name.
-	// Find the arguments (not to be confused with exec_params) of this action, if it has any:
-	LPTSTR action_args;
-	bool could_be_named_action;
 	if (end_marker)
 	{
 		action_args = omit_leading_whitespace(end_marker);
-		TCHAR end_char = *end_marker;
-		could_be_named_action = (!end_char || IS_SPACE_OR_TAB(end_char) || end_char == '(')
-			&& *action_args != '=' // Allow for a more specific error message for `x = y`, to ease transition from v1.
-			&& *action_args != ':'; // Exclude `default :` (for anything else, this just affects which error message is shown).
+		// For v2, the interpretation of a control flow keyword shouldn't be affected by whatever
+		// operator follows it, so this is done before checking for assignments or other operators.
+		if (IS_SPACE_OR_TAB(*end_marker) || *end_marker == '(' || !*end_marker)
+			aActionType = ConvertActionType(action_name);
 	}
 	else
 	{
 		action_args = aLineText;
-		// Since this entire line is the action's arg, it can't contain an action name.
-		could_be_named_action = false;
 	}
-	// Now action_args is either the first delimiter or the first parameter (if the optional first
-	// delimiter was omitted).
+
 	bool add_openbrace_afterward = false; // v1.0.41: Set default for use in supporting brace in "if (expr) {" and "Loop {".
 	bool all_args_are_expressions = false;
 
-	if (!aActionType) // i.e. the caller hasn't yet determined this line's action type.
+	if (!aActionType) // i.e. not yet determined.
 	{
 		//////////////////////////////////////////////////////
 		// Detect operators and assignments such as := and +=
 		//////////////////////////////////////////////////////
-		// This section is done before the section that checks whether action_name is a valid command
-		// because it avoids ambiguity in a line such as the following:
-		//    Input := test  ; Would otherwise be confused with the Input command.
 
 		if (*aLineText == '"' || *aLineText == '\'')
 		{
@@ -4424,7 +4220,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						if (!*cp || has_space_or_tab)
 						{
 							end_marker = id_end;
-							could_be_named_action = true;
 							// Let the parentheses be added in the section below.
 						}
 						//else: Neither a command nor a legal standalone expression.
@@ -4469,49 +4264,24 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		} // if (aActionType)
 
 	} // Handling of assignments and other operators.
-	//else aActionType was already determined by the caller.
+	//else aActionType was already determined.
 
-	if (!aActionType && could_be_named_action) // Caller nor logic above has yet determined the action.
+	if (!aActionType)
 	{
-		aActionType = ConvertActionType(action_name); // Is this line a control flow statement?
-
-		if (!aActionType && *end_marker != '(')
+		if (end_marker && (!*end_marker || IS_SPACE_OR_TAB(*end_marker))
+			&& *action_args != '=' // Allow for a more specific error message for `x = y` when it isn't recognized as an expression (e.g. ternary).
+			&& *action_args != ':' // Exclude `default :` (for anything else, this just affects which error message is shown).
+			&& !(*action_name <= '9' && *action_name >= '0')) // Exclude numbers, since no function name can start with a number.
 		{
-			if (*action_name < '0' || *action_name > '9') // Exclude numbers, since no function name can start with a number.
-			{
-				// Convert function/method call statements to function/method calls.
-				if (*end_marker) // Replace space or tab with parenthesis.
-					*end_marker = '(';
-				else
-					aLineText[line_length++] = '(';
-				aLineText[line_length++] = ')';
-				aLineText[line_length] = '\0';
-				action_args = aLineText;
-				aActionType = ACT_EXPRESSION;
-			}
-		}
-	}
-
-	if (!aActionType) // Didn't find any action or command in this line.
-	{
-		// v1.0.41: Support one-true brace style even if there's no space, but make it strict so that
-		// things like "Loop{ string" are reported as errors (in case user intended an object literal).
-		if (*action_args == '{')
-		{
-			switch (ActionTypeType otb_act = ConvertActionType(action_name))
-			{
-			case ACT_LOOP:
-			case ACT_SWITCH:
-				if (action_args[1]) // See above.
-					break;
-				//else fall through:
-			case ACT_ELSE:
-			case ACT_TRY:
-			case ACT_CATCH:
-			case ACT_FINALLY:
-				aActionType = otb_act;
-				break;
-			}
+			// Convert function/method call statements to function/method calls.
+			if (*end_marker) // Replace space or tab with parenthesis.
+				*end_marker = '(';
+			else
+				aLineText[line_length++] = '(';
+			aLineText[line_length++] = ')';
+			aLineText[line_length] = '\0';
+			action_args = aLineText;
+			aActionType = ACT_EXPRESSION;
 		}
 		else if (*action_args == ':')
 		{
@@ -4528,7 +4298,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				return ParseAndAddLine(action_args);
 			}
 		}
-		if (!aActionType && _tcschr(EXPR_ALL_SYMBOLS, *action_args))
+		else if (_tcschr(EXPR_ALL_SYMBOLS, *action_args))
 		{
 			LPTSTR question_mark;
 			if ((*action_args == '+' || *action_args == '-') && action_args[1] == *action_args) // Post-inc/dec. See comments further below.
@@ -4610,6 +4380,133 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				// no effect, so it's probably an error.
 				return ScriptError(_T("Invalid loop type."), aLineText);
 		}
+	}
+	else if (ACT_IS_VAR_DECL(aActionType))
+	{
+		int declare_type;
+		switch (aActionType)
+		{
+		case ACT_STATIC: declare_type = VAR_DECLARE_STATIC; break;
+		case ACT_LOCAL: declare_type = VAR_DECLARE_LOCAL; break;
+		default: declare_type = VAR_DECLARE_GLOBAL; break;
+		}
+
+		if (!*action_args) // It's the word "global", "local", "static" by itself.
+		{
+			// Any combination of declarations is allowed here for simplicity, but only declarations can
+			// appear above this line:
+			if (mNextLineIsFunctionBody && declare_type != VAR_DECLARE_LOCAL)
+			{
+				g->CurrentFunc->mDefaultVarType = declare_type;
+				// No further action is required.
+				return OK;
+			}
+			// Otherwise, it occurs too far down in the body.
+			return ScriptError(ERR_UNEXPECTED_DECL, aLineText);
+		}
+			
+		// Since above didn't break or return, a variable is being declared.
+
+		if (!g->CurrentFunc && (declare_type & VAR_LOCAL))
+			return ScriptError(ERR_UNEXPECTED_DECL, aLineText);
+
+		int initializers = 0;
+		LPTSTR init_end = aLineText;
+		for (LPTSTR item_end, item = action_args; *item; item = item_end) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
+		{
+			item_end = find_identifier_end(item);
+			size_t var_name_length = item_end - item;
+			if (!var_name_length)
+				return ScriptError(ERR_INVALID_VARDECL, item);
+
+			Var *var = nullptr;
+			Var *global_var = nullptr;
+			if (declare_type & VAR_GLOBAL)
+			{
+				// This is done separately since it may also need to be added to mStaticVars:
+				if (  !(global_var = FindOrAddVar(item, var_name_length, declare_type))  )
+					return FAIL; // It already displayed the error.
+			}
+
+			if (g->CurrentFunc)
+			{
+				int insert_pos;
+				VarList *varlist;
+				ResultType result = OK;
+				// Search both locals and statics so any conflicts are detected, but set insert_pos
+				// according to which list we want to insert into.  For "global", we want to insert
+				// into the static list to make it accessible to the function.
+				int insert_into = global_var ? (VAR_LOCAL_STATIC | VAR_LOCAL) : declare_type;
+				var = FindVar(item, var_name_length, insert_into, &varlist, &insert_pos, &result);
+				if (!var)
+				{
+					if (!result)
+						return result;
+					if (global_var) // Implies (declare_type & VAR_GLOBAL) != 0.
+					{
+						// Insert could be skipped if the function is assume-global, but isn't because:
+						//  - When !mNextLineIsFunctionBody, mDefaultVarType might still be changed.
+						//  - It seems harmless to add any explicitly declared globals here.
+						//  - There might be some reason to refer to the declared globals in future.
+						if (!varlist->Insert(global_var, insert_pos))
+							return ScriptError(ERR_OUTOFMEM);
+						var = global_var;
+					}
+					else
+					{
+						var = AddVar(item, var_name_length, varlist, insert_pos, declare_type);
+						if (!var)
+							return FAIL; // It already displayed the error.
+					}
+				}
+				// Detect the following conflicts:
+				//  - Declaring local but found a static/global in conflicts, or vice versa.
+				//  - Declaring static but found a global in varlist, or vice versa.
+				//  - Declaring local but found a parameter in varlist.
+				//  - Declaring a built-in variable as local or static.
+				// But permit the following:
+				//  - Exact duplicate declarations, such as for two different code paths.
+				if (var->Scope() != declare_type)
+					return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
+			}
+			else
+				var = global_var;
+
+			item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
+			if (*item_end && *item_end != ',')
+			{
+				// Since this variable might already have a value, compound assignments are
+				// permitted (although not very conventional).  This is mostly for globals,
+				// which might only be referenced on this one line (and outside the function),
+				// but might have some utility with "static" due to its once-only nature.
+				if (!( _tcschr(_T(":+-*/.|&^"), *item_end) && item_end[1] == '=' // += -= *= /= .= |= &= ^=
+					|| _tcschr(_T("/<>?"), *item_end) && item_end[1] == *item_end && (item_end[2] == '=' // //= <<= >>= ??=
+						|| (*item_end == '>' && item_end[2] == *item_end && item_end[3] == '=')) )) // >>>=
+					return ScriptError(ERR_INVALID_VARDECL, item); // It's not any of the above, so it's invalid.
+				// Find the comma (or terminator) that marks the end of this initializer.
+				item_end += FindExprDelim(item_end);
+				if (initializers > 0)
+				{
+					*init_end++ = ',';
+					if (init_end < item)
+						*init_end++ = ' '; // For readability in ListLines.
+				}
+				tmemmove(init_end, item, (item_end - item));
+				init_end += (item_end - item);
+				++initializers;
+			}
+			if (*item_end == ',')
+				item_end = omit_leading_whitespace(item_end + 1); // Find the start of the next item.
+			else if (*item_end)
+				return ScriptError(ERR_INVALID_VARDECL, item);
+		} // for() each item in the declaration list.
+		if (init_end == aLineText) // No initializers are present.
+			return OK;
+		*init_end = '\0';
+		end_marker = NULL;
+		action_args = aLineText;
+		if (aActionType != ACT_STATIC)
+			aActionType = ACT_EXPRESSION; // ACT_LOCAL and ACT_GLOBAL aren't handled at runtime.
 	}
 	int mark;
 	LPTSTR subaction_start = NULL;
@@ -4802,7 +4699,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			, this_action.MinParams > 1 ? _T("s") : _T(""));
 		return ScriptError(error_msg, aLineText);
 	}
-	if (action_args[mark] && !(aActionType == ACT_EXPRESSION || aActionType == ACT_CATCH))
+	if (action_args[mark] && aActionType >= ACT_FIRST_NAMED_ACTION && !(aActionType == ACT_CATCH || ACT_IS_VAR_DECL(aActionType)))
 	{
 		sntprintf(error_msg, _countof(error_msg), _T("\"%s\" accepts at most %d parameter%s.")
 			, this_action.Name, max_params
@@ -4853,7 +4750,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 
 
-inline LPTSTR Script::ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors)
+inline LPTSTR Script::ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource)
 // inline since it's called so often.
 // aBufTarget should be at least MAX_VAR_NAME_LENGTH + 1 in size.
 // Returns NULL if it's not a named action; otherwise, the address of the first

@@ -246,9 +246,12 @@ Action g_act[] =
 	, {_T("{"), 0, 0}
 	, {_T("}"), 0, 0}
 
-	, {_T("Static"), 1, 1} // ACT_STATIC (used only at load time).
 	, {_T("#HotIf"), 0, 1}
 	, {_T("Exit"), 0, 1} // ExitCode
+
+	, {_T("Static"), 1, 1} // ACT_STATIC - executes once and then the Line is removed.
+	, {_T("Global"), 1, 1} // ACT_GLOBAL - used only at load time.
+	, {_T("Local"), 1, 1} // ACT_LOCAL - used only at load time.
 
 	, {_T("If"), 1, 1}
 	, {_T("Else"), 0, 0} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").

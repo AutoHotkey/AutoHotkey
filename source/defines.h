@@ -624,24 +624,27 @@ enum enum_act {
 , ACT_EXPRESSION
 // Keep ACT_BLOCK_BEGIN as the first "control flow" action, for range checks with ACT_FIRST_CONTROL_FLOW:
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
-, ACT_STATIC
 , ACT_HOTKEY_IF // Must be before ACT_FIRST_COMMAND.
 , ACT_EXIT // Used with AddLine(), but excluded from the "named" range below so that the function is preferred.
-, ACT_IF, ACT_FIRST_NAMED_ACTION = ACT_IF
+// ================================================================================
+// Named actions recognized by ConvertActionType:
+, ACT_STATIC, ACT_GLOBAL, ACT_LOCAL
+, ACT_IF
 , ACT_ELSE
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
 , ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
 , ACT_BREAK, ACT_CONTINUE // Keep ACT_FOR..ACT_CONTINUE together for ACT_EXPANDS_ITS_OWN_ARGS.
 , ACT_GOTO
-, ACT_FIRST_JUMP = ACT_BREAK, ACT_LAST_JUMP = ACT_GOTO // Actions which accept a label name.
 , ACT_RETURN
 , ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
 , ACT_SWITCH, ACT_CASE // Keep ACT_TRY..ACT_CASE together for ACT_EXPANDS_ITS_OWN_ARGS.
-, ACT_LAST_NAMED_ACTION = ACT_CASE
 // ================================================================================
 // All others are not included in g_act, and are only used for misc. purposes:
-// ================================================================================
 , ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG // Used by PerformMouse().
+// ================================================================================
+// Aliases used for range checks:
+, ACT_FIRST_NAMED_ACTION = ACT_STATIC, ACT_LAST_NAMED_ACTION = ACT_CASE
+, ACT_FIRST_JUMP = ACT_BREAK, ACT_LAST_JUMP = ACT_GOTO // Actions which accept a label name.
 };
 
 #define ACT_IS_IF(ActionType) (ActionType == ACT_IF)
@@ -650,6 +653,7 @@ enum enum_act {
 #define ACT_IS_LINE_PARENT(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
 	|| ACT_IS_LOOP(ActionType) || (ActionType >= ACT_TRY && ActionType <= ACT_FINALLY) \
 	|| ActionType == ACT_SWITCH)
+#define ACT_IS_VAR_DECL(ActionType) ((ActionType) <= ACT_LOCAL && (ActionType) >= ACT_STATIC)
 // The following groups of action types do not need ExpandArgs() called by ExecUntil(),
 // for one of the following reasons: 1) action has no args, 2) action's args are
 // always fully resolved at load time, 3) action is never executed by ExecUntil(),
