@@ -4239,9 +4239,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				// Find the first non-function comma.
 				// This is done because ACT_ASSIGNEXPR needs to make comma-separated sub-expressions
 				// into one big ACT_EXPRESSION so that the leftmost sub-expression will get evaluated
-				// prior to the others (for consistency and as documented).  However, this has at
-				// least one side-effect; namely that if expression evaluation is aborted for some
-				// reason, the assignment is skipped completely rather than assigning a blank value.
+				// prior to the others (for consistency and as documented).
 				// ALSO: ACT_ASSIGNEXPR is made into ACT_EXPRESSION *only* when multi-statement
 				// commas are present because it performs much better for trivial assignments,
 				// even some which aren't optimized to become non-expressions.
