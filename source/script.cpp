@@ -2676,9 +2676,12 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 		{
 			if (buf[buf_length - 1] == ':')
 			{
-				if (action_type == ACT_CASE && FindExprDelim(buf, ':') == buf_length - 1)
+				// Rather than checking for ACT_CASE and "Default:" or "Default :" (even though Default is recognized
+				// as such only within a Switch), just treat all statement types the same: do line continuation only
+				// if this ":" has a matching "?".
+				if (FindExprDelim(buf, ':') == buf_length - 1)
 				{
-					// This is the colon terminating a case statement.
+					// This is either an error or the colon terminating a case/default statement.
 					return OK;
 				}
 				//else this colon qualifies for line continuation.
