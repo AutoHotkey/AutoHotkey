@@ -261,7 +261,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 
 void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
 
-DWORD ProcessExist(LPCTSTR aProcess, bool aGetParent = false);
+DWORD ProcessExist(LPCTSTR aProcess, bool aGetParent = false, bool aVerifyPID = true);
 DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly);
 
 FResult Shutdown(int nFlag);
