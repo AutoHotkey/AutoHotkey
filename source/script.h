@@ -1629,7 +1629,8 @@ public:
 #ifdef CONFIG_DEBUGGER
 			// Don't do this for fat-arrow functions because they're only (part of) a single line,
 			// and they are removed from the linked list of Lines (which would be relied upon below).
-			if (g_Debugger.IsConnected() && !mIsFuncExpression)
+			// Inline function definitions are treated the same if they start with a RETURN statement.
+			if (g_Debugger.IsConnected() && (!mIsFuncExpression || mJumpToLine->mActionType != ACT_RETURN))
 			{
 				// Find the end of this function.
 				//Line *line;
@@ -2796,6 +2797,22 @@ private:
 	friend bool LibNotifyProblem(LPCTSTR, LPCTSTR, Line *, bool);
 #endif
 
+	struct PartialExpression
+	{
+		PartialExpression *outer;
+		Line *pending_parent;
+		UserFunc *func = nullptr;
+		LPTSTR code;
+		size_t length;
+		LineNumberType line_no;
+		PartialExpression(LPTSTR aCode, size_t aLen, Script &aScript)
+			: code(aCode), length(aLen)
+			, outer(aScript.mExprContainingThisFunc)
+			, pending_parent(aScript.mPendingParentLine)
+			, line_no(aScript.mCombinedLineNumber) {}
+		~PartialExpression() { free(code); }
+	};
+
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
 #ifdef CONFIG_DLL
@@ -2817,6 +2834,7 @@ private:
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 	Line *mPendingParentLine, *mPendingRelatedLine;
+	PartialExpression *mExprContainingThisFunc = nullptr;
 	SymbolType mDefaultReturn = SYM_STRING;
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;

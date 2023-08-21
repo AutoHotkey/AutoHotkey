@@ -3078,6 +3078,14 @@ int BalanceExpr(LPCTSTR aBuf, int aStartBalance, TCHAR aExpect[], TCHAR *aOpenQu
 
 
 
+int BalanceExpr(LPCTSTR aBuf)
+{
+	TCHAR expect[MAX_BALANCEEXPR_DEPTH];
+	return BalanceExpr(aBuf, 0, expect);
+}
+
+
+
 #if 0 // Currently unused.
 bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 // Checks if aStr exists in aList (which is a comma-separated list).

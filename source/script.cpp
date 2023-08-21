@@ -2408,8 +2408,34 @@ process_completed_line:
 			}
 			else // Normal block begin/end.
 			{
+				auto end_func = *buf != '{' ? g->CurrentFunc : nullptr;
 				if (!AddLine(*buf == '{' ? ACT_BLOCK_BEGIN : ACT_BLOCK_END))
 					return FAIL;
+				if (mExprContainingThisFunc && end_func == mExprContainingThisFunc->func)
+				{
+					if (IS_IDENTIFIER_CHAR(buf[1])) // Prevent (a(){...}b) from producing (ab).
+						return ScriptError(ERR_EXPR_SYNTAX, buf);
+					auto expr = mExprContainingThisFunc;
+					// expr contains some code and parser state that was saved when a function definition
+					// was encountered by ParseAndAddLine().  expr->code includes up to (and including)
+					// the function name.  Append this current line to form the final expression (unless
+					// there's another function definition, in which case, rinse and repeat).
+					if (!buf.EnsureCapacity(--buf_length + expr->length))
+						return MemoryError();
+					tmemmove(buf + expr->length, buf + 1, buf_length + 1);
+					tmemmove(buf, expr->code, expr->length);
+					buf_length += expr->length;
+					mCombinedLineNumber = expr->line_no;
+					// Restoring mPendingParentLine ensures that both the new line's mParentLine and the
+					// parent line's mRelatedLine will be set correctly.  By contrast, mPendingRelatedLine
+					// shouldn't be changed since mRelatedLine for any prior line was already handled, and
+					// mPendingRelatedLine should now point to end_func's block-begin.
+					mPendingParentLine = expr->pending_parent;
+					mExprContainingThisFunc = expr->outer;
+					delete expr;
+					mCurrLine = NULL; // See comments below.
+					goto process_completed_line;
+				}
 			}
 			// Allow the remainder of the line to be treated as a separate line:
 			LPTSTR cp = omit_leading_whitespace(buf + 1);
@@ -2703,12 +2729,12 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 			}
 		}
 		// Before appending each line, check whether the last line ended with OTB '{'.
-		// It can't be OTB if balance > 1 since that would mean another unclosed (/[/{.
-		// balance == 1 implies buf_length >= 1, but below requires buf_length >= 2.
+		// It can be OTB even for balance > 1, but only with an inline function definition.
+		// balance > 0 implies buf_length >= 1, but below requires buf_length >= 2.
 		// The shortest valid OTB is for the property "p{".  Finding '{' usually implies
 		// buf_length >= 2 because '{' at the start of buf is usually handled by the
 		// caller, but that isn't always the case (e.g. for one-line hotkeys).
-		if (balance == 1 && buf[buf_length - 1] == '{' && buf_length >= 2)
+		else if (buf[buf_length - 1] == '{' && buf_length >= 2)
 		{
 			// Some common OTB constructs:
 			//   myfn() {
@@ -2724,11 +2750,26 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 			// between "loop {" and "return {".  Since valid OTB can't be preceded by an operator
 			// such as ":= {", also check that case to improve flexibility.
 			LPTSTR cp = omit_trailing_whitespace(buf, buf + (buf_length - 2));
-			if (   *cp == ')' // Function/method definition or reserved.
-				|| *cp == ']' // Property definition or reserved.
-				|| ACT_IS_LINE_PARENT(action_type) && !EndsWithOperator(buf, cp)
-				|| mClassObjectCount && !g->CurrentFunc && (cp - buf) < action_end_pos) // "Property {" (get/set was already handled by caller).
+			if (*cp == ')' // Function/method definition or reserved.
+				|| balance == 1 // The following cases don't apply if the '{' is enclosed.
+				&& (*cp == ']' // Property definition or reserved.
+				 || ACT_IS_LINE_PARENT(action_type) && !EndsWithOperator(buf, cp)
+				 || mClassObjectCount && !g->CurrentFunc && (cp - buf) < action_end_pos)) // "Property {" (get/set was already handled by caller).
 				return OK;
+		}
+		else if (buf[buf_length - 1] == ')' && *next_buf == '{')
+		{
+			// This is a function definition enclosed within an expression.  In order to permit a statement
+			// on the same line as the opening brace, it is currently necessary to move the brace up one line.
+			LPTSTR cp = omit_leading_whitespace(next_buf + 1);
+			if (*cp)
+			{
+				buf[buf_length++] = '{';
+				buf[buf_length] = '\0';
+				tmemcpy(next_buf, cp, (next_buf.length -= (cp - next_buf)) + 1);
+				return OK; 
+			}
+			// The line is just "{", so let it be handled by line continuation since we can't leave next_buf empty.
 		}
 		if (next_buf_length) // Skip empty/comment lines.
 		{
@@ -4102,6 +4143,78 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	else
 	{
 		action_args = aLineText;
+	}
+	
+	if (aLineText[line_length - 1] == '{'
+		&& (!ACT_IS_LINE_PARENT(aActionType) || BalanceExpr(aLineText) > 1)) // Not an action type that permits OTB, or the '{' is enclosed.
+	{
+		// This is part of a workaround for parser limitations, that allows function definitions to be used
+		// within an expression.  Either GetLineContExpr() has determined that this is OTB, or it is at the
+		// end of the script (so there aren't any subsequent lines to be appended to it).
+		// GetLineContExpr()/BalanceExpr() normally balances opening and closing symbols, but in this case
+		// there may be a number of open parentheses/brackets/braces with the close symbol to come after
+		// the function.  It does at least ensure aLineText doesn't contain an unterminated quoted string
+		// or consist of just "){", so those cases don't need to be handled here.
+		ASSERT(line_length > 1); // Should be guaranteed as '{' on its own wouldn't cause a ParseAndAddLine() call.
+		size_t i = line_length - 2;
+		while (IS_SPACE_OR_TAB(aLineText[i]) && i)
+			--i;
+		if (aLineText[i] != ')')
+			return ScriptError(ERR_UNEXPECTED_OPEN_BRACE);
+		TCHAR quote = 0;
+		int open = 1;
+		while (i > 0 && open)
+		{
+			switch (aLineText[--i])
+			{
+			case ')': ++open; break;
+			case '(': --open; break;
+			case '"':
+			case '\'':
+				for (quote = aLineText[i--]; i > 0; --i)
+				{
+					if (aLineText[i] == quote)
+					{
+						// Only the escape char can escape itself, so any odd number of preceding
+						// escape chars means this quote mark is escaped; e.g. `" or ```".
+						bool escaped = false;
+						if (aLiteralMap)
+							escaped = aLiteralMap[i];
+						else
+							while (i > 0 && aLineText[i - 1] == g_EscapeChar)
+								escaped = !escaped, --i;
+						if (!escaped)
+							break;
+					}
+				}
+			}
+		}
+		ASSERT(!open);
+		LPTSTR open_paren = aLineText + i;
+		LPTSTR id = open_paren;
+		while (id > aLineText && IS_IDENTIFIER_CHAR(id[-1]))
+			--id;
+		if (id == open_paren)
+			return ScriptError(_T("Function name required."), open_paren);
+		// Save everything up to (but not including) the open parentheses.  When the close brace
+		// is found, anything following it will be appended to this code, effectively forming an
+		// expression which references the function by name.
+		size_t len = open_paren - aLineText;
+		LPTSTR code = tmalloc(len + 1);
+		if (!code)
+			return MemoryError();
+		tmemcpy(code, aLineText, len);
+		code[open_paren - aLineText] = '\0';
+		auto expr = new PartialExpression(code, len, *this); // Save the prefix code and some current script state.
+		// Parse the start of the function definition, including the open brace.
+		if (!DefineFunc(id, false, true))
+		{
+			delete expr;
+			return FAIL;
+		}
+		expr->func = g->CurrentFunc; // Save this so that the correct block-end is detected.
+		mExprContainingThisFunc = expr;
+		return OK;
 	}
 
 	bool add_openbrace_afterward = false; // v1.0.41: Set default for use in supporting brace in "if (expr) {" and "Loop {".
