@@ -521,6 +521,11 @@ public:
 			aBuf = var.ObjectToText(this->mName, aBuf, aBufSize);
 			break;
 		default:
+			if (var.IsUninitialized())
+			{
+				aBuf += sntprintf(aBuf, aBufSize, _T("%s: unset"), mName);
+				break;
+			}
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%Iu of %Iu]: %-1.60s%s"), mName // mName not var.mName (see comment above).
 				, var._CharLength(), var._CharCapacity() ? (var._CharCapacity() - 1) : 0  // Use -1 since it makes more sense to exclude the terminator.
 				, var.mCharContents, var._CharLength() > 60 ? _T("...") : _T(""));
