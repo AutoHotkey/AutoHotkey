@@ -65,7 +65,7 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Ob
 #else
 	// Without the debugger stack, there's no good way to determine what's throwing. It could be:
 	//g_act[mActionType].Name; // A command implemented as an Action (g_act).
-	//g->CurrentFunc->mName; // A user-defined function (perhaps when mActionType == ACT_THROW).
+	//g->CurrentFunc->mName; // A user-defined function.
 	//???; // A built-in function implemented as a Func (g_BIF).
 	aParams[1].SetValue(_T(""), 0);
 #endif

@@ -636,7 +636,7 @@ enum enum_act {
 , ACT_BREAK, ACT_CONTINUE // Keep ACT_FOR..ACT_CONTINUE together for ACT_EXPANDS_ITS_OWN_ARGS.
 , ACT_GOTO
 , ACT_RETURN
-, ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
+, ACT_TRY, ACT_CATCH, ACT_FINALLY // Keep TRY, CATCH and FINALLY together and in this order for range checks.
 , ACT_SWITCH, ACT_CASE // Keep ACT_TRY..ACT_CASE together for ACT_EXPANDS_ITS_OWN_ARGS.
 // ================================================================================
 // All others are not included in g_act, and are only used for misc. purposes:

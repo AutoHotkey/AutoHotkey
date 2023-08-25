@@ -669,7 +669,7 @@ bool LibNotifyProblem(LPCTSTR aMessage, LPCTSTR aExtra, Line *aLine, bool aWarn)
 {
 	if (!lib_ProblemCallback)
 		return false;
-	static Line sLine(0, 0, ACT_THROW, nullptr, 0);
+	static Line sLine(0, 0, ACT_EXPRESSION, nullptr, 0);
 	if (!aLine)
 	{
 		sLine.mFileIndex = g_script.mCurrFileIndex;

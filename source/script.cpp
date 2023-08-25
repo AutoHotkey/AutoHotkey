@@ -4924,7 +4924,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	else if (aActionType == ACT_BLOCK_END && g->CurrentFunc && mOpenBlock && g->CurrentFunc == mOpenBlock->mAttribute // This is the block-end of a function.
 		&& mDefaultReturn == SYM_MISSING // It should default to unset, and doesn't end with a return.
 		&& !mPendingParentLine // There's no misplaced IF/LOOP/etc. at the end of the function.
-		&& (!(mLastLine->mActionType == ACT_RETURN || mLastLine->mActionType == ACT_THROW) || mLastLine->mParentLine != mOpenBlock)) // It wouldn't be "unreachable".
+		&& (mLastLine->mActionType != ACT_RETURN || mLastLine->mParentLine != mOpenBlock)) // It wouldn't be "unreachable".
 	{
 		if (!AddLine(ACT_RETURN, nullptr, 0, nullptr, true)) // The recursive call will detect that this needs to be `return unset`.
 			return FAIL;
@@ -7564,7 +7564,6 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 		case ACT_BREAK:
 		case ACT_CONTINUE:
 		case ACT_GOTO:
-		case ACT_THROW:
 		// v2: ACT_EXIT is always from AddLine(ACT_EXIT), since a script calling Exit would produce ACT_EXPRESSION.
 		// Exit could be parsed as both ACT_EXIT and as a function, but that would create minor inconsistencies
 		// between "Exit" and "(x && Exit())", or Exit called directly vs. called via a separate function.
@@ -9240,7 +9239,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					//   ACT_HOTKEY_IF is optional but must be boolean, not unset.
 					//   ACT_LOOP can't distinguish between unset and "" (which is equivalent to 0).
 					//   ACT_LOOP_* can be supported easily enough, but it's also easy to do ?? "" or similar.
-					//   ACT_THROW: making `throw unset` behave like `throw` would require changes.
 					//   ACT_SWITCH/ACT_CASE: unclear whether an unset case should be "omitting" or
 					//     compared to the switch value. There would be no difference when the switch
 					//     value is not `unset` and has no `?`, but there's also the issue of consistency
@@ -9346,7 +9344,6 @@ end_of_infix_to_postfix:
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not WHILE or UNTIL, which currently perform better as expressions, or FOR, which performs the same but currently expects aResultToken to always be set.
 		&& (mActionType != ACT_SWITCH && mActionType != ACT_CASE) // It's not SWITCH or CASE, which require a proper postfix expression.
-		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
 		&& (mActionType != ACT_HOTKEY_IF) // #HotIf requires the expression text not be modified.
 		&& (only_symbol != SYM_VAR || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of local vars (see "ToReturnValue") and ByRef.
 		)
@@ -9758,7 +9755,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 		// Note: Only one line at a time be expanded via the above function.  So be sure
 		// to store any parts of a line that are needed prior to moving on to the next
 		// line (e.g. control stmts such as IF and LOOP).
-		if (!ACT_EXPANDS_ITS_OWN_ARGS(line->mActionType)) // Not ACT_ASSIGNEXPR, ACT_WHILE or ACT_THROW.
+		if (!ACT_EXPANDS_ITS_OWN_ARGS(line->mActionType))
 		{
 			result = line->ExpandArgs(line->mActionType == ACT_RETURN ? aResultToken : NULL);
 			// As of v1.0.31, ExpandArgs() will also return EARLY_EXIT if a function call inside one of this
@@ -10313,52 +10310,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			}
 			continue_ExecUntil_loop:
 			continue;
-		}
-
-		case ACT_THROW:
-		{
-			if (!line->mArgc)
-			{
-				// If we're executing within a CATCH statement, signal it to re-throw its exception.
-				// Otherwise, throw a new generic Error.
-				return (g.ExcptMode & EXCPTMODE_CAUGHT) ? FAIL : line->ThrowRuntimeException(ERR_EXCEPTION);
-			}
-
-			// ThrownToken should only be non-NULL while control is being passed up the
-			// stack, which implies no script code can be executing.
-			ASSERT(!g.ThrownToken);
-
-			ResultToken* token = new ResultToken;
-			token->symbol = SYM_STRING; // Set default. ExpandArgs() mightn't set it.
-			token->mem_to_free = NULL;
-			token->marker_length = -1;
-
-			result = line->ExpandArgs(token);
-			if (result != OK)
-			{
-				// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
-				delete token;
-				return result;
-			}
-
-			if (token->symbol == SYM_STRING && !token->mem_to_free)
-			{
-				// There are a couple of shortcuts we could take here, but they aren't taken
-				// because throwing a string is pretty rare and not a performance priority.
-				// Shortcut #1: Assign _T("") if ARG1 is empty.
-				// Shortcut #2: Take over sDerefBuf if ARG1 == sDerefBuf.
-				if (!token->Malloc(token->marker, token->marker_length))
-				{
-					delete token;
-					// See ThrowRuntimeException() for comments.
-					MsgBox(ERR_OUTOFMEM ERR_ABORT);
-					return FAIL;
-				}
-			}
-
-			// Throw the newly-created token
-			line->SetThrownToken(g, token);
-			return FAIL;
 		}
 
 		case ACT_FINALLY:

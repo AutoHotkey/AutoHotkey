@@ -270,7 +270,6 @@ Action g_act[] =
 	, {_T("Try"), 0, 0}
 	, {_T("Catch"), 0, 1}
 	, {_T("Finally"), 0, 0}
-	, {_T("Throw"), 0, 1}
 	, {_T("Switch"), 0, 2}
 	, {_T("Case"), 1, MAX_ARGS}
 };
