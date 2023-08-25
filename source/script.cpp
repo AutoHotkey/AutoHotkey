@@ -8174,7 +8174,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						break;
 					}
 					bool maybe;
-					if (cp1 == '.' && (cp[2] == '(' || cp[2] == '[')) // fun?.() or arr?.[i]
+					op_end = omit_leading_whitespace(cp + 1);
+					if (*op_end == '.' && (op_end[1] == '(' || op_end[1] == '[')) // fun?.() or arr?.[i]
 					{
 						// Prohibit x.y?.(z) for now since it's probably ideal to have it short-circuit over (z)
 						// if the method doesn't exist, and call with `this == x` (like JavaScript in both cases).
@@ -8189,17 +8190,17 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						//  4. z
 						//     stack: [x.y, x, z]
 						//  5. FUNC {flags: IT_CALL}  ; calls (x.y)(x, z)
-						if (cp[2] == '(' && infix_count && infix[infix_count-1].symbol == SYM_DOT)
+						if (op_end[1] == '(' && infix_count && infix[infix_count-1].symbol == SYM_DOT)
 							return LineError(_T("Optional method calls are not supported."), FAIL, cp);
 						maybe = true;
-						++cp; // An additional increment to have loop skip over '.' too.
+						cp = op_end; // The loop will skip over '.' itself.
 					}
-					else if (cp1 == '.' && IS_IDENTIFIER_CHAR(cp[2])) // x?.y or x?.123
+					else if (*op_end == '.' && IS_IDENTIFIER_CHAR(op_end[1])) // x?.y or x?.123
 					{
 						// Do some extra checks to allow an optional chain enclosed in parentheses to use numeric
 						// property names without breaking expressions like a?.123:b, for backward-compatibility.
 						LPTSTR d_end;
-						auto id = cp + 2, id_end = find_identifier_end(id);
+						auto id = op_end + 1, id_end = find_identifier_end(id);
 						_tcstod(id, &d_end); // This accounts for scientific notation.
 						if (id_end != d_end || *id_end == '(' || *id_end == '[')
 							maybe = id_end >= d_end;
@@ -8213,9 +8214,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					}
 					else
 					{
-						if (IS_SPACE_OR_TAB(cp1))
-							cp1 = *omit_leading_whitespace(cp + 1);
-						maybe = _tcschr(EXPR_SYMBOLS_AFTER_MAYBE, cp1); // Can't be valid ternary in any of these cases.  cp1 == 0 is included in the search to support fat arrow functions (line continuation otherwise prevents it from occurring at EOL, except at EOF).
+						maybe = _tcschr(EXPR_SYMBOLS_AFTER_MAYBE, *op_end); // Can't be valid ternary in any of these cases.  *op_end == 0 is included in the search to support fat arrow functions (line continuation otherwise prevents it from occurring at EOL, except at EOF).
 					}
 					if (maybe)
 						this_infix_item.symbol = SYM_MAYBE;
