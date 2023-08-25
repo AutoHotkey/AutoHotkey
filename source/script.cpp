@@ -2650,7 +2650,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 // buf) by a previous call to GetLineContinuation(), but **only up to the unbalanced line**;
 // any subsequent contination is handled by this function.
 {
-	ActionTypeType action_type = ACT_INVALID; // Set default.
+	enum_act action_type = ACT_INVALID; // Set default.
 	ptrdiff_t action_end_pos = 0;
 
 	size_t &buf_length = buf.length;
@@ -2671,10 +2671,11 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 		{
 			TCHAR orig_char = *action_end;
 			// This relies on names of control flow statements being invalid for use as var/func names:
-			if (IS_SPACE_OR_TAB(orig_char) || orig_char == '(' || orig_char == '{') // '{' supports "else{".
+			if ((IS_SPACE_OR_TAB(orig_char) || orig_char == '(' || orig_char == '{') // '{' supports "else{".
+				&& !(mClassObjectCount && !g->CurrentFunc)) // Not in a class body (where Else/Try/Finally are just property names).
 			{
 				*action_end = '\0';
-				action_type = ConvertActionType(action_start);
+				action_type = (enum_act)ConvertActionType(action_start);
 				*action_end = orig_char;
 
 				if (action_type == ACT_ELSE || action_type == ACT_TRY || action_type == ACT_FINALLY)
@@ -2683,13 +2684,6 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 					if (*action_start == '{')
 						return OK; // This is unconditionally a block-begin, not an expression.
 					continue; // Parse any same-line action instead.
-				}
-
-				if (mClassObjectCount && !g->CurrentFunc // In a class body.
-					&& (action_end - action_start == 6) && !_tcsnicmp(action_start, _T("Static"), 6)) // Ignore "Static" modifier.
-				{
-					action_start = omit_leading_whitespace(action_end);
-					continue;
 				}
 			}
 		}
@@ -2753,8 +2747,8 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 			if (*cp == ')' // Function/method definition or reserved.
 				|| balance == 1 // The following cases don't apply if the '{' is enclosed.
 				&& (*cp == ']' // Property definition or reserved.
-				 || ACT_IS_LINE_PARENT(action_type) && !EndsWithOperator(buf, cp)
-				 || mClassObjectCount && !g->CurrentFunc && (cp - buf) < action_end_pos)) // "Property {" (get/set was already handled by caller).
+				 || IS_IDENTIFIER_CHAR(*cp) // As above (get/set was handled by caller).
+				 || ACT_IS_LINE_PARENT(action_type) && !EndsWithOperator(buf, cp))) // Control flow OTB.
 				return OK;
 		}
 		else if (buf[buf_length - 1] == ')' && *next_buf == '{')
