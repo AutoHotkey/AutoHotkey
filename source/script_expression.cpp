@@ -1540,7 +1540,11 @@ abort_with_exception:
 	// FALL THROUGH:
 abort_if_result:
 	if (aResult != FAIL)
+	{
+		if (aResultToken)
+			aResultToken->symbol = SYM_MISSING;
 		goto normal_end_skip_output_var;
+	}
 	// FALL THROUGH:
 abort:
 	// The callers of this function know that the value of aResult (which contains the reason

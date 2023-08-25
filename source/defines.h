@@ -559,7 +559,7 @@ struct ResultToken : public ExprTokenType
 
 	ResultType SoftFail()
 	{
-		SetValue(_T(""), 0);
+		symbol = SYM_MISSING;
 		// Caller may rely on FAIL to unwind stack, but this->result is still OK.
 		return FAIL;
 	}
