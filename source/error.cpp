@@ -157,6 +157,37 @@ ResultType Line::SetThrownToken(global_struct &g, ResultToken *aToken, ResultTyp
 }
 
 
+BIF_DECL(BIF_Throw)
+{
+	if (!aParamCount || aParam[aParamCount - 1]->symbol == SYM_MISSING)
+		_f_throw(ERR_EXCEPTION);
+	auto &param = *aParam[aParamCount - 1];
+	ResultToken* token = new ResultToken;
+	token->mem_to_free = nullptr;
+	switch (param.symbol)
+	{
+	case SYM_OBJECT:
+		token->SetValue(param.object);
+		param.object->AddRef();
+		break;
+	case SYM_VAR:
+		param.var->ToToken(*token);
+		break;
+	default:
+		token->CopyValueFrom(param);
+	}
+	if (token->symbol == SYM_STRING && !token->Malloc(token->marker, token->marker_length))
+	{
+		delete token;
+		_f_throw_oom;
+	}
+	if (FAIL == g_script.mCurrLine->SetThrownToken(*g, token, FAIL_OR_OK))
+		aResultToken.SetExitResult(FAIL);
+	else
+		aResultToken.symbol = SYM_MISSING;
+}
+
+
 ResultType Script::Win32Error(DWORD aError, ResultType aErrorType)
 {
 	TCHAR number_string[_MAX_ULTOSTR_BASE10_COUNT];

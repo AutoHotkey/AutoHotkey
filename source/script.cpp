@@ -134,6 +134,7 @@ FuncEntry g_BIF[] =
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
 	BIF1(Tan, 1, 1),
+	BIF1(Throw, 0, NA),
 	BIFn(Trim, 1, 2, BIF_Trim),
 	BIF1(Type, 1, 1),
 	BIF1(VarSetStrCapacity, 1, 2, {1}),
@@ -7030,7 +7031,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 		// Built-in functions can be shadowed, so are checked only in this section.
 		if (auto *func = GetBuiltInFunc(var_name))
 		{
-			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL);
+			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL | ADDVAR_NO_VALIDATE);
 			if (!var)
 			{
 				if (aDisplayError)
@@ -7192,8 +7193,10 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1];
 	tcslcpy(var_name, aVarName, aVarNameLength + 1);  // See explanation above.  +1 to convert length to size.
 
-	if (*var_name && !Var::ValidateName(var_name))
-		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
+	if (aScope & ADDVAR_NO_VALIDATE)
+		aScope &= ~ADDVAR_NO_VALIDATE;
+	else if (*var_name && !Var::ValidateName(var_name))
+		// Above already displayed error for us.
 		return NULL;
 
 	if ((aScope & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL // This is an implicit local.

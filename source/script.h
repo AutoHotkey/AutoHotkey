@@ -3038,6 +3038,7 @@ public:
 	#define FINDVAR_LOCAL			VAR_LOCAL
 	#define FINDVAR_GLOBAL_FALLBACK	0x100
 	#define FINDVAR_NO_BIF			0x200
+	#define ADDVAR_NO_VALIDATE		0x400
 	#define FINDVAR_FOR_WRITE		FINDVAR_DEFAULT
 	#define FINDVAR_FOR_READ		(FINDVAR_DEFAULT | FINDVAR_GLOBAL_FALLBACK)
 	Var *FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope);
@@ -3277,7 +3278,7 @@ BIF_DECL(BIF_VerCompare);
 
 BIF_DECL(BIF_Type);
 BIF_DECL(BIF_IsObject);
-
+BIF_DECL(BIF_Throw);
 
 BIF_DECL(Op_Object);
 BIF_DECL(Op_Array);
