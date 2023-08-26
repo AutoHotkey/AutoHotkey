@@ -5663,10 +5663,6 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 
 ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 // Returns OK or FAIL.
-// Caller has already called ValidateName() on the function, and it is known that this valid name
-// is followed immediately by an open-paren.  aFuncExceptionVar is the address of an array on
-// the caller's stack that will hold the list of exception variables (those that must be explicitly
-// declared as either local or global) within the body of the function.
 {
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
 	int insert_pos;
