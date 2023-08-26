@@ -8726,6 +8726,7 @@ unquoted_literal:
 			}
 			else
 			{
+				this_infix->callsite = in_param_list; // For SYM_MAYBE.
 				++this_infix;
 				stack[stack_count - 1]->symbol = SYM_FUNC; // In case it was SYM_OBRACKET or SYM_OBRACE.
 				goto standard_pop_into_postfix; // Pop the token (now SYM_FUNC) into the postfix array to immediately follow its params.
@@ -8975,15 +8976,19 @@ unquoted_literal:
 						}
 						else
 						{
-							auto &last_postfix = *postfix[postfix_count - 1];
-							if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
+							if (sym_prev == SYM_VAR || sym_prev == SYM_DYNAMIC)
 							{
-								last_postfix.var_usage = VARREF_READ_MAYBE;
+								this_infix[-1].var_usage = VARREF_READ_MAYBE;
 								applied = true;
 							}
-							else if (sym_postfix == SYM_FUNC && (last_postfix.callsite->flags & IT_BITMASK) != IT_SET) // fn()? or x.y?
+							else if (sym_prev == SYM_FUNC) // x.y?
 							{
-								last_postfix.callsite->flags |= EIF_UNSET_RETURN | ((&last_postfix == this_infix - 1) ? EIF_UNSET_PROP : 0);
+								this_infix[-1].callsite->flags |= EIF_UNSET_RETURN | EIF_UNSET_PROP;
+								applied = true;
+							}
+							else if ((sym_prev == SYM_CPAREN || sym_prev == SYM_CBRACKET) && this_infix[-1].callsite) // x()?, x[]?, x.y[z]?, x?.[]?
+							{
+								this_infix[-1].callsite->flags |= EIF_UNSET_RETURN;
 								applied = true;
 							}
 						}
