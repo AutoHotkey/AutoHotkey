@@ -2421,11 +2421,14 @@ process_completed_line:
 					// was encountered by ParseAndAddLine().  expr->code includes up to (and including)
 					// the function name.  Append this current line to form the final expression (unless
 					// there's another function definition, in which case, rinse and repeat).
-					if (!buf.EnsureCapacity(--buf_length + expr->length))
+					// If the function had no explicit name, AddFunc has given it one we can insert here.
+					size_t extra = !IS_IDENTIFIER_CHAR(expr->code[expr->length - 1]) ? _tcslen(expr->func->mName) : 0;
+					if (!buf.EnsureCapacity(--buf_length + expr->length + extra))
 						return MemoryError();
-					tmemmove(buf + expr->length, buf + 1, buf_length + 1);
+					tmemmove(buf + expr->length + extra, buf + 1, buf_length + 1);
 					tmemmove(buf, expr->code, expr->length);
-					buf_length += expr->length;
+					tmemmove(buf + expr->length, expr->func->mName, extra); // Insert automatic name, if any.
+					buf_length += expr->length + extra;
 					mCombinedLineNumber = expr->line_no;
 					// Restoring mPendingParentLine ensures that both the new line's mParentLine and the
 					// parent line's mRelatedLine will be set correctly.  By contrast, mPendingRelatedLine
@@ -4189,8 +4192,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		LPTSTR id = open_paren;
 		while (id > aLineText && IS_IDENTIFIER_CHAR(id[-1]))
 			--id;
-		if (id == open_paren)
-			return ScriptError(_T("Function name required."), open_paren);
 		// Save everything up to (but not including) the open parentheses.  When the close brace
 		// is found, anything following it will be appended to this code, effectively forming an
 		// expression which references the function by name.
@@ -5632,7 +5633,7 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	if (!AddLine(ACT_BLOCK_END))
 		return FAIL;
 
-	if (!*name) // Anonymous function is not yet preceded by a DT_VAR.
+	if (*aPrmStart == '(' || *aPrmEnd != ')') // Anonymous function is not yet preceded by a DT_VAR.
 	{
 		if (!aDeref.Push())
 			return FAIL;
@@ -6818,6 +6819,16 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 			the_new_func->mIsStatic = true;
 			scope |= VAR_LOCAL_STATIC;
 		}
+		if (!aFuncNameLength) // Anonymous.
+		{
+			// Give it a name for debugging purposes and to allow function definition expressions to
+			// be anonymous (since they currently work by preprocessing/replacing the definition with
+			// just its name).  Starting with a digit ensures it will never conflict.
+			TCHAR buf[16];
+			static UINT sCount = 0;
+			aFuncNameLength = _stprintf(buf, _T("%ufn"), ++sCount);
+			the_new_func->mName = aFuncName = SimpleHeap::Alloc(buf, aFuncNameLength); // The previous value of the_new_func->mName was the constant _T("").
+		}
 		Var *var = aFuncNameLength ? FindVar(aFuncName, aFuncNameLength, FINDVAR_NO_BIF | scope, &varlist, &insert_pos, &result) : NULL;
 		if (var)
 		{
@@ -6830,12 +6841,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 			ConflictingDeclarationError(_T("function"), var);
 			return nullptr;
 		}
-		if (!aFuncNameLength)
-		{
-			insert_pos = 0;
-			varlist = g->CurrentFunc ? &g->CurrentFunc->mVars : GlobalVars();
-		}
-		var = AddVar(aFuncName, aFuncNameLength, varlist, insert_pos, scope);
+		var = AddVar(aFuncName, aFuncNameLength, varlist, insert_pos, scope | ADDVAR_NO_VALIDATE); // Already validated, or invalid in the case of anonymous functions.
 		if (!var)
 			return nullptr;
 		var->Assign(the_new_func);
