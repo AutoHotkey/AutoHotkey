@@ -1239,7 +1239,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 		{
 			Object::FieldType &field = mFields[i];
 			ExprTokenType value;
-			if (field.symbol == SYM_DYNAMIC)
+			if (field.symbol == SYM_DYNAMIC || field.symbol == SYM_TYPED_FIELD)
 			{
 				if (field.prop->MinParams > 0)
 					continue;
@@ -2986,7 +2986,7 @@ void Debugger::PropertyWriter::WriteDynamicProperty(LPTSTR aName)
 	ExprTokenType t_this(mProp.this_object ? mProp.this_object : mObject);
 	auto excpt_mode = g->ExcptMode;
 	g->ExcptMode |= EXCPTMODE_CATCH;
-	auto result = mObject->Invoke(result_token, IT_GET, aName, t_this, nullptr, 0);
+	auto result = mObject->Invoke(result_token, IT_GET | (mProp.this_object ? IF_SUPER : 0), aName, t_this, nullptr, 0);
 	g->ExcptMode = excpt_mode;
 	if (!result)
 	{

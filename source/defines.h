@@ -231,6 +231,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define SYM_IS_RESERVED(symbol) ((symbol) >= SYM_RESERVED_WORD) // No need to exclude SYM_COUNT in this case.
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
+	, SYM_TYPED_FIELD
 };
 
 // This should include all operators which can produce SYM_VAR for a subsequent assignment:
@@ -320,9 +321,9 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define BIMF_UNSET_ARG_1	8 // Flag used by BuiltInMethod.
 
 #define IF_BYPASS_METAFUNC	0x000010 // Skip invocation of meta-functions, such as when calling __Init or __Delete.
-#define IF_SUBSTITUTE_THIS	0x000020 // "this" is a substitute object (i.e. ValueBase()), so prohibit new value properties.
+#define IF_SUBSTITUTE_THIS	0x000020 // Target is a substitute object (i.e. ValueBase()), so refer to "aThisToken" instead of "this".
 #define IF_SUPER			0x000040 // super.something invocation.
-#define IF_DEFAULT			0x000100 // Invoke the default member (call a function object, array indexing, etc.).
+#define IF_NO_NEW_PROPS		0x000080 // Don't permit new properties.
 #define IF_NEWENUM			0x000200 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
 
 #define EIF_VARIADIC		0x010000

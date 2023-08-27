@@ -49,6 +49,8 @@ enum class MdType : UINT8
 	IntPtr = Exp32or64(Int32, Int64)
 };
 
+#define MDTYPE_NAMES nullptr, _T("i8"), _T("u8"), _T("i16"), _T("u16"), _T("i32"), _T("u32"), _T("i64"), _T("u64"), _T("f64"), _T("f32")
+
 #define MdType_IsInt(t) ((t) <= MdType::LastIntType && (t) >= MdType::FirstIntType)
 #define MdType_IsNum(t) ((t) <= MdType::LastNumberType && (t) >= MdType::FirstNumberType)
 #define MdType_Is64bit(t) ((t) >= MdType::First64bitNumType && (t) <= MdType::Last64bitNumType)
@@ -199,3 +201,10 @@ template<typename T> constexpr void* cast_into_voidp(T in)
 #define md_property(class_name, member_name, arg_type) \
 	md_property_get(class_name, member_name, arg_type), \
 	md_property_set(class_name, member_name, arg_type)
+
+
+void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken);
+ResultType SetValueOfTypeAtPtr(MdType aType, void *aPtr, ExprTokenType &aValue, ResultToken &aResultToken);
+size_t TypeSize(MdType aType);
+MdType TypeCode(LPCTSTR aName);
+LPCTSTR TypeName(MdType aType);

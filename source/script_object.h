@@ -247,6 +247,17 @@ public:
 };
 
 
+struct TypedProperty
+{
+	MdType type;
+	Object *class_object;
+	size_t data_offset;
+	size_t object_index;
+	size_t item_count;
+	~TypedProperty();
+};
+
+
 //
 // Object - Scriptable associative array.
 //
@@ -275,6 +286,7 @@ protected:
 			IObject *object;	// for SYM_OBJECT
 			String string;		// for SYM_STRING
 			Property *prop;		// for SYM_DYNAMIC
+			TypedProperty *tprop; // SYM_TYPED_FIELD
 		};
 		SymbolType symbol;
 		// key_c contains the first character of key.s. This utilizes space that would
@@ -306,6 +318,13 @@ protected:
 		~FieldType() { free(name); }
 	};
 
+	struct StructInfo
+	{
+		size_t size;
+		size_t align;
+		size_t nested_count;
+	};
+
 	enum EnumeratorType
 	{
 		Enum_Properties,
@@ -322,7 +341,11 @@ protected:
 	{
 		ClassPrototype = 0x01,
 		NativeClassPrototype = 0x02,
-		LastObjectFlag = 0x02
+		DataIsSetFlag = 0x04,
+		DataIsAllocatedFlag = 0x08,
+		DataIsStructInfo = 0x10,
+		StructInfoLocked = 0x20,
+		LastObjectFlag = 0x20
 	};
 
 	Object *CloneTo(Object &aTo);
@@ -333,6 +356,8 @@ protected:
 private:
 	Object *mBase = nullptr;
 	FlatVector<FieldType, index_t> mFields;
+	void *mData = nullptr;
+	Object **mNested = nullptr;
 
 	FieldType *FindField(name_t name, index_t &insert_pos);
 	FieldType *FindField(name_t name)
@@ -349,18 +374,22 @@ private:
 	{
 		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
+	
+	StructInfo *GetStructInfo(bool aDefine = false);
 
 protected:
 	ResultType CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMeta(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMetaVarg(int aFlags, LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	void CallNestedDelete();
+	ResultType NestedNew(ResultToken &aResultToken, StructInfo *si);
 
 public:
 
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 
-	ResultType New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, Object *aOuter = nullptr);
 	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	bool HasProp(name_t aName);
@@ -378,6 +407,7 @@ public:
 		None = 0,
 		Value,
 		Object,
+		Typed,
 		DynamicValue,
 		DynamicMethod,
 		DynamicMixed
@@ -394,6 +424,7 @@ public:
 				return field->prop->Method() ? PropType::DynamicMixed : PropType::DynamicValue;
 			return field->prop->Method() ? PropType::DynamicMethod : PropType::None;
 		case SYM_OBJECT: return PropType::Object;
+		case SYM_TYPED_FIELD: return PropType::Typed;
 		default: return PropType::Value;
 		}
 	}
@@ -446,6 +477,8 @@ public:
 	}
 	
 	Property *DefineProperty(name_t aName);
+	TypedProperty *DefineTypedProperty(name_t aName);
+	FResult DefineTypedProperty(name_t aName, MdType aType, Object *aClass, size_t aCount);
 	bool DefineMethod(name_t aName, IObject *aFunc);
 	void DefineClass(name_t aName, Object *aClass);
 	
@@ -501,6 +534,14 @@ public:
 	void GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void SetDataPtr(UINT_PTR aPtr);
+	FResult GetDataPtr(UINT_PTR &aPtr);
+	FResult AllocDataPtr(UINT_PTR aSize);
+	FResult FreeDataPtr();
+	UINT_PTR DataPtr() { return (UINT_PTR)mData + ((mFlags & DataIsAllocatedFlag) ? sizeof(UINT_PTR) : 0); }
+	UINT_PTR DataSize() { return (mFlags & DataIsAllocatedFlag) ? *(UINT_PTR*)mData : 0; }
+	UINT_PTR StructSize() { return (mFlags & DataIsStructInfo) ? ((StructInfo*)mData)->size : mBase ? mBase->StructSize() : 0; }
+	UINT_PTR LockStructSize() { auto si = GetStructInfo(); return si ? si->size : 0; }
 
 	// Methods and functions:
 	void DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
