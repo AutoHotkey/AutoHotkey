@@ -6114,9 +6114,13 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 
 	Object *prototype;
 	if (class_object)
+	{
 		prototype = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+		class_object->SetBase(base_class);
+		prototype->SetBase(base_prototype);
+	}
 	else
-		class_object = Object::CreateClass(prototype = Object::CreatePrototype(mClassName));
+		class_object = Object::CreateClass(prototype = Object::CreatePrototype(mClassName, base_prototype), base_class);
 
 	if (mClassObjectCount)
 	{
@@ -6129,9 +6133,6 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		class_var->MakeReadOnly();
 		class_var->MarkUninitialized(); // This enables the constructor to be called on first use.
 	}
-
-	prototype->SetBase(base_prototype);
-	class_object->SetBase(base_class);
 
 	if (mClassObjectCount ? !DefineClassVarInit(mClassName, true, outer_class, ACT_EXPRESSION) : !ParseAndAddLine(mClassName, ACT_EXPRESSION))
 		return FAIL;

@@ -519,7 +519,7 @@ public:
 	static IObject *sObjectCall;
 
 	static void CreateRootPrototypes();
-	static Object *CreateClass(Object *aPrototype);
+	static Object *CreateClass(Object *aPrototype, Object *aBase = Object::sClassPrototype);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberMd aMember[], int aMemberCount);
@@ -929,5 +929,6 @@ struct NestedClassInfo
 };
 BIF_DECL(Class_GetNestedClass);
 BIF_DECL(Class_CallNestedClass);
+BIF_DECL(Class_New);
 
 BIF_DECL(Any___Init);

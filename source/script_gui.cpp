@@ -640,10 +640,8 @@ void GuiControlType::DefineControlClasses()
 
 	sPrototype = CreatePrototype(_T("Gui.Control"), Object::sPrototype, sMembers, _countof(sMembers));
 	sPrototypeList = CreatePrototype(_T("Gui.List"), sPrototype, sMembersList, _countof(sMembersList));
-	auto ctrl_class = CreateClass(sPrototype);
-	auto list_class = CreateClass(sPrototypeList);
-	ctrl_class->SetBase(Object::sClass);
-	list_class->SetBase(ctrl_class);
+	auto ctrl_class = CreateClass(sPrototype, Object::sClass);
+	auto list_class = CreateClass(sPrototypeList, ctrl_class);
 	gui_class->DefineClass(_T("Control"), ctrl_class);
 	gui_class->DefineClass(_T("List"), list_class);
 

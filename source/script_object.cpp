@@ -1169,10 +1169,10 @@ LPTSTR Object::Type()
 }
 
 
-Object *Object::CreateClass(Object *aPrototype)
+Object *Object::CreateClass(Object *aPrototype, Object *aBase)
 {
 	auto cls = new Object();
-	cls->SetBase(sClassPrototype);
+	cls->SetBase(aBase);
 	cls->SetOwnProp(_T("Prototype"), aPrototype);
 	return cls;
 }
@@ -1276,9 +1276,7 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 
 Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ClassFactoryDef aFactory)
 {
-	auto class_obj = CreateClass(aPrototype);
-
-	class_obj->SetBase(aBase);
+	auto class_obj = CreateClass(aPrototype, aBase);
 
 	if (aFactory.call)
 	{
@@ -3448,7 +3446,7 @@ void Object::CreateRootPrototypes()
 			{_T("ClipboardAll"), &ClipboardAll::sPrototype, NewObject<ClipboardAll>
 				, ClipboardAll::sMembers, _countof(ClipboardAll::sMembers)}
 		}},
-		{_T("Class"), &Object::sClassPrototype},
+		{_T("Class"), &Object::sClassPrototype, {Class_New, 0, 2, true}},
 		{_T("Error"), &ErrorPrototype::Error, no_ctor, sErrorMembers, _countof(sErrorMembers), {
 			{_T("MemoryError"), &ErrorPrototype::Memory},
 			{_T("OSError"), &ErrorPrototype::OS, no_ctor, sOSErrorMembers, _countof(sOSErrorMembers)},
@@ -3625,6 +3623,35 @@ BIF_DECL(Class_CallNestedClass)
 	else
 		aResultToken.symbol = SYM_STRING; // Set the default expected by Invoke.
 	cls->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType { cls }, aParam + 1, aParamCount - 1);
+}
+
+
+BIF_DECL(Class_New)
+{
+	// aParam[0] is implicit and mandatory, as this is a method.  Usually it should be Class itself,
+	// but might be something else if the script explicitly calls (Class.Call)(this) or extends Class
+	// itself (which is not the same as an instance of Class, as that derives from Class.Prototype).
+	++aParam, --aParamCount; // Exclude "Class" itself.
+
+	// Get the optional name and class parameters.
+	LPTSTR name = _T("");
+	IObject *obj0 = ParamIndexToObject(0);
+	if (!obj0 && aParamCount)
+	{
+		name = ParamIndexToOptionalString(0, _f_retval_buf);
+		++aParam, --aParamCount;
+	}
+	Object *base_class = obj0 ? dynamic_cast<Object *>(obj0) : ParamIndexIsOmitted(0) ? Object::sClass : dynamic_cast<Object *>(ParamIndexToObject(0));
+	Object *base_proto = base_class ? dynamic_cast<Object *>(base_class->GetOwnPropObj(_T("Prototype"))) : nullptr;
+	if (!base_proto)
+		return (void)aResultToken.ParamError(obj0 ? 0 : 1, aParam[0], _T("Class"));
+	if (aParamCount)
+		++aParam, --aParamCount;
+
+	auto proto = Object::CreatePrototype(name, base_proto);
+	auto class_obj = Object::CreateClass(proto, base_class);
+	proto->Release();
+	class_obj->Construct(aResultToken, aParam, aParamCount); // This either releases or returns class_obj.
 }
 
 
