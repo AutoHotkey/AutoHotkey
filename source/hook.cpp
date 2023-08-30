@@ -1801,7 +1801,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT;
 			return AllowKeyToGoToSystem;
 		}
-		else if (aVK == VK_LMENU || aVK == VK_RMENU)
+		// Fix for v1.1.37.02 and v2.0.6: The following is also done for LWin/RWin because otherwise,
+		// the system does not generate WM_SYSKEYDOWN (or even WM_KEYDOWN) messages for combinations
+		// that correspond to some global hotkeys, even though they aren't actually triggering global
+		// hotkeys because the logical key state doesn't match.  For example, with LWin::Alt, LWin-T
+		// would not activate the Tools menu on a menu bar.
+		else if (aVK == VK_LMENU || aVK == VK_RMENU || aVK == VK_LWIN || aVK == VK_RWIN)
 		{
 			// Fix for v1.1.26.01: Added KEY_BLOCK_THIS to suppress the Alt key-up, which fixes an issue
 			// which could be reproduced as follows:
