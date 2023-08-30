@@ -4107,8 +4107,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			else // It's the word "global", "local", "static" by itself.
 			{
 				// Any combination of declarations is allowed here for simplicity, but only declarations can
-				// appear above this line:
-				if (mNextLineIsFunctionBody && declare_type != VAR_DECLARE_LOCAL)
+				// appear above this line.  This reserves the use of "global"/"static" inside a nested block
+				// for potential future use, rather than letting it affect the entire function .
+				// mLastParamInitializer is checked to allow for lines which are added for optional parameters
+				// when the parameter's default expression is not a simple literal string or number, since they
+				// actually come from the parameter list and not the body of the function.
+				if (declare_type != VAR_DECLARE_LOCAL && (mNextLineIsFunctionBody || mLastParamInitializer == mLastLine))
 				{
 					g->CurrentFunc->mDefaultVarType = declare_type;
 					// No further action is required.
@@ -5845,6 +5849,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 						if (!ParseAndAddLine(buf, ACT_EXPRESSION))
 							return FAIL;
 						this_param.default_type = PARAM_DEFAULT_UNSET;
+						mLastParamInitializer = mLastLine; // Allow other checks to identify this as not an actual script line.
 					}
 				}
 				param_end = param_start + value_length;
