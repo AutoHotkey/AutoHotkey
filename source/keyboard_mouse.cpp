@@ -4526,7 +4526,7 @@ bif_impl FResult MouseClick(optl<StrArg> aButton, optl<int> aX, optl<int> aY, op
 	return PerformMouse(ACT_MOUSECLICK, aButton, aX, aY, nullptr, nullptr, aSpeed, aRelative, aClickCount, aDownOrUp);
 }
 
-bif_impl FResult MouseClickDrag(optl<StrArg> aButton, int aX1, int aY1, int aX2, int aY2, optl<int> aSpeed, optl<StrArg> aRelative)
+bif_impl FResult MouseClickDrag(optl<StrArg> aButton, optl<int> aX1, optl<int> aY1, int aX2, int aY2, optl<int> aSpeed, optl<StrArg> aRelative)
 {
 	return PerformMouse(ACT_MOUSECLICKDRAG, aButton, aX1, aY1, aX2, aY2, aSpeed, aRelative, nullptr, nullptr);
 }
