@@ -1139,6 +1139,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// to design a way to tell the main window when to release the alt-key.
 		if (hotkey_id_temp == HOTKEY_ID_ALT_TAB || hotkey_id_temp == HOTKEY_ID_ALT_TAB_SHIFT)
 		{
+			if (pPrefixKey->was_just_used != AS_PASSTHROUGH_PREFIX)
+				pPrefixKey->was_just_used = AS_PREFIX_FOR_HOTKEY;
+
 			// Not sure if it's necessary to set this in this case.  Review.
 			if (!aKeyUp)
 				this_key.down_performed_action = true; // aKeyUp is known to be false due to an earlier check.
