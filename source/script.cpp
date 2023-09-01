@@ -2059,14 +2059,16 @@ process_completed_line:
 						}
 						// Otherwise, remap_keybd_to_mouse==false.
 
-						TCHAR blind_mods[5], * next_blind_mod = blind_mods, * this_mod, * found_mod;
-						for (this_mod = _T("!#^+"); *this_mod; ++this_mod)
-						{
-							found_mod = _tcschr(remap_source, *this_mod);
-							if (found_mod && found_mod[1]) // Exclude the last char for !:: and similar.
-								if (!_tcschr(remap_dest_modifiers, *this_mod)) // This works around an issue with {Blind+}+x releasing RShift to press LShift.
-									*next_blind_mod++ = *this_mod;
-						}
+						TCHAR blind_mods[17], *next_blind_mod = blind_mods;
+						const auto mod_string = MODLR_STRING;
+						auto &hk = *Hotkey::shk[Hotkey::sHotkeyCount - 1];
+						for (int i = 0; i < 8; ++i)
+							if (hk.mModifiersConsolidatedLR & (1 << i))
+								if (!_tcschr(remap_dest_modifiers, mod_string[i*2+1])) // This works around an issue with {Blind+}+x releasing RShift to press LShift.
+								{
+									*next_blind_mod++ = mod_string[i*2]; // < or >
+									*next_blind_mod++ = mod_string[i*2+1]; // One of ^!+#
+								}
 						*next_blind_mod = '\0';
 						LPTSTR extra_event = _T(""); // Set default.
 						switch (remap_dest_vk)
