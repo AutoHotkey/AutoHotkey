@@ -183,6 +183,9 @@ typedef UCHAR modLR_type; // Only the left-right win/alt/ctrl/shift rather than 
 #define MOD_RSHIFT 0x20
 #define MOD_LWIN 0x40
 #define MOD_RWIN 0x80
+#define MODLR_LMASK (MOD_LCONTROL | MOD_LALT | MOD_LSHIFT | MOD_LWIN)
+#define MODLR_RMASK (MOD_RCONTROL | MOD_RALT | MOD_RSHIFT | MOD_RWIN)
+#define MODLR_MASK (MODLR_LMASK | MODLR_RMASK)
 #define MODLR_STRING _T("<^>^<!>!<+>+<#>#")
 
 

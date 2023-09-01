@@ -158,16 +158,22 @@ void SendKeys(LPCTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWN
 		// letters because avoiding that adds flexibility that couldn't be achieved otherwise.
 		// Thus, ^c::Send {Blind}c produces the same result when ^c is substituted for the final c.
 		// But Send {Blind}{LControl down} will generate the extra events even if ctrl already down.
+		modLR_type mod_mask = MODLR_MASK;
 		for (aKeys += 6; *aKeys != '}'; ++aKeys)
 		{
+			modLR_type mod;
 			switch (*aKeys)
 			{
-			case '^': mods_excluded_from_blind |= MOD_LCONTROL|MOD_RCONTROL; break;
-			case '+': mods_excluded_from_blind |= MOD_LSHIFT|MOD_RSHIFT; break;
-			case '!': mods_excluded_from_blind |= MOD_LALT|MOD_RALT; break;
-			case '#': mods_excluded_from_blind |= MOD_LWIN|MOD_RWIN; break;
+			case '<': mod_mask = MODLR_LMASK; continue;
+			case '>': mod_mask = MODLR_RMASK; continue;
+			case '^': mod = MOD_LCONTROL|MOD_RCONTROL; break;
+			case '+': mod = MOD_LSHIFT|MOD_RSHIFT; break;
+			case '!': mod = MOD_LALT|MOD_RALT; break;
+			case '#': mod = MOD_LWIN|MOD_RWIN; break;
 			case '\0': return; // Just ignore the error.
 			}
+			mods_excluded_from_blind |= (mod & mod_mask);
+			mod_mask = MODLR_MASK; // Reset for the next modifier.
 		}
 	}
 
