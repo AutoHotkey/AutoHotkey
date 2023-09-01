@@ -462,6 +462,7 @@ ResultType Script::Init(LPTSTR aScriptFilename)
 		// path awareness enabled.
 		if (buf_length == _countof(buf)) // It was truncated.
 			return FAIL; // Seems the safest option for this unlikely case.
+		ConvertFilespecToCorrectCase(buf, _countof(buf), buf_length); // Normalize the case for A_AhkPath.  This might change the length, e.g. due to expansion of 8.3 filename.
 		mOurEXE = SimpleHeap::Alloc(buf, buf_length);
 		LPTSTR last_backslash = _tcsrchr(buf, '\\');
 		if (last_backslash) // Probably always true due to the nature of GetModuleFileName().
@@ -523,17 +524,14 @@ ResultType Script::Init(LPTSTR aScriptFilename)
 			buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // Succeeds even on nonexistent files.
 			if (!buf_length || buf_length >= _countof(buf))
 				return FAIL; // Due to rarity, no error msg, just abort.
+			// Using the correct case not only makes it look better in title bar & tray tool tip,
+			// it also helps with the detection of "this script already running" since otherwise
+			// it might not find the dupe if the same script name is launched with different
+			// lowercase/uppercase letters:
+			ConvertFilespecToCorrectCase(buf, _countof(buf), buf_length); // This might change the length, e.g. due to expansion of 8.3 filename.
 		}
 	}
 #endif
-	if (mKind != ScriptKindStdIn)
-	{
-		// Using the correct case not only makes it look better in title bar & tray tool tip,
-		// it also helps with the detection of "this script already running" since otherwise
-		// it might not find the dupe if the same script name is launched with different
-		// lowercase/uppercase letters:
-		ConvertFilespecToCorrectCase(buf, _countof(buf), buf_length); // This might change the length, e.g. due to expansion of 8.3 filename.
-	}
 	mFileSpec = SimpleHeap::Alloc(buf);  // The full spec is stored for convenience.
 	LPTSTR filename_marker;
 	if (filename_marker = _tcsrchr(buf, '\\'))
