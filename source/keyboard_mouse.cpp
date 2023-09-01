@@ -2802,6 +2802,7 @@ void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend)
 				modLR_type mods_changed_physically_during_send = aModsDuringSend ^ mods_current;
 				g_modifiersLR_physical &= ~(mods_changed_physically_during_send & aModsDuringSend); // Remove those that changed from down to up.
 				g_modifiersLR_physical |= mods_changed_physically_during_send & mods_current; // Add those that changed from up to down.
+				g_modifiersLR_logical = g_modifiersLR_logical_non_ignored = mods_current; // Necessary for hotkeys to be recognized correctly if modifiers were sent.
 				g_HShwnd = GetForegroundWindow(); // An item done by ResetHook() that seems worthwhile here.
 				// Most other things done by ResetHook() seem like they would do more harm than good to reset here
 				// because of the the time the hook is typically missing is very short, usually under 30ms.
