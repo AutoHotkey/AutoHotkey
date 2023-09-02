@@ -1207,6 +1207,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// to design a way to tell the main window when to release the alt-key.
 		if (hotkey_id_temp == HOTKEY_ID_ALT_TAB || hotkey_id_temp == HOTKEY_ID_ALT_TAB_SHIFT)
 		{
+			if (pPrefixKey->was_just_used != AS_PASSTHROUGH_PREFIX)
+				pPrefixKey->was_just_used = AS_PREFIX_FOR_HOTKEY;
+
 			// Not sure if it's necessary to set this in this case.  Review.
 			if (!aKeyUp)
 				this_key.down_performed_action = true; // aKeyUp is known to be false due to an earlier check.
@@ -1871,7 +1874,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT;
 			return AllowKeyToGoToSystem;
 		}
-		else if (aVK == VK_LMENU || aVK == VK_RMENU)
+		// Fix for v1.1.37.02 and v2.0.6: The following is also done for LWin/RWin because otherwise,
+		// the system does not generate WM_SYSKEYDOWN (or even WM_KEYDOWN) messages for combinations
+		// that correspond to some global hotkeys, even though they aren't actually triggering global
+		// hotkeys because the logical key state doesn't match.  For example, with LWin::Alt, LWin-T
+		// would not activate the Tools menu on a menu bar.
+		else if (aVK == VK_LMENU || aVK == VK_RMENU || aVK == VK_LWIN || aVK == VK_RWIN)
 		{
 			// Fix for v1.1.26.01: Added KEY_BLOCK_THIS to suppress the Alt key-up, which fixes an issue
 			// which could be reproduced as follows:
