@@ -26,6 +26,7 @@
 #include "application.h" // For SLEEP_WITHOUT_INTERRUPTION and MsgSleep().
 #include "script_func_impl.h"
 #include "abi.h"
+#include <Psapi.h>
 
 
 ResultType Script::DoRunAs(LPTSTR aCommandLine, LPCTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
@@ -1895,7 +1896,7 @@ void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed)
 // PROCESS ROUTINES
 ////////////////////
 
-DWORD ProcessExist(LPCTSTR aProcess, bool aGetParent)
+DWORD ProcessExist(LPCTSTR aProcess, bool aGetParent, bool aVerifyPID)
 {
 	// Determine the PID if aProcess is a pure, non-negative integer (any negative number
 	// is more likely to be the name of a process [with a leading dash], rather than the PID).
@@ -1929,6 +1930,14 @@ DWORD ProcessExist(LPCTSTR aProcess, bool aGetParent)
 		// case of a process with a name composed of digits and no extension (verified possible).
 		// If ERROR_ACCESS_DENIED was returned, we can't rule out the false-positive cases described
 		// above without doing a thorough enumeration of processes, so continue in that case as well.
+		if (!aVerifyPID && GetLastError() != ERROR_INVALID_PARAMETER && !(specified_pid & 3))
+			// Caller doesn't strictly need a result of "no such process" if the process apparently
+			// exists but can't be opened, so we return early under these specific conditions.
+			// This speeds up ProcessGetPath(PID) when PID identifies a protected system process,
+			// without affecting error detection significantly.
+			return specified_pid;
+		// (specified_pid & 3) almost certainly means an invalid PID, but since that's not documented,
+		// do a thorough check before returning 0 in case there ever is a valid PID like that.
 	}
 
 	PROCESSENTRY32 proc;

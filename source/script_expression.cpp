@@ -1164,7 +1164,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						}
 					}
 					// Since "break" was not used, "right" is not a valid type object.
-					error_info = _T("Object");
+					error_info = _T("Class");
 					error_value = &right;
 					goto type_mismatch;
 				}

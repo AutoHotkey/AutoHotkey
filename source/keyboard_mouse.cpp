@@ -2753,6 +2753,7 @@ void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend)
 				modLR_type mods_changed_physically_during_send = aModsDuringSend ^ mods_current;
 				g_modifiersLR_physical &= ~(mods_changed_physically_during_send & aModsDuringSend); // Remove those that changed from down to up.
 				g_modifiersLR_physical |= mods_changed_physically_during_send & mods_current; // Add those that changed from up to down.
+				g_modifiersLR_logical = g_modifiersLR_logical_non_ignored = mods_current; // Necessary for hotkeys to be recognized correctly if modifiers were sent.
 				g_HShwnd = GetForegroundWindow(); // An item done by ResetHook() that seems worthwhile here.
 				// Most other things done by ResetHook() seem like they would do more harm than good to reset here
 				// because of the the time the hook is typically missing is very short, usually under 30ms.
@@ -4463,7 +4464,7 @@ bif_impl FResult MouseClick(optl<StrArg> aButton, optl<int> aX, optl<int> aY, op
 	return PerformMouse(ACT_MOUSECLICK, aButton, aX, aY, nullptr, nullptr, aSpeed, aRelative, aClickCount, aDownOrUp);
 }
 
-bif_impl FResult MouseClickDrag(optl<StrArg> aButton, int aX1, int aY1, int aX2, int aY2, optl<int> aSpeed, optl<StrArg> aRelative)
+bif_impl FResult MouseClickDrag(optl<StrArg> aButton, optl<int> aX1, optl<int> aY1, int aX2, int aY2, optl<int> aSpeed, optl<StrArg> aRelative)
 {
 	return PerformMouse(ACT_MOUSECLICKDRAG, aButton, aX1, aY1, aX2, aY2, aSpeed, aRelative, nullptr, nullptr);
 }

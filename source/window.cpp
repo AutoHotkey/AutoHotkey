@@ -782,12 +782,12 @@ HWND ControlExist(HWND aParentWindow, LPCTSTR aClassNameAndNum)
 	{
 		// Tell EnumControlFind() to search by Class+Num.  Don't call ws.SetCriteria() because
 		// that has special handling for ahk_id, ahk_class, etc. in the first parameter.
-		tcslcpy(ws.mCriterionClass, aClassNameAndNum, _countof(ws.mCriterionClass));
+		ws.mCriterionClass = aClassNameAndNum;
 		ws.mCriterionText = _T("");
 	}
 	else // Tell EnumControlFind() to search the control's text.
 	{
-		*ws.mCriterionClass = '\0';
+		ws.mCriterionClass = _T("");
 		ws.mCriterionText = aClassNameAndNum;
 	}
 
@@ -799,7 +799,7 @@ HWND ControlExist(HWND aParentWindow, LPCTSTR aClassNameAndNum)
 		// to match the title/text of another control), search again only after the search
 		// for the ClassNameAndNum didn't turn up anything.
 		// Tell EnumControlFind() to search the control's text.
-		*ws.mCriterionClass = '\0';
+		ws.mCriterionClass = _T("");
 		ws.mCriterionText = aClassNameAndNum;
 		EnumChildWindows(aParentWindow, EnumControlFind, (LPARAM)&ws); // ws.mFoundChild is already initialized to NULL due to the above check.
 	}
@@ -1376,139 +1376,123 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 	mCriterionExcludeText = aExcludeText;
 	mSettings = &aSettings;
 
-	DWORD orig_criteria = mCriteria;
-	TCHAR buf[MAX_VAR_NAME_LENGTH + 1];
-	LPCTSTR ahk_flag, cp;
-	int criteria_count;
-	size_t size;
+	DWORD orig_criteria = mCriteria, this_criterion = CRITERION_TITLE, next_criterion;
+	LPCTSTR start, end, value, next_value = nullptr;
+	size_t value_length, buf_used = 0;
 
-	for (mCriteria = 0, ahk_flag = aTitle, criteria_count = 0;; ++criteria_count, ahk_flag += 4) // +4 only since an "ahk_" string that isn't qualified may have been found.
+	for (mCriteria = 0, start = aTitle; this_criterion; start = next_value, this_criterion = next_criterion)
 	{
-		if (   !(ahk_flag = tcscasestr(ahk_flag, _T("ahk_")))   ) // No other special strings are present.
+		for (next_criterion = 0, end = start; end = tcscasestr(end, _T("ahk_")); end += 4)
 		{
-			if (!criteria_count) // Since no special "ahk_" criteria were present, it is CRITERION_TITLE by default.
-			{
-				mCriteria = CRITERION_TITLE; // In this case, there is only one criterion.
-				tcslcpy(mCriterionTitle, aTitle, _countof(mCriterionTitle));
-				mCriterionTitleLength = _tcslen(mCriterionTitle); // Pre-calculated for performance.
-			}
+			// To reduce ambiguity, the following requires that any "ahk_" criteria beyond the first
+			// be preceded by at least one space or tab:
+			if (end > aTitle && !IS_SPACE_OR_TAB(end[-1]))
+				continue;
+			auto cp = end + 4;
+			if (!_tcsnicmp(cp, _T("id"), 2))
+				cp += 2, next_criterion = CRITERION_ID;
+			else if (!_tcsnicmp(cp, _T("pid"), 3))
+				cp += 3, next_criterion = CRITERION_PID;
+			else if (!_tcsnicmp(cp, _T("group"), 5))
+				cp += 5, next_criterion = CRITERION_GROUP;
+			else if (!_tcsnicmp(cp, _T("exe"), 3))
+				cp += 3, next_criterion = CRITERION_PATH;
+			else if (!_tcsnicmp(cp, _T("class"), 5))
+				cp += 5, next_criterion = CRITERION_CLASS;
+			else
+				continue;
+			next_value = cp;
 			break;
 		}
-		// Since above didn't break, another instance of "ahk_" has been found. To reduce ambiguity,
-		// the following requires that any "ahk_" criteria beyond the first be preceded by at least
-		// one space or tab:
-		if (ahk_flag > aTitle && !IS_SPACE_OR_TAB(ahk_flag[-1])) // Relies on short-circuit boolean order.
+
+		switch (this_criterion)
 		{
-			--criteria_count; // Decrement criteria_count to compensate for the loop's increment.
-			continue;
-		}
-		// Since above didn't "continue", it meets the basic test.  But is it an exact match for one of the
-		// special criteria strings?  If not, it's really part of the title criterion instead.
-		cp = ahk_flag + 4;
-		if (!_tcsnicmp(cp, _T("id"), 2))
-		{
-			cp += 2;
-			mCriteria |= CRITERION_ID;
-			mCriterionHwnd = (HWND)ATOU64(cp);
+		case CRITERION_ID:
+			mCriterionHwnd = (HWND)ATOU64(start);
 			// Note that this can validly be the HWND of a child window; i.e. ahk_id %ChildWindowHwnd% is supported.
 			if (mCriterionHwnd != HWND_BROADCAST && !IsWindow(mCriterionHwnd)) // Checked here once rather than each call to IsMatch().
 			{
 				mCriterionHwnd = NULL;
 				return FAIL; // Inform caller of invalid criteria.  No need to do anything else further below.
 			}
-		}
-		else if (!_tcsnicmp(cp, _T("pid"), 3))
-		{
-			cp += 3;
-			mCriteria |= CRITERION_PID;
-			mCriterionPID = ATOU(cp);
-		}
-		else if (!_tcsnicmp(cp, _T("group"), 5))
-		{
-			cp += 5;
-			mCriteria |= CRITERION_GROUP;
-			tcslcpy(buf, omit_leading_whitespace(cp), _countof(buf));
-			if (auto cp = StrChrAny(buf, _T(" \t"))) // Group names can't contain spaces, so terminate at the first one to exclude any "ahk_" criteria that come afterward.
-				*cp = '\0';
-			if (   !(mCriterionGroup = g_script.FindGroup(buf))   )
-				return FAIL; // No such group: Inform caller of invalid criteria.  No need to do anything else further below.
-		}
-		else
-		{
-			// Fix for v1.1.09: ahk_exe is handled with ahk_class so that it can be followed by
-			// another criterion, such as in "ahk_exe explorer.exe ahk_class CabinetWClass".
-			TCHAR *criterion = NULL;
-			if (!_tcsnicmp(cp, _T("exe"), 3))
-			{
-				cp += 3;
-				mCriteria |= CRITERION_PATH;
-				criterion = mCriterionPath;
-				
-			}
-			else if (!_tcsnicmp(cp, _T("class"), 5))
-			{
-				cp += 5;
-				mCriteria |= CRITERION_CLASS;
-				criterion = mCriterionClass;
-			}
-			else // It doesn't qualify as a special criteria name even though it starts with "ahk_".
-			{
-				--criteria_count; // Decrement criteria_count to compensate for the loop's increment.
-				continue;
-			}
-
+			break;
+		case CRITERION_PID:
+			mCriterionPID = ATOU(start);
+			break;
+		default:
 			// In the following line, it may have been preferable to skip only zero or one spaces rather than
 			// calling omit_leading_whitespace().  But now this should probably be kept for backward compatibility.
 			// Besides, even if it's possible for a class name to start with a space, a RegEx dot or other symbol
 			// can be used to match it via SetTitleMatchMode RegEx.
-			tcslcpy(criterion, omit_leading_whitespace(cp), SEARCH_PHRASE_SIZE); // Copy all of the remaining string to simplify the below.
-			for (auto cp = criterion; cp = tcscasestr(cp, _T("ahk_")); cp += 4)  // Fix for v1.0.47.06: strstr() changed to strcasestr() for consistency with the other sections.
+			start = omit_leading_whitespace(start);
+			if (end == start) // Empty or consists entirely of whitespace.
 			{
-				// This loop truncates any other criteria from the class criteria.  It's not a complete
-				// solution because it doesn't validate that what comes after the "ahk_" string is a
-				// valid criterion name. But for it not to be and yet also be part of some valid class
-				// name seems far too unlikely to worry about.  It would have to be a legitimate class name
-				// such as "ahk_class SomeClassName ahk_wrong".
-				if (cp == criterion) // This check prevents underflow in the next check.
+				// For backward compatibility, disqualify any title consisting entirely of whitespace,
+				// but otherwise include any trailing whitespace aside from the final delimiting space.
+				if (this_criterion == CRITERION_TITLE) // Only title, since it has no explicit keyword.
+					continue;
+				value = _T(""); // For backward-compatibility.  An empty value is an automatic pass for RegEx mode and fail for other modes.
+			}
+			else if (end) // Because end != start, this implies end[-1] is the delimiting space.
+			{
+				if (!buf_used) // mCriterionBuf hasn't been used by this call, but may have been used by a previous call.
 				{
-					*cp = '\0';
-					break;
-				}
-				else
-					if (IS_SPACE_OR_TAB(cp[-1]))
+					// Allow for space in the buffer for all remaining options, to minimize realloc and avoid the need
+					// to update previously stored addresses.  Some options don't need buffer space, but this is just
+					// an estimate, and we will allow extra space for future calls anyway.
+					size_t max_size = _tcschr(end, '\0') - start + 1;
+					if (max_size > mCriterionBufSize)
 					{
-						cp[-1] = '\0';
-						break;
+						// Use a generous initial size and exponential growth to minimize the number of reallocs
+						// while evaluating window groups.
+						if (mCriterionBufSize < 1024)
+							mCriterionBufSize = 1024;
+						while (mCriterionBufSize < max_size)
+							mCriterionBufSize <<= 1;
+						free(mCriterionBuf); // The previous content is not needed, so free/malloc rather than realloc.
+						if (!(mCriterionBuf = tmalloc(mCriterionBufSize)))
+						{
+							mCriterionBufSize = 0;
+							return FAIL;
+						}
 					}
-					//else assume this "ahk_" string is part of the literal text, continue looping in case
-					// there is a legitimate "ahk_" string after this one.
-			} // for()
+				}
+				// Omit exactly one space or tab from the title criterion. That space or tab is the one
+				// required to delimit the special "ahk_" string.  Any other spaces or tabs to the left of
+				// that one are considered literal (for flexibility).
+				value_length = end - start - 1; // -1 to omit the delimiting space.
+				auto buf = mCriterionBuf + buf_used;
+				tmemcpy(buf, start, value_length);
+				buf[value_length] = '\0';
+				buf_used += value_length + 1;
+				value = buf;
+			}
+			else
+				value = start;
 
-			if (criterion == mCriterionPath)
+			switch (this_criterion)
 			{
+			case CRITERION_TITLE:
+				// Due to checks above, there is always at least one non-whitespace character.
+				mCriterionTitle = value;
+				mCriterionTitleLength = end ? value_length : _tcslen(value);
+				break;
+			case CRITERION_GROUP:
+				if (   !(mCriterionGroup = g_script.FindGroup(value))   )
+					return FAIL; // No such group: Inform caller of invalid criteria.  No need to do anything else further below.
+				break;
+			case CRITERION_PATH:
+				mCriterionPath = value;
 				// Allow something like "ahk_exe firefox.exe" to be an exact match for the process name
 				// instead of full path, but for flexibility, always use full path when in regex mode.
 				mCriterionPathIsNameOnly = mSettings->TitleMatchMode != FIND_REGEX && !_tcschr(mCriterionPath, '\\');
+				break;
+			case CRITERION_CLASS:
+				mCriterionClass = value;
+				break;
 			}
 		}
-		// Since above didn't return or continue, a valid "ahk_" criterion has been discovered.
-		// If this is the first such criterion, any text that lies to its left should be interpreted
-		// as CRITERION_TITLE.  However, for backward compatibility it seems best to disqualify any title
-		// consisting entirely of whitespace.  This is because some scripts might have a variable containing
-		// whitespace followed by the string ahk_class, etc. (however, any such whitespace is included as a
-		// literal part of the title criterion for flexibility and backward compatibility).
-		if (!criteria_count && ahk_flag > omit_leading_whitespace(aTitle))
-		{
-			mCriteria |= CRITERION_TITLE;
-			// Omit exactly one space or tab from the title criterion. That space or tab is the one
-			// required to delimit the special "ahk_" string.  Any other spaces or tabs to the left of
-			// that one are considered literal (for flexibility):
-			size = ahk_flag - aTitle; // This will always be greater than one due to other checks above, which will result in at least one non-whitespace character in the title criterion.
-			if (size > _countof(mCriterionTitle)) // Prevent overflow.
-				size = _countof(mCriterionTitle);
-			tcslcpy(mCriterionTitle, aTitle, size); // Copy only the eligible substring as the criteria.
-			mCriterionTitleLength = _tcslen(mCriterionTitle); // Pre-calculated for performance.
-		}
+		mCriteria |= this_criterion;
 	}
 
 	// Since this function doesn't change mCandidateParent, there is no need to update the candidate's

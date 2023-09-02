@@ -189,7 +189,7 @@ md_func(MouseClick,
 	(In_Opt, String, Relative))
 md_func(MouseClickDrag,
 	(In_Opt, String, Button),
-	(In, Int32, X1), (In, Int32, Y1),
+	(In_Opt, Int32, X1), (In_Opt, Int32, Y1),
 	(In, Int32, X2), (In, Int32, Y2),
 	(In_Opt, Int32, Speed),
 	(In_Opt, String, Relative))

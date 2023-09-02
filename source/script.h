@@ -260,7 +260,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 
 void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed);
 
-DWORD ProcessExist(LPCTSTR aProcess, bool aGetParent = false);
+DWORD ProcessExist(LPCTSTR aProcess, bool aGetParent = false, bool aVerifyPID = true);
 DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNameOnly);
 
 FResult Shutdown(int nFlag);
@@ -2835,6 +2835,7 @@ private:
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 	Line *mPendingParentLine, *mPendingRelatedLine;
+	Line *mLastParamInitializer;
 	PartialExpression *mExprContainingThisFunc = nullptr;
 	SymbolType mDefaultReturn = SYM_STRING;
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.

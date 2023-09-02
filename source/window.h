@@ -61,7 +61,6 @@ inline bool IsTextMatch(LPCTSTR aHaystack, LPCTSTR aNeedle)
 
 
 
-#define SEARCH_PHRASE_SIZE 1024
 // Info from AutoIt3 source: GetWindowText fails under 95 if >65535, WM_GETTEXT randomly fails if > 32767.
 // My: And since 32767 is what AutoIt3 passes to the API functions as the size (not the length, i.e.
 // it can only store 32766 if room is left for the zero terminator) we'll use that for the size too.
@@ -92,8 +91,10 @@ public:
 
 	// Controlled and initialized by SetCriteria():
 	ScriptThreadSettings *mSettings;           // Settings such as TitleMatchMode and DetectHiddenWindows.
-	TCHAR mCriterionTitle[SEARCH_PHRASE_SIZE]; // For storing the title.
-	TCHAR mCriterionClass[SEARCH_PHRASE_SIZE]; // For storing the "ahk_class" class name.
+	LPTSTR mCriterionBuf;                     // Contains all of the other string criterion sourced from WinTitle.
+	size_t mCriterionBufSize;
+	LPCTSTR mCriterionTitle;                   // The portion of WinTitle preceding the first "ahk_" keyword.
+	LPCTSTR mCriterionClass;                   // For "ahk_class".
 	size_t mCriterionTitleLength;             // Length of mCriterionTitle.
 	LPCTSTR mCriterionExcludeTitle;           // ExcludeTitle.
 	size_t mCriterionExcludeTitleLength;      // Length of the above.
@@ -102,7 +103,7 @@ public:
 	HWND mCriterionHwnd;                      // For "ahk_id".
 	DWORD mCriterionPID;                      // For "ahk_pid".
 	WinGroup *mCriterionGroup;                // For "ahk_group".
-	TCHAR mCriterionPath[SEARCH_PHRASE_SIZE]; // For "ahk_exe".
+	LPCTSTR mCriterionPath;                    // For "ahk_exe".
 
 	bool mCriterionPathIsNameOnly;
 	bool mFindLastMatch; // Whether to keep searching even after a match is found, so that last one is found.
@@ -144,6 +145,7 @@ public:
 		// For performance and code size, only the most essential members are initialized.
 		// The others do not require it or are initialized by SetCriteria() or SetCandidate().
 		: mCriteria(0), mCriterionExcludeTitle(_T("")) // ExcludeTitle is referenced often, so should be initialized.
+		, mCriterionBuf(NULL), mCriterionBufSize(0)
 		, mFoundCount(0), mFoundParent(NULL) // Must be initialized here since none of the member functions is allowed to do it.
 		, mFoundChild(NULL) // ControlExist() relies upon this.
 		, mCandidateParent(NULL)
@@ -153,6 +155,11 @@ public:
 		// after they were overridden even upon multiple subsequent calls to SetCriteria():
 		, mFindLastMatch(false), mAlreadyVisited(NULL), mAlreadyVisitedCount(0), mFirstWinSpec(NULL), mArray(NULL)
 	{
+	}
+
+	~WindowSearch()
+	{
+		free(mCriterionBuf);
 	}
 };
 

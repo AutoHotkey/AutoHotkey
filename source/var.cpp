@@ -188,6 +188,13 @@ IObject *Var::GetRef()
 			return mObject;
 		}
 		target_var = mAliasFor;
+		// It is also possible for a non-object alias to point to an object alias if the reference operator
+		// is applied to target_var itself or some other alias after this var became an alias of target_var.
+		if (target_var->mType == VAR_ALIAS && (target_var->mAttrib & VAR_ATTRIB_IS_OBJECT))
+		{
+			target_var->mObject->AddRef();
+			return target_var->mObject;
+		}
 	}
 	auto ref = new VarRef();
 	if (!target_var->MoveToNewFreeVar(*ref))

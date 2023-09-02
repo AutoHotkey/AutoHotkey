@@ -43,7 +43,7 @@ bif_impl UINT ProcessGetParent(optl<StrArg> aProcess)
 bif_impl FResult ProcessClose(StrArg aProcess, UINT &aRetVal)
 {
 	aRetVal = 0; // Set default in case of failure.
-	if (auto pid = ProcessExist(aProcess))  // Assign
+	if (auto pid = ProcessExist(aProcess, false, false))
 	{
 		if (auto hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pid))
 		{
@@ -59,7 +59,7 @@ bif_impl FResult ProcessClose(StrArg aProcess, UINT &aRetVal)
 
 static FResult ProcessGetPathName(optl<StrArg> aProcess, StrRet &aRetVal, bool aGetNameOnly)
 {
-	auto pid = aProcess.has_value() ? ProcessExist(aProcess.value()) : GetCurrentProcessId();
+	auto pid = aProcess.has_value() ? ProcessExist(aProcess.value(), false, false) : GetCurrentProcessId();
 	if (!pid)
 		return FError(ERR_NO_PROCESS, nullptr, ErrorPrototype::Target);
 	TCHAR process_name[MAX_PATH];
@@ -183,7 +183,7 @@ bif_impl FResult ProcessSetPriority(StrArg aPriority, optl<StrArg> aProcess, UIN
 		return FR_E_ARG(0);
 	}
 
-	DWORD pid = aProcess.has_nonempty_value() ? ProcessExist(aProcess.value()) : GetCurrentProcessId();
+	DWORD pid = aProcess.has_nonempty_value() ? ProcessExist(aProcess.value(), false, false) : GetCurrentProcessId();
 	if (!pid)
 		return FError(ERR_NO_PROCESS, nullptr, ErrorPrototype::Target);
 
