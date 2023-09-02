@@ -675,6 +675,7 @@ has_valid_return_type:
 
 		if (IObject *obj = TokenToObject(*aParam[i]))
 		{
+			this_dyna_param.type = DLL_ARG_INVALID;
 			if (obj->IsOfType(Object::sPrototype))
 			{
 				param_class = (Object*)obj;
