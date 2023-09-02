@@ -1443,7 +1443,7 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 						while (mCriterionBufSize < max_size)
 							mCriterionBufSize <<= 1;
 						free(mCriterionBuf); // The previous content is not needed, so free/malloc rather than realloc.
-						if (!(mCriterionBuf = tmalloc(max_size)))
+						if (!(mCriterionBuf = tmalloc(mCriterionBufSize)))
 						{
 							mCriterionBufSize = 0;
 							return FAIL;
