@@ -718,7 +718,7 @@ has_valid_return_type:
 			}
 		}
 		ExprTokenType &this_param = *aParam[i + 1];
-		if (this_param.symbol == SYM_MISSING)
+		if (this_param.symbol == SYM_MISSING && this_dyna_param.type != DLL_ARG_STRUCT) // Permit struct classes with __value to handle unset.
 			_f_throw(ERR_PARAM_REQUIRED);
 
 		switch (this_dyna_param.type)
@@ -798,6 +798,8 @@ has_valid_return_type:
 					, _T("__value"), ExprTokenType(obj), aParam + i + 1, 1);
 				if (result == INVOKE_NOT_HANDLED)
 				{
+					if (this_param.symbol == SYM_MISSING)
+						_f_throw(ERR_PARAM_REQUIRED);
 					ExprTokenType tn;
 					_f_throw_type(param_proto->GetOwnProp(tn, _T("__Class")) && tn.symbol == SYM_STRING
 						? tn.marker : _T("Object"), *aParam[i + 1]);
