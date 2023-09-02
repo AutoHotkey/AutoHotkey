@@ -360,14 +360,7 @@ void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
 	case 'w': if (!_tcsicmp(buf, _T("WStr")))	{ aDynaParam.type = DLL_ARG_WSTR; return; } break;
 	case 'c': if (!_tcsicmp(buf, _T("Char")))	{ aDynaParam.type = DLL_ARG_CHAR; return; } break;
 	}
-	int b = 0;
-	if (!aDynaParam.passed_by_address && !aDynaParam.is_unsigned && (isdigit(buf[b]) || !_tcsnicmp(buf, _T("Struct"), b = 6) && isdigit(buf[b]))) {
-		int i = b + 1, n = buf[b] - '0';
-		while (isdigit(buf[i])) n = n * 10 + (buf[i++] - '0');
-		aDynaParam.struct_size = n;
-		aDynaParam.type = n && buf[i] == 0 ? DLL_ARG_STRUCT : DLL_ARG_INVALID;
-	}
-	else aDynaParam.type = DLL_ARG_INVALID;
+	aDynaParam.type = DLL_ARG_INVALID;
 }
 
 
@@ -615,14 +608,6 @@ BIF_DECL(BIF_DllCall)
 			return_attrib.is_hresult = true;
 			//return_attrib.is_unsigned = true; // Not relevant since an exception is thrown for any negative value.
 		}
-		else if (TokenIsPureNumeric(token) == SYM_INTEGER)
-		{
-			__int64 size = TokenToInt64(token);
-			// See the arg processing section below for comments.
-			return_attrib.type = (size >= 1 && size < 65536) ? DLL_ARG_STRUCT : DLL_ARG_INVALID;
-			return_struct_size = (int)size;
-			return_type_string = nullptr; // To help detect errors.
-		}
 		else if (IObject *obj = TokenToObject(token))
 		{
 			if (obj->IsOfType(Object::sPrototype))
@@ -640,8 +625,6 @@ BIF_DECL(BIF_DllCall)
 		else
 		{
 			ConvertDllArgType(return_type_string, return_attrib);
-			if (return_attrib.type == DLL_ARG_STRUCT)
-				return_struct_size = return_attrib.struct_size, return_attrib.struct_size = 0;
 		}
 		if (return_attrib.type == DLL_ARG_INVALID)
 			_f_throw_value(ERR_INVALID_RETURN_TYPE);
@@ -661,21 +644,14 @@ has_valid_return_type:
 
 	if (return_struct_size)
 	{
-		if (return_class)
-		{
-			aResultToken.symbol = SYM_STRING; // Set default for Invoke.
-			aResultToken.marker = _T("");
-			auto obj = Object::Create();
-			if (obj->New(aResultToken, aParam + aParamCount, 1) != OK)
-				return; // New releases obj on failure.
-			return_struct_ptr = (void*)obj->DataPtr();
-			pObj[nObj++] = obj;
-			aResultToken.symbol = SYM_INTEGER; // Ensure it is not SYM_OBJECT, for maintainability (in case of early exit due to an error).
-		}
-		else if (return_struct_ptr = malloc(return_struct_size))
-			pObj[nObj++] = BufferObject::Create(return_struct_ptr, return_struct_size);
-		else
-			_f_throw_oom;
+		aResultToken.symbol = SYM_STRING; // Set default for Invoke.
+		aResultToken.marker = _T("");
+		auto obj = Object::Create();
+		if (obj->New(aResultToken, aParam + aParamCount, 1) != OK)
+			return; // New releases obj on failure.
+		return_struct_ptr = (void*)obj->DataPtr();
+		pObj[nObj++] = obj;
+		aResultToken.symbol = SYM_INTEGER; // Ensure it is not SYM_OBJECT, for maintainability (in case of early exit due to an error).
 	}
 
 	// Using stack memory, create an array of dll args large enough to hold the actual number of args present.
@@ -697,17 +673,7 @@ has_valid_return_type:
 		DYNAPARM &this_dyna_param = dyna_param[arg_count];
 		Object *param_class = nullptr, *param_proto = nullptr;
 
-		if (TokenIsPureNumeric(*aParam[i]) == SYM_INTEGER)
-		{
-			__int64 size = TokenToInt64(*aParam[i]);
-			// Prohibiting size >= 64KB should detect any cases where a pointer value is unintentionally
-			// being passed as an arg type, while not actually imposing a hard limit since larger numbers
-			// can be passed as strings.  Note that the stack itself has a limit of 1-8MB.
-			this_dyna_param.type = (size >= 1 && size < 65536) ? DLL_ARG_STRUCT : DLL_ARG_INVALID;
-			this_dyna_param.struct_size = (int)size;
-			arg_type_string = nullptr; // To help detect errors.
-		}
-		else if (IObject *obj = TokenToObject(*aParam[i]))
+		if (IObject *obj = TokenToObject(*aParam[i]))
 		{
 			if (obj->IsOfType(Object::sPrototype))
 			{
@@ -817,49 +783,33 @@ has_valid_return_type:
 			break;
 			
 		case DLL_ARG_STRUCT: {
-			if (param_class)
+			if (!this_param_obj || !this_param_obj->IsOfType(param_proto))
 			{
-				if (!this_param_obj || !this_param_obj->IsOfType(param_proto))
+				aResultToken.symbol = SYM_STRING; // Set default for Invoke.
+				aResultToken.marker = _T("");
+				auto obj = Object::Create();
+				if (!obj->New(aResultToken, aParam + i, 1))
+					return; // New releases obj on failure.
+				pObj[nObj++] = this_param_obj = obj;
+				aResultToken.symbol = SYM_STRING; // Set default for Invoke (New set aResultToken to obj without calling AddRef).
+				aResultToken.marker = _T("");
+				auto result = obj->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS
+					, _T("__value"), ExprTokenType(obj), aParam + i + 1, 1);
+				if (result == INVOKE_NOT_HANDLED)
 				{
-					aResultToken.symbol = SYM_STRING; // Set default for Invoke.
-					aResultToken.marker = _T("");
-					auto obj = Object::Create();
-					if (!obj->New(aResultToken, aParam + i, 1))
-						return; // New releases obj on failure.
-					pObj[nObj++] = this_param_obj = obj;
-					aResultToken.symbol = SYM_STRING; // Set default for Invoke (New set aResultToken to obj without calling AddRef).
-					aResultToken.marker = _T("");
-					auto result = obj->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS
-						, _T("__value"), ExprTokenType(obj), aParam + i + 1, 1);
-					if (result == INVOKE_NOT_HANDLED)
-					{
-						ExprTokenType tn;
-						_f_throw_type(param_proto->GetOwnProp(tn, _T("__Class")) && tn.symbol == SYM_STRING
-							? tn.marker : _T("Object"), *aParam[i + 1]);
-					}
-					if (aResultToken.Exited())
-						return;
-					aResultToken.Free(); // It shouldn't have returned anything, but it could.
-					aResultToken.symbol = SYM_INTEGER; // Revert to the BIF default in case return type is integer, and to ensure Free() won't Release().
-					aResultToken.mem_to_free = nullptr;
+					ExprTokenType tn;
+					_f_throw_type(param_proto->GetOwnProp(tn, _T("__Class")) && tn.symbol == SYM_STRING
+						? tn.marker : _T("Object"), *aParam[i + 1]);
 				}
-				// The parameter size is based on the struct itself, so there's little sense
-				// in querying a Ptr property; we always want the struct's own address.
-				this_dyna_param.value_uintptr = ((Object*)this_param_obj)->DataPtr();
-			}
-			else if (this_param_obj)
-			{
-				GetDllArgObjectPtr(aResultToken, this_param_obj, this_dyna_param.value_uintptr);
 				if (aResultToken.Exited())
 					return;
+				aResultToken.Free(); // It shouldn't have returned anything, but it could.
+				aResultToken.symbol = SYM_INTEGER; // Revert to the BIF default in case return type is integer, and to ensure Free() won't Release().
+				aResultToken.mem_to_free = nullptr;
 			}
-			else if (TokenIsPureNumeric(this_param) == SYM_INTEGER)
-				this_dyna_param.value_int64 = TokenToInt64(this_param);
-			else
-				_o_throw_type(_T("Integer"), this_param);
-			if (this_dyna_param.value_uintptr < 65536)
-				_o_throw_value(ERR_INVALID_VALUE);
-
+			// The parameter size is based on the struct itself, so there's little sense
+			// in querying a Ptr property; we always want the struct's own address.
+			this_dyna_param.value_uintptr = ((Object*)this_param_obj)->DataPtr();
 			int& size = this_dyna_param.struct_size;
 #ifdef _WIN64
 			this_dyna_param.type = DLL_ARG_INT64;
