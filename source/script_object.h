@@ -537,7 +537,9 @@ public:
 	void SetDataPtr(UINT_PTR aPtr);
 	FResult GetDataPtr(UINT_PTR &aPtr);
 	FResult AllocDataPtr(UINT_PTR aSize);
+#ifdef ENABLE_OBJALLOCDATA
 	FResult FreeDataPtr();
+#endif
 	UINT_PTR DataPtr() { return (UINT_PTR)mData + ((mFlags & DataIsAllocatedFlag) ? sizeof(UINT_PTR) : 0); }
 	UINT_PTR DataSize() { return (mFlags & DataIsAllocatedFlag) ? *(UINT_PTR*)mData : 0; }
 	UINT_PTR StructSize() { return (mFlags & DataIsStructInfo) ? ((StructInfo*)mData)->size : mBase ? mBase->StructSize() : 0; }

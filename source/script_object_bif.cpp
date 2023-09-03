@@ -286,12 +286,14 @@ FResult Object::GetDataPtr(UINT_PTR &aPtr)
 }
 
 
+#ifdef ENABLE_OBJALLOCDATA
 bif_impl FResult ObjAllocData(IObject *aObj, UINT_PTR aSize)
 {
 	if (!aObj->IsOfType(Object::sPrototype))
 		return FR_E_ARG(0);
 	return ((Object*)aObj)->AllocDataPtr(aSize);
 }
+#endif
 
 FResult Object::AllocDataPtr(UINT_PTR aSize)
 {
@@ -318,6 +320,7 @@ bif_impl FResult ObjGetDataSize(IObject *aObj, UINT_PTR &aRetVal)
 }
 
 
+#ifdef ENABLE_OBJALLOCDATA
 bif_impl FResult ObjFreeData(IObject *aObj)
 {
 	if (!aObj->IsOfType(Object::sPrototype))
@@ -337,3 +340,4 @@ FResult Object::FreeDataPtr()
 		return FR_E_FAILED;
 	return OK;
 }
+#endif
