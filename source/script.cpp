@@ -2744,9 +2744,8 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 			//   loop {
 			//   if cond {
 			// For the first few cases, *cp == ')' is sufficient.  There is no need to verify
-			// that this is a function definition because ") {" is not valid in an expression
-			// (it is reserved for future use with anonymous functions).  Similarly, "] {" is
-			// either a property definition or invalid.
+			// that this is a function definition because ") {" is only valid in that case.
+			// "] {" is either a property definition or invalid.
 			// For other cases, checking the action_type is the only way to resolve the ambiguity
 			// between "loop {" and "return {".  Since valid OTB can't be preceded by an operator
 			// such as ":= {", also check that case to improve flexibility.
