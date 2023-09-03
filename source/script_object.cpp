@@ -3628,6 +3628,11 @@ BIF_DECL(Class_CallNestedClass)
 
 BIF_DECL(Class_New)
 {
+	// For backward-compatibility, Class() is the same as (Object.Call)(Class).
+	// Class(unset) would have thrown ERR_TOO_MANY_PARAMS, so is exempted from this.
+	if (aParamCount == 1)
+		return NewObject<Object>(aResultToken, aParam, aParamCount);
+
 	// aParam[0] is implicit and mandatory, as this is a method.  Usually it should be Class itself,
 	// but might be something else if the script explicitly calls (Class.Call)(this) or extends Class
 	// itself (which is not the same as an instance of Class, as that derives from Class.Prototype).
@@ -3636,9 +3641,9 @@ BIF_DECL(Class_New)
 	// Get the optional name and class parameters.
 	LPTSTR name = _T("");
 	IObject *obj0 = ParamIndexToObject(0);
-	if (!obj0 && aParamCount)
+	if (!obj0)
 	{
-		name = ParamIndexToOptionalString(0, _f_retval_buf);
+		name = ParamIndexToString(0, _f_retval_buf);
 		++aParam, --aParamCount;
 	}
 	Object *base_class = obj0 ? dynamic_cast<Object *>(obj0) : ParamIndexIsOmitted(0) ? Object::sClass : dynamic_cast<Object *>(ParamIndexToObject(0));
