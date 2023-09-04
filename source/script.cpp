@@ -4137,8 +4137,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		action_args = omit_leading_whitespace(end_marker);
 		// For v2, the interpretation of a control flow keyword shouldn't be affected by whatever
 		// operator follows it, so this is done before checking for assignments or other operators.
-		if (IS_SPACE_OR_TAB(*end_marker) || *end_marker == '(' || !*end_marker)
+		if (IS_SPACE_OR_TAB(*end_marker) || *end_marker == '(' || !*end_marker || *end_marker == '{')
 			aActionType = ConvertActionType(action_name);
+		if (*end_marker == '{' && !(aActionType == ACT_ELSE || aActionType == ACT_LOOP
+			|| aActionType == ACT_SWITCH || aActionType >= ACT_TRY && aActionType <= ACT_FINALLY))
+			aActionType = ACT_INVALID; // Not an action for which "xxx{" is valid.
 	}
 	else
 	{
