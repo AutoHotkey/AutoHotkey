@@ -2753,7 +2753,10 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 			if (*cp == ')' // Function/method definition or reserved.
 				|| balance == 1 // The following cases don't apply if the '{' is enclosed.
 				&& (*cp == ']' // Property definition or reserved.
-				 || mClassObjectCount && !g->CurrentFunc && (cp - buf) < action_end_pos // As above (get/set was handled by caller).  Must check the first two conditions to exclude "return {".
+				 || IS_IDENTIFIER_CHAR(*cp) && mClassObjectCount && !g->CurrentFunc // As above (get/set was handled by caller).
+					// Above must check the last two conditions to exclude "return {" and "MyFunc {",
+					// and must cover both "prop {" and "static prop {", so uses *cp, not action_end_pos.
+					// Expressions like "x := y {" are reserved/not valid, so are not considered here.
 				 || ACT_IS_LINE_PARENT(action_type) && !EndsWithOperator(buf, cp))) // Control flow OTB.
 				return OK;
 		}
