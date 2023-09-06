@@ -1838,7 +1838,6 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 	if (!Func::Call(aResultToken, aParam, aParamCount))
 		return false;
 
-		ResultType result;
 		UDFCallInfo recurse(this);
 
 		int j, count_of_actuals_that_have_formals;
@@ -1951,6 +1950,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			}
 		}
 
+		int default_expr = mParamCount;
 		for (j = 0; j < mParamCount; ++j) // For each formal parameter.
 		{
 			FuncParam &this_formal_param = mParam[j]; // For performance and convenience.
@@ -1988,6 +1988,11 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 				case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
 				case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
 				case PARAM_DEFAULT_UNSET: this_formal_param.var->MarkUninitialized(); break;
+				case PARAM_DEFAULT_EXPR:
+					this_formal_param.var->MarkUninitialized();
+					if (default_expr > j)
+						default_expr = j; // Take note of the first param with a default expr.
+					break;
 				default: //case PARAM_DEFAULT_NONE:
 					// No value has been supplied for this REQUIRED parameter.
 					aResultToken.Error(ERR_PARAM_REQUIRED, this_formal_param.var->mName); // Abort thread.
@@ -2066,7 +2071,27 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 
 		DEBUGGER_STACK_PUSH(&recurse)
 
-		result = Execute(&aResultToken); // Execute the body of the function.
+		ResultType result = OK;
+		// Execute any default initializers that weren't simple constants.  This is not done in
+		// the loop above for two reasons:
+		//  1) It needs to be after DEBUGGER_STACK_PUSH (which isn't moved because it probably
+		//     doesn't make sense for the other errors to include this function in the stack trace).
+		//  2) To preserve the pre-v2.0.8 behaviour, which allows an initializer to refer to later
+		//     parameters if they are simple values.
+		for (j = default_expr; j < mParamCount; ++j)
+		{
+			if (j < aParamCount && aParam[j]->symbol != SYM_MISSING || mParam[j].default_type != PARAM_DEFAULT_EXPR)
+				continue;
+			result = mParam[j].default_expr->ExecUntil(ONLY_ONE_LINE);
+			if (result != OK)
+			{
+				aResultToken.SetExitResult(result);
+				break;
+			}
+		}
+
+		if (result == OK)
+			result = Execute(&aResultToken); // Execute the body of the function.
 
 		DEBUGGER_STACK_POP()
 		

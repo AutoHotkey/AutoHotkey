@@ -5880,7 +5880,12 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 						this_param.default_double = _tstof(buf); // _tstof() vs. ATOF() because PURE_FLOAT is never hexadecimal.
 						break;
 					default: // Not numeric (and also not a quoted string because that was handled earlier).
-						sntprintf(buf, _countof(buf), _T("%s ??= %.*s"), this_param.var->mName, value_length, param_start);
+						// This was previously done using ??, which gave the wrong result for ByRef parameters,
+						// since ?? checks the target variable when one is provided.  So instead, the Line is executed
+						// directly by UserFunc::Call() if the parameter is omitted.  To prevent them from executing
+						// unconditionally, PreparseExpressions() sets mJumpToLine to the real first line of the body,
+						// after it uses the initial value of mJumpToLine (which is set by ParseAndAddLine below).
+						sntprintf(buf, _countof(buf), _T("%s := %.*s"), this_param.var->mName, value_length, param_start);
 						if (!at_least_one_default_expr)
 						{
 							at_least_one_default_expr = true;
@@ -5889,7 +5894,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 						}
 						if (!ParseAndAddLine(buf, ACT_EXPRESSION))
 							return FAIL;
-						this_param.default_type = PARAM_DEFAULT_UNSET;
+						this_param.default_type = PARAM_DEFAULT_EXPR;
+						this_param.default_expr = mLastLine;
 						mLastParamInitializer = mLastLine; // Allow other checks to identify this as not an actual script line.
 					}
 				}
@@ -7463,6 +7469,20 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 		g->CurrentFunc = &func;
 		if (!PreparseExpressions(func.mJumpToLine)) // Preparse this function's body.
 			return FAIL;
+		// Now that expressions have been preparsed, remove any parameter default expressions
+		// from the normal flow of execution by adjusting the function's mJumpToLine.  (This
+		// wasn't done earlier because the original value is needed above.)
+		if (mLastParamInitializer && func.mMinParams < func.mParamCount)
+		{
+			for (int i = func.mParamCount; --i >= func.mMinParams; )
+			{
+				if (func.mParam[i].default_type == PARAM_DEFAULT_EXPR)
+				{
+					func.mJumpToLine = func.mParam[i].default_expr->mNextLine;
+					break;
+				}
+			}
+		}
 		// Nested functions will be preparsed next, due to the fact that they immediately
 		// follow the outer function in aFuncs.
 	}

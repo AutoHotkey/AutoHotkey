@@ -1377,13 +1377,13 @@ public:
 
 
 
-enum FuncParamDefaults {PARAM_DEFAULT_NONE, PARAM_DEFAULT_STR, PARAM_DEFAULT_INT, PARAM_DEFAULT_FLOAT, PARAM_DEFAULT_UNSET};
+enum FuncParamDefaults {PARAM_DEFAULT_NONE, PARAM_DEFAULT_STR, PARAM_DEFAULT_INT, PARAM_DEFAULT_FLOAT, PARAM_DEFAULT_UNSET, PARAM_DEFAULT_EXPR};
 struct FuncParam
 {
 	Var *var;
 	WORD is_byref; // Boolean, but defined as WORD in case it helps data alignment and/or performance (BOOL vs. WORD didn't help benchmarks).
 	WORD default_type;
-	union {LPTSTR default_str; __int64 default_int64; double default_double;};
+	union {LPTSTR default_str; __int64 default_int64; double default_double; Line *default_expr;};
 };
 
 struct FuncResult : public ResultToken
