@@ -104,16 +104,6 @@ inline bool BreakpointLineIsSlippery(Line *aLine)
 		: act == ACT_ELSE || act == ACT_BLOCK_BEGIN;
 }
 
-bool LineIsFatArrowBlock(Line *line)
-{
-	return line->mActionType == ACT_BLOCK_BEGIN && line->mAttribute
-		// line->mRelatedLine isn't used because it can be changed by Line::ExecUntil for ACT_STATIC.
-		//&& line->mNextLine // Always true at this stage.
-		&& line->mNextLine->mNextLine
-		&& line->mNextLine->mNextLine->mLineNumber == line->mLineNumber
-		&& line->mNextLine->mNextLine->mFileIndex == line->mFileIndex;
-}
-
 Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
 {
 	Line *found_line = nullptr;
@@ -125,13 +115,9 @@ Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
 			// so any breakpoint set on one of those lines would never be hit.  Attempting to
 			// set a breakpoint on one of these should act like setting a breakpoint on a line
 			// which contains no code: put the breakpoint at the next line instead.
-			// Without this check, setting a breakpoint on a line like "else Exit" would not work.
 			// ACT_CASE executes when the *previous* case reaches its end, so for that case
 			// we want to shift the breakpoint to the first Line after the ACT_CASE.
-			// An expression such as x:=()=>y results in a fat arrow function prior to the assignment;
-			// in that case breakpoints need to be set on a series of lines (inside each fat arrow
-			// function and on the final expression Line).
-			if (BreakpointLineIsSlippery(line) && !LineIsFatArrowBlock(line))
+			if (BreakpointLineIsSlippery(line))
 				continue;
 			// Use the first line of code at or after lineno, like Visual Studio.
 			// To display the breakpoint correctly, an IDE should use breakpoint_get.
@@ -145,30 +131,18 @@ Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
 	return found_line;
 }
 
-// Set Line::mBreakpoint for a single executable line and all fat-arrow functions
-// that it contains.  line should be as determined by FindFirstLineForBreakpoint().
+// Set Line::mBreakpoint for all executable lines that share the line's number,
+// such as an expression and any fat arrow function's it contains, or all param
+// default initializers in e.g. `Fn(a:=[], b:={}) {`.
 void SetBreakpointForLineGroup(Line *line, Breakpoint *bp)
 {
 	auto line_no = line->mLineNumber;
 	auto file_no = line->mFileIndex;
-	while (line->mActionType == ACT_BLOCK_BEGIN)
-	{
-		// Under the conditions established by FindFirstLineForBreakpoint(), this line can
-		// only be the block-begin of a fat-arrow function, which is always followed by a
-		// return and block-end, then either another fat-arrow or the final expression Line.
-		ASSERT(LineIsFatArrowBlock(line) && line->mNextLine->mActionType == ACT_RETURN
-			&& line->mNextLine->mNextLine->mActionType == ACT_BLOCK_END);
-		line = line->mNextLine; // Set it to the return.
-		if (!line)
-			return; // Shouldn't happen.
-		line->mBreakpoint = bp;
-		if (   !(line = line->mNextLine)     // Set it to the block-end.
-			|| !(line = line->mNextLine)   ) // Set it to the next fat-arrow block-begin or the final expression.
-			return; // Shouldn't happen.
-		if (line->mLineNumber != line_no || line->mFileIndex != file_no)
-			return; // May happen after an ACT_STATIC line is removed.
-	}
-	line->mBreakpoint = bp;
+	do {
+		if (line->mActionType != ACT_BLOCK_BEGIN) // Skip the block-begin implied by any fat-arrow.
+			line->mBreakpoint = bp;
+		line = line->mNextLine;
+	} while (line && line->mLineNumber == line_no && line->mFileIndex == file_no);
 }
 
 
@@ -186,17 +160,9 @@ int Debugger::PreExecLine(Line *aLine)
 	{
 		if (bp->temporary)
 		{
-			auto line = aLine;
-			if (line->mPrevLine && LineIsFatArrowBlock(line->mPrevLine))
-			{
-				// This line is inside a fat-arrow function, which means the breakpoint must have been
-				// set not just for this line, but also for all other fat-arrow functions on this line
-				// and the expression line which contains them (and is last in the Line list).
-				Line *prev;
-				for (line = line->mPrevLine; // Init to the fat-arrow's block-begin.
-					(prev = line->mPrevLine) && prev->mActionType == ACT_BLOCK_END && LineIsFatArrowBlock(prev->mParentLine);
-					line = prev->mParentLine); // Update to the previous fat-arrow's block-begin.
-			}
+			Line *line = aLine, *prev;
+			while ((prev = line->mPrevLine) && prev->mLineNumber == line->mLineNumber && prev->mFileIndex == line->mFileIndex)
+				line = prev;
 			SetBreakpointForLineGroup(line, nullptr);
 			delete bp;
 		}
