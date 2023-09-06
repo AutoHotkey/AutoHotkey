@@ -1269,8 +1269,7 @@ void ReleaseStaticVarObjects(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		ASSERT(dynamic_cast<UserFunc*>(aFuncs.mItem[i]));
-		auto &f = *(UserFunc *)aFuncs.mItem[i];
+		UserFunc &f = *aFuncs.mItem[i];
 		// Since it doesn't seem feasible to release all var backups created by recursive function
 		// calls and all tokens in the 'stack' of each currently executing expression, currently
 		// only static and global variables are released.  It seems best for consistency to also
@@ -7464,8 +7463,7 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		ASSERT(dynamic_cast<UserFunc*>(aFuncs.mItem[i]));
-		auto &func = *(UserFunc *)aFuncs.mItem[i];
+		UserFunc &func = *aFuncs.mItem[i];
 		g->CurrentFunc = &func;
 		if (!PreparseExpressions(func.mJumpToLine)) // Preparse this function's body.
 			return FAIL;
@@ -12149,8 +12147,7 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		ASSERT(dynamic_cast<UserFunc*>(aFuncs.mItem[i]));
-		auto &func = *(UserFunc *)aFuncs.mItem[i];
+		UserFunc &func = *aFuncs.mItem[i];
 		if (!PreprocessLocalVars(func))
 			return FAIL;
 		// Nested functions will be preparsed next, due to the fact that they immediately
