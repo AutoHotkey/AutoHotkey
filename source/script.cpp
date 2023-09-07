@@ -1787,9 +1787,8 @@ process_completed_line:
 				}
 			// Find the hotstring's final double-colon by considering escape sequences from left to right.
 			// This is necessary for it to handle cases such as the following:
-			// ::abc```::::Replacement String
-			// The above hotstring translates literally into "abc`::".
-			LPTSTR escaped_double_colon = NULL;
+			// ::abc```:::Replacement String
+			// The above hotstring translates literally into "abc`:".
 			for (cp = hotstring_start; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
 			{
 				for (; *cp && *cp != g_EscapeChar && *cp != ':'; ++cp);  // Find the next escape char or colon.
