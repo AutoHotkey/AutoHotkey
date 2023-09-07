@@ -1966,14 +1966,14 @@ process_completed_line:
 					if (cp - hotkey_flag < _countof(remap_dest_modifiers)) // Avoid reading beyond the end.
 						remap_dest_modifiers[cp - hotkey_flag] = '\0';   // Terminate at the proper end of the modifier string.
 					
-					if (!*remap_dest_modifiers	
-						&& (remap_dest_vk == VK_PAUSE)	
+					if (remap_dest_vk == VK_PAUSE
+						&& !*remap_dest_modifiers // If modifiers are present, it can't be a call to the Pause function.
 						&& (!_tcsicmp(remap_dest, _T("Pause")))) // Specifically "Pause", not "vk13".
 					{
-						// In the unlikely event that the dest key has the same name as a command, disqualify it
-						// from being a remap (as documented). 
-						// v1.0.40.05: If the destination key has any modifiers,
-						// it is unambiguously a key name rather than a command.
+						// Pause is excluded because it is more common to create a hotkey to pause the script than
+						// to remap something to the Pause/Break key, and that's how it was in v1.  Any other key
+						// names are interpreted as remapping even if the user defines a function with that name.
+						// Doing otherwise would be complicated and probably undesirable.
 					}
 					else
 					{
