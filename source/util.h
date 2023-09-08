@@ -730,6 +730,7 @@ void AssignColor(COLORREF aNewColorValue, COLORREF &aColor, HBRUSH &aBrush);
 bool ColorToBGR(LPCTSTR aColorNameOrRGB, COLORREF &aBGR);
 COLORREF ColorNameToBGR(LPCTSTR aColorName);
 LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap);
+LPTSTR ConvertSpaceEscapeSequences(LPTSTR aBuf);
 int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
 int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
 #define MAX_BALANCEEXPR_DEPTH 100 // The maximum depth at which BalanceExpr() can validate symbols (the size of aExpect[]).
