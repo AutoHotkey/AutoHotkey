@@ -1941,7 +1941,7 @@ process_completed_line:
 					
 					vk_type remap_source_vk;
 					TCHAR remap_source[32], remap_dest[32], remap_dest_modifiers[8]; // Must fit the longest key name (currently Browser_Favorites [17]), but buffer overflow is checked just in case.
-					bool remap_source_is_combo, remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
+					bool remap_source_is_combo, remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse, remap_wheel;
 
 					// These will be ignored in other stages if it turns out not to be a remap later below:
 					LPCTSTR cp1;
@@ -1950,6 +1950,7 @@ process_completed_line:
 					remap_source_is_mouse = IsMouseVK(remap_source_vk);
 					remap_dest_is_mouse = IsMouseVK(remap_dest_vk);
 					remap_keybd_to_mouse = !remap_source_is_mouse && remap_dest_is_mouse;
+					remap_wheel = IS_WHEEL_VK(remap_source_vk) || IS_WHEEL_VK(remap_dest_vk);
 					sntprintf(remap_source, _countof(remap_source), _T("%s%s%s")
 						, remap_source_is_combo ? _T("") : _T("*") // v1.1.27.01: Omit * when the remap source is a custom combo.
 						, _tcslen(cp1) == 1 && IsCharUpper(*cp1) ? _T("+") : _T("")  // Allow A::b to be different than a::b.
@@ -2046,7 +2047,7 @@ process_completed_line:
 						// The primary reason for adding Key/MouseDelay -1 is to minimize the chance that a one of
 						// these hotkey threads will get buried under some other thread such as a timer, which
 						// would disrupt the remapping if #MaxThreadsPerHotkey is at its default of 1.
-						if (remap_keybd_to_mouse)
+						if (remap_keybd_to_mouse && !remap_wheel)
 						{
 							// Since source is keybd and dest is mouse, prevent keyboard auto-repeat from auto-repeating
 							// the mouse button (since that would be undesirable 90% of the time).  This is done
@@ -2068,8 +2069,8 @@ process_completed_line:
 						*next_blind_mod = '\0';
 						LPTSTR extra_event = _T(""); // Set default.
 						cp += _stprintf(cp
-							, _T("Send(\"{Blind%s}%s%s{%s DownR}\")") // DownR vs. Down. See Send's DownR handler for details.
-							, blind_mods, extra_event, remap_dest_modifiers, remap_dest);
+							, _T("Send(\"{Blind%s}%s%s{%s%s}\")") // DownR vs. Down. See Send's DownR handler for details.
+							, blind_mods, extra_event, remap_dest_modifiers, remap_dest, remap_wheel ? _T("") : _T(" DownR"));
 
 						auto define_remap_func = [&]()
 						{
@@ -2081,6 +2082,8 @@ process_completed_line:
 						};
 						if (!define_remap_func()) // the "down" function.
 							return FAIL;
+						if (remap_wheel) // Mapping key-down to wheel or vice versa is sufficient; mapping key-up to wheel would cause double scrolling.
+							goto continue_main_loop;
 						//
 						// "Down" is finished, proceed with "Up":
 						//
