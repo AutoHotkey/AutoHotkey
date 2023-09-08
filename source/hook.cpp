@@ -1809,7 +1809,18 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// that correspond to some global hotkeys, even though they aren't actually triggering global
 		// hotkeys because the logical key state doesn't match.  For example, with LWin::Alt, LWin-T
 		// would not activate the Tools menu on a menu bar.
-		else if (aVK == VK_LMENU || aVK == VK_RMENU || aVK == VK_LWIN || aVK == VK_RWIN)
+		// Fixes for v1.1.37.02 and v2.0.8:
+		//  1) Apply this to Ctrl hotkeys because otherwise, the OS thinks Ctrl is being held down
+		//     and therefore translates Alt-key combinations to WM_KEYDOWN instead of WM_SYSKEYDOWN.
+		//     (confirmed on Windows 7, but might not be necessary on Windows 11).
+		//  2) Apply this to Shift as well for simplicity and consistency.  Although this hasn't been
+		//     confirmed, it might be necessary for correct system handling in some cases, such as with
+		//     certain language-switching hotkeys, IME or advanced keyboard layouts.
+		//  3) Don't apply this if the modifier is logically down, since in that case the system *should*
+		//     consider the key to be held down.  For example, pressing Ctrl+Alt should produce WM_KEYDOWN,
+		//     but if the system thinks Ctrl has been released, it will instead produce WM_SYSKEYDOWN.
+		//     This was confirmed necessary for LCtrl::Alt and LAlt::LCtrl to work correctly on Windows 7.
+		else if (this_key.as_modifiersLR & ~g_modifiersLR_logical)
 		{
 			// Fix for v1.1.26.01: Added KEY_BLOCK_THIS to suppress the Alt key-up, which fixes an issue
 			// which could be reproduced as follows:
