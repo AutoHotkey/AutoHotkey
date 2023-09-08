@@ -3007,10 +3007,10 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 				{
 					next_option += 4;
 					tcslcpy(suffix, next_option, _countof(suffix)); // The word "Join" by itself will product an empty string, as documented.
-					// Passing true for the last parameter supports `s as the special escape character,
-					// which allows space to be used by itself and also at the beginning or end of a string
-					// containing other chars.
-					ConvertEscapeSequences(suffix, NULL);
+					// Only `s and `t are replaced, as everything else must be in a quoted string, which would
+					// perform its own conversion of escape sequences.  In particular, `` is left as is since
+					// it would otherwise be converted again later; i.e. ```` would become a literal `.
+					ConvertSpaceEscapeSequences(suffix);
 					suffix_length = _tcslen(suffix);
 				}
 				else if (!_tcsnicmp(next_option, _T("LTrim"), 5))

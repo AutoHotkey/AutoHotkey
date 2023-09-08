@@ -2895,6 +2895,33 @@ LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap)
 
 
 
+LPTSTR ConvertSpaceEscapeSequences(LPTSTR aBuf)
+// Replaces the `s and `t escapes sequences with \s and \t, while leaving all other sequences.
+// In particular, `` is left as is so that a subsequent call to ConvertEscapeSequences() won't
+// interpret it as escaping the next char.
+{
+	auto src = _tcschr(aBuf, g_EscapeChar);
+	if (!src)
+		return aBuf;
+	auto dst = src;
+	for ( ; TCHAR c = *src; ++src, ++dst)
+	{
+		if (c == g_EscapeChar)
+		{
+			switch (src[1])
+			{
+			case 's': c = ' '; ++src; break;
+			case 't': c = '\t'; ++src; break;
+			}
+		}
+		*dst = c;
+	}
+	*dst = '\0';
+	return aBuf;
+}
+
+
+
 int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
 // Returns the index of the next delimiter, taking into account quotes, parentheses, etc.
 // If the delimiter is not found, returns the length of aBuf.
