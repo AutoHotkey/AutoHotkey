@@ -2067,34 +2067,6 @@ process_completed_line:
 								}
 						*next_blind_mod = '\0';
 						LPTSTR extra_event = _T(""); // Set default.
-						switch (remap_dest_vk)
-						{
-						case VK_LMENU:
-						case VK_RMENU:
-						case VK_MENU:
-							switch (remap_source_vk)
-							{
-							case VK_LCONTROL:
-							case VK_CONTROL:
-								extra_event = _T("{LCtrl up}"); // Somewhat surprisingly, this is enough to make "Ctrl::Alt" properly remap both right and left control.
-								break;
-							case VK_RCONTROL:
-								extra_event = _T("{RCtrl up}");
-								break;
-								// Below is commented out because its only purpose was to allow a shift key remapped to alt
-								// to be able to alt-tab.  But that wouldn't work correctly due to the need for the following
-								// hotkey, which does more harm than good by impacting the normal Alt key's ability to alt-tab
-								// (if the normal Alt key isn't remapped): *Tab::Send {Blind}{Tab}
-								//case VK_LSHIFT:
-								//case VK_SHIFT:
-								//	extra_event = "{LShift up}";
-								//	break;
-								//case VK_RSHIFT:
-								//	extra_event = "{RShift up}";
-								//	break;
-							}
-							break;
-						}
 						cp += _stprintf(cp
 							, _T("Send(\"{Blind%s}%s%s{%s DownR}\")") // DownR vs. Down. See Send's DownR handler for details.
 							, blind_mods, extra_event, remap_dest_modifiers, remap_dest);
