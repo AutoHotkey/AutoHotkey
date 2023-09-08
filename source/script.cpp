@@ -4115,7 +4115,7 @@ void Script::RemoveLabel(Label *aLabel)
 
 
 
-ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType, LPTSTR aLiteralMap, size_t aLiteralMapLength)
+ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 // Returns OK or FAIL.
 // aLineText needs to be a string whose contents are modifiable (though the string won't be made any
 // longer than it is now, so it doesn't have to be of size LINE_SIZE). This helps performance by
@@ -4194,11 +4194,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						// Only the escape char can escape itself, so any odd number of preceding
 						// escape chars means this quote mark is escaped; e.g. `" or ```".
 						bool escaped = false;
-						if (aLiteralMap)
-							escaped = aLiteralMap[i];
-						else
-							while (i > 0 && aLineText[i - 1] == g_EscapeChar)
-								escaped = !escaped, --i;
+						while (i > 0 && aLineText[i - 1] == g_EscapeChar)
+							escaped = !escaped, --i;
 						if (!escaped)
 							break;
 					}
@@ -4242,7 +4239,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 		if (*aLineText == '"' || *aLineText == '\'')
 		{
-			action_args = aLineText + FindTextDelim(aLineText, *aLineText, 1, aLiteralMap);
+			action_args = aLineText + FindTextDelim(aLineText, *aLineText, 1);
 			if (*action_args)
 			{
 				action_args = omit_leading_whitespace(action_args + 1);
@@ -4711,33 +4708,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 	Action &this_action = g_act[aActionType];
 
-	//////////////////////////////////////////////////////////////////////////////////////////////
-	// Handle escaped-sequences (escaped delimiters and all others except variable deref symbols).
-	// This section must occur after all other changes to the pointer value action_args have
-	// occurred above.
-	//////////////////////////////////////////////////////////////////////////////////////////////
-	LPTSTR literal_map;
-	if (aLiteralMap)
-	{
-		// Caller's aLiteralMap starts at aLineText, so adjust it so that it starts at the newly
-		// found position of action_args instead:
-		literal_map = aLiteralMap + (action_args - aLineText);
-	}
-	else
-	{
-		literal_map = (LPTSTR)_alloca(sizeof(TCHAR) * line_length);
-		ZeroMemory(literal_map, sizeof(TCHAR) * line_length);  // Must be fully zeroed for this purpose.
-		// Resolve escaped sequences and make a map of which characters in the string should
-		// be interpreted literally rather than as their native function.  In other words,
-		// convert any escape sequences in order from left to right.  This part must be
-		// done *after* checking for comment-flags that appear to the right of a valid line, above.
-		// How literal comment-flags (e.g. semicolons) work:
-		//string1; string2 <-- not a problem since string2 won't be considered a comment by the above.
-		//string1 ; string2  <-- this would be a user mistake if string2 wasn't supposed to be a comment.
-		//string1 `; string 2  <-- since esc seq. is resolved *after* checking for comments, this behaves as intended.
-		ConvertEscapeSequences(action_args, literal_map);
-	}
-
 	// v2: All statements accept expressions by default, except goto/break/continue.
 	if (aActionType > ACT_LAST_JUMP || aActionType < ACT_FIRST_JUMP)
 		all_args_are_expressions = true;
@@ -4773,7 +4743,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	/////////////////////////////////////////////////////////////
 	// MaxParams has already been verified as being <= MAX_ARGS.
 	int nArgs;
-	LPTSTR arg[MAX_ARGS], arg_map[MAX_ARGS];
+	LPTSTR arg[MAX_ARGS];
 	int max_params = this_action.MaxParams;
 	int max_params_minus_one = max_params - 1;
 	bool is_expression;
@@ -4781,17 +4751,16 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	for (nArgs = mark = 0; action_args[mark] && nArgs < max_params; ++nArgs)
 	{
 		arg[nArgs] = action_args + mark;
-		arg_map[nArgs] = literal_map + mark;
 
 		is_expression = all_args_are_expressions; // This would be false for goto/break/continue.
 
 		// Find the end of the above arg:
 		if (is_expression)
 			// Find the next delimiter, taking into account quote marks, parentheses, etc.
-			mark = FindExprDelim(action_args, g_delimiter, mark, literal_map);
+			mark = FindExprDelim(action_args, g_delimiter, mark);
 		else
 			// Find the next non-literal delimiter.
-			mark = FindTextDelim(action_args, g_delimiter, mark, literal_map);
+			mark = FindTextDelim(action_args, g_delimiter, mark);
 
 		if (action_args[mark])  // A non-literal delimiter was found.
 		{
@@ -4802,14 +4771,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			}
 			action_args[mark] = '\0';  // Terminate the previous arg.
 			// Trim any whitespace from the previous arg.  This operation will not alter the contents
-			// of anything beyond action_args[i], so it should be safe.  In addition, even though it
-			// changes the contents of the arg[nArgs] substring, we don't have to update literal_map
-			// because the map is still accurate due to the nature of rtrim).  UPDATE: Note that this
-			// version of rtrim() specifically avoids trimming newline characters, since the user may
-			// have included literal newlines at the end of the string by using an escape sequence:
-			rtrim_literal(arg[nArgs], arg_map[nArgs]);
+			// of anything beyond action_args[i], so it should be safe.
+			rtrim(arg[nArgs], (action_args + mark) - arg[nArgs]);
 			// Omit the leading whitespace from the next arg:
-			for (++mark; IS_SPACE_OR_TAB(action_args[mark]) && !literal_map[mark]; ++mark);
+			for (++mark; IS_SPACE_OR_TAB(action_args[mark]); ++mark);
 			// Now <mark> marks the end of the string, the start of the next arg,
 			// or a delimiter-char (if the next arg is blank).
 		}
@@ -4867,7 +4832,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	if (aActionType == ACT_SWITCH && nArgs && !*arg[0]) // Switch with parameters - do this only after the above, since it might remove one arg.
 		ScriptError(ERR_PARAM1_MUST_NOT_BE_BLANK); // "Switch , y" or "Switch , "
 
-	if (!AddLine(aActionType, arg, nArgs, arg_map, all_args_are_expressions))
+	if (!AddLine(aActionType, arg, nArgs, all_args_are_expressions))
 		return FAIL;
 	if (add_openbrace_afterward)
 		if (!AddLine(ACT_BLOCK_BEGIN))
@@ -4916,11 +4881,9 @@ inline ActionTypeType Script::ConvertActionType(LPCTSTR aActionTypeString)
 
 
 
-ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc, LPTSTR aArgMap[], bool aAllArgsAreExpressions)
+ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc, bool aAllArgsAreExpressions)
 // aArg must be a collection of pointers to memory areas that are modifiable, and there
-// must be at least aArgc number of pointers in the aArg array.  In v1.0.40, a caller (namely
-// the "macro expansion" for remappings such as "a::b") is allowed to pass a non-NULL value for
-// aArg but a NULL value for aArgMap.
+// must be at least aArgc number of pointers in the aArg array.
 // Returns OK or FAIL.
 {
 #ifdef _DEBUG
@@ -4949,13 +4912,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		&& !mPendingParentLine // There's no misplaced IF/LOOP/etc. at the end of the function.
 		&& (mLastLine->mActionType != ACT_RETURN || mLastLine->mParentLine != mOpenBlock)) // It wouldn't be "unreachable".
 	{
-		if (!AddLine(ACT_RETURN, nullptr, 0, nullptr, true)) // The recursive call will detect that this needs to be `return unset`.
+		if (!AddLine(ACT_RETURN, nullptr, 0, true)) // The recursive call will detect that this needs to be `return unset`.
 			return FAIL;
 	}
 
 	DerefList deref;  // Will be used to temporarily store the var-deref locations in each arg.
 	ArgStruct *new_arg;  // We will allocate some dynamic memory for this, then hang it onto the new line.
-	LPTSTR this_aArgMap, this_aArg;
+	LPTSTR this_aArg;
 
 	//////////////////////////////////////////////////////////
 	// Build the new arg list in dynamic memory.
@@ -4975,7 +4938,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// FOR EACH ARG:
 			////////////////
 			this_aArg = aArg[i];                        // For performance and convenience.
-			this_aArgMap = aArgMap ? aArgMap[i] : NULL; // Same.
 			ArgStruct &this_new_arg = new_arg[i];       // Same.
 			this_new_arg.postfix = NULL;                // Set default early, for maintainability.
 
@@ -5004,15 +4966,14 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// Now that any escaped quote marks etc. have been marked, pre-parse all operands
 			// in this_new_arg.text.  Review is needed to determine whether var derefs still
 			// need to be resolved at this stage (and whether this is optimal).  Other operands
-			// are marked at this stage to avoid some redundant processing later, and so that we
-			// don't need to make this_aArgMap persistent.
+			// are marked at this stage to avoid some redundant processing later.
 			// Note: this_new_arg.text is scanned rather than this_aArg because we want to
 			// establish pointers to the correct area of memory:
 			deref.count = 0;  // Init for each arg.
 
 			if (this_new_arg.is_expression)
 			{
-				if (!ParseOperands(this_new_arg.text, this_aArgMap, deref))
+				if (!ParseOperands(this_new_arg.text, deref))
 					return FAIL;
 			}
 			// Otherwise, this arg does not contain an expression and therefore cannot contain
@@ -5280,7 +5241,7 @@ ResultType DerefList::Push()
 
 
 
-ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref, int *aPos, TCHAR aEndChar)
+ResultType Script::ParseOperands(LPTSTR aArgText, DerefList &aDeref, int *aPos, TCHAR aEndChar)
 {
 	LPTSTR op_begin, op_end;
 	size_t operand_length;
@@ -5289,14 +5250,6 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 	bool is_function;
 	bool is_double_deref;
 	SymbolType wordop;
-
-	// Escape sequences outside of literal strings have no meaning, so could be considered illegal
-	// to improve error detection and reserve ` for future use.  However, in that case ` must still
-	// be allowed inside quoted strings and for `) in continuation sections, so this is inadequate:
-	//if (this_aArgMap) // This arg has an arg map indicating which chars are escaped/literal vs. normal.
-	//	for (j = 0; this_new_arg.text[j]; ++j)
-	//		if (this_aArgMap[j])
-	//			return ScriptError(ERR_EXP_ILLEGAL_CHAR, this_new_arg.text + j);
 
 	op_begin = aArgText;
 	if (aPos)
@@ -5359,7 +5312,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			if (close_char == ')')
 			{
 				// Before parsing derefs, check if this is the parameter list of an inline function.
-				LPTSTR close_paren = aArgText + FindExprDelim(aArgText, close_char, j, aArgMap);
+				LPTSTR close_paren = aArgText + FindExprDelim(aArgText, close_char, j);
 				if (*close_paren)
 				{
 					cp = omit_leading_whitespace(close_paren + 1);
@@ -5371,13 +5324,13 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 							if (d.type == DT_VAR && d.marker + d.length == op_begin)
 								op_begin = d.marker;
 						}
-						if (!ParseFatArrow(aArgText, aArgMap, aDeref, op_begin, close_paren, cp + 2, op_begin))
+						if (!ParseFatArrow(aArgText, aDeref, op_begin, close_paren, cp + 2, op_begin))
 							return FAIL;
 						continue;
 					}
 				}
 			}
-			if (!ParseOperands(aArgText, aArgMap, aDeref, &j, close_char))
+			if (!ParseOperands(aArgText, aDeref, &j, close_char))
 				return FAIL;
 			op_begin = aArgText + j;
 			if (*op_begin)
@@ -5392,7 +5345,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 
 		if (*op_begin == '"' || *op_begin == '\'')
 		{
-			op_end = aArgText + FindTextDelim(aArgText, *op_begin, int(op_begin - aArgText + 1), aArgMap);
+			op_end = aArgText + FindTextDelim(aArgText, *op_begin, int(op_begin - aArgText + 1));
 			if (!*op_end)
 				return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
 			if (!aDeref.Push())
@@ -5440,7 +5393,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 		{
 			// This operand is the leading literal part of a double dereference.
 			j = (int)(op_begin - aArgText);
-			if (!ParseDoubleDeref(aArgText, aArgMap, aDeref, &j))
+			if (!ParseDoubleDeref(aArgText, aDeref, &j))
 				return FAIL;
 			op_end = aArgText + j;
 			is_function = *op_end == '('; // Dynamic function call.
@@ -5472,7 +5425,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			}
 			else if (*cp == '=' && cp[1] == '>') // one_param => Fat arrow function.
 			{
-				if (!ParseFatArrow(aArgText, aArgMap, aDeref, op_begin, op_end, cp + 2, op_end))
+				if (!ParseFatArrow(aArgText, aDeref, op_begin, op_end, cp + 2, op_end))
 					return FAIL;
 				continue;
 			}
@@ -5535,7 +5488,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 }
 
 
-ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref, int *aPos)
+ResultType Script::ParseDoubleDeref(LPTSTR aArgText, DerefList &aDeref, int *aPos)
 {
 	LPTSTR op_begin, dd_begin;
 	LPTSTR op_end;
@@ -5559,7 +5512,7 @@ ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefList &
 		if (this_deref.terminal)
 			break;
 		(*aPos)++;
-		if (!ParseOperands(aArgText, aArgMap, aDeref, aPos, g_DerefChar))
+		if (!ParseOperands(aArgText, aDeref, aPos, g_DerefChar))
 			return FAIL;
 		op_end = aArgText + *aPos;
 		if (*op_end != g_DerefChar)
@@ -5600,19 +5553,19 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 }
 
 
-ResultType Script::ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref
+ResultType Script::ParseFatArrow(LPTSTR aArgText, DerefList &aDeref
 	, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd)
 {
 	int expr_start_pos = int(aExpr - aArgText);
-	int expr_end_pos = FindExprDelim(aArgText, 0, expr_start_pos, aArgMap);
-	if (!ParseFatArrow(aDeref, aPrmStart, aPrmEnd, aExpr, aArgText + expr_end_pos, aArgMap + expr_start_pos))
+	int expr_end_pos = FindExprDelim(aArgText, 0, expr_start_pos);
+	if (!ParseFatArrow(aDeref, aPrmStart, aPrmEnd, aExpr, aArgText + expr_end_pos))
 		return FAIL;
 	aExprEnd = aArgText + expr_end_pos;
 	return OK;
 }
 
 
-ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap)
+ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd)
 {
 	TCHAR orig_end;
 
@@ -5646,7 +5599,7 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	for (; aExprEnd > aExpr && IS_SPACE_OR_TAB(aExprEnd[-1]); --aExprEnd);
 	orig_end = *aExprEnd;
 	*aExprEnd = '\0';
-	if (!ParseAndAddLine(aExpr, ACT_RETURN, aExprMap, aExprEnd - aExpr))
+	if (!ParseAndAddLine(aExpr, ACT_RETURN))
 		return FAIL;
 	*aExprEnd = orig_end;
 
@@ -8541,8 +8494,11 @@ unquoted_literal:
 
 			if (!can_be_optimized_out)
 			{
-				LPTSTR str = SimpleHeap::Alloc(this_deref_ref.marker, this_deref_ref.length);
-				infix[infix_count].SetValue(str, this_deref_ref.length);
+				auto length = UnescapedLength(this_deref_ref.marker, this_deref_ref.length);
+				auto str = SimpleHeap::Alloc<TCHAR>(length + 1);
+				ConvertEscapeSequences(str, length + 1, this_deref_ref.marker, this_deref_ref.length);
+				ASSERT(!str[length]);
+				infix[infix_count].SetValue(str, length);
 				infix_count++;
 			}
 			cp += this_deref_ref.length;

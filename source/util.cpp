@@ -2859,6 +2859,54 @@ HBITMAP IconToBitmap32(HICON ahIcon, bool aDestroyIcon)
 
 
 
+size_t UnescapedLength(LPCTSTR aSrc, size_t aSrcLen)
+{
+	size_t len;
+	for (len = aSrcLen; aSrcLen > 1; --aSrcLen, ++aSrc) // > 1 because a trailing ` would be copied as-is.
+		if (*aSrc == g_EscapeChar)
+			--len, --aSrcLen, ++aSrc;
+	return len;
+}
+
+
+
+LPTSTR ConvertEscapeSequences(LPTSTR aDst, size_t aDstSize, LPCTSTR aSrc, size_t aSrcLen)
+// Copies aSrc to aDst, replacing any escape sequences with their reduced equivalent.
+// aDst must be at least UnescapedLength(aSrc, aSrcLen)+1 TCHARs (+1 for null termination).
+// Should work for aSrc == aDst, but is not optimized for it.
+{
+	auto cp = aDst;
+	auto src_last = aSrc + aSrcLen - 1;
+	for ( ; aDstSize > 1; ++aSrc, ++cp, --aDstSize)
+	{
+		if (*aSrc != g_EscapeChar)
+		{
+			*cp = *aSrc;
+			continue;
+		}
+		if (aSrc != src_last) // Should always be true since ` can't occur at the end of a quoted string.
+			++aSrc;
+		//else treat the trailing ` like ``, and leave aSrcLen == 1 so the loop's --aSrcLen will make it 0.
+		switch (*aSrc)
+		{
+			// Only lowercase is recognized for these:
+			case 'a': *cp = '\a'; break;  // alert (bell) character
+			case 'b': *cp = '\b'; break;  // backspace
+			case 'f': *cp = '\f'; break;  // formfeed
+			case 'n': *cp = '\n'; break;  // newline
+			case 'r': *cp = '\r'; break;  // carriage return
+			case 't': *cp = '\t'; break;  // horizontal tab
+			case 'v': *cp = '\v'; break;  // vertical tab
+			case 's': *cp = ' '; break;   // space
+			default: *cp = *aSrc; break;
+		}
+	}
+	*cp = '\0'; // Terminate separately since aSrc[aSrcLen] might not be a null-terminator.
+	return aDst;
+}
+
+
+
 LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap)
 // Replaces any escape sequences in aBuf with their reduced equivalent.  For example, if aEscapeChar
 // is accent, Each `n would become a literal linefeed.  aBuf's length should always be the same or

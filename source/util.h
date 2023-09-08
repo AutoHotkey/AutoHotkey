@@ -730,6 +730,8 @@ void AssignColor(COLORREF aNewColorValue, COLORREF &aColor, HBRUSH &aBrush);
 bool ColorToBGR(LPCTSTR aColorNameOrRGB, COLORREF &aBGR);
 COLORREF ColorNameToBGR(LPCTSTR aColorName);
 LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap);
+LPTSTR ConvertEscapeSequences(LPTSTR aDst, size_t aDstSize, LPCTSTR aSrc, size_t aSrcLen);
+size_t UnescapedLength(LPCTSTR aSrc, size_t aSrcLen);
 LPTSTR ConvertSpaceEscapeSequences(LPTSTR aBuf);
 int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
 int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
