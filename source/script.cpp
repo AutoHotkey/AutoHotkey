@@ -3664,8 +3664,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				// after the word EndChar.
 				if (    !(parameter = StrChrAny(suboption, _T("\t ")))   )
 					return CONDITION_TRUE;
-				tcslcpy(g_EndChars, ++parameter, _countof(g_EndChars));
-				ConvertEscapeSequences(g_EndChars, NULL);
+				parameter++;
+				ConvertEscapeSequences(g_EndChars, _countof(g_EndChars), parameter, _tcslen(parameter));
 				return CONDITION_TRUE;
 			}
 			if (!_tcsnicmp(parameter, _T("NoMouse"), 7)) // v1.0.42.03
@@ -5781,13 +5781,13 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 				if (*param_end) // Close-quote was found.
 				{
 					auto next_non_white = *omit_leading_whitespace(param_end + 1);
-					if ((next_non_white == ',' || next_non_white == ')') // Just a literal string.
-						&& param_end - param_start < _countof(buf)) // If it's too long for the buffer, let it raise an error in the next section.
+					if (next_non_white == ',' || next_non_white == ')') // Just a literal string.
 					{
-						tcslcpy(buf, param_start + 1, param_end - param_start); // +1 skips the opening quote and also accounts for the terminator for tcslcpy.
-						ConvertEscapeSequences(buf, NULL); // Raw escape sequences like `n haven't been converted yet, so do it now.
+						param_start++; // Skip the opening quote mark.
+						size_t len;
+						// Raw escape sequences like `n haven't been converted yet, so it's done here while also copying the string.
 						this_param.default_type = PARAM_DEFAULT_STR;
-						this_param.default_str = SimpleHeap::Alloc(buf);
+						this_param.default_str = ConvertEscapeSequences<SimpleHeap::Alloc<TCHAR>>(param_start, param_end - param_start, len);
 						++param_end; // Move beyond the close-quote, for below.
 					}
 				}
@@ -8482,9 +8482,8 @@ unquoted_literal:
 
 			if (!can_be_optimized_out)
 			{
-				auto length = UnescapedLength(this_deref_ref.marker, this_deref_ref.length);
-				auto str = SimpleHeap::Alloc<TCHAR>(length + 1);
-				ConvertEscapeSequences(str, length + 1, this_deref_ref.marker, this_deref_ref.length);
+				size_t length;
+				auto str = ConvertEscapeSequences<SimpleHeap::Alloc<TCHAR>>(this_deref_ref.marker, this_deref_ref.length, length);
 				ASSERT(!str[length]);
 				infix[infix_count].SetValue(str, length);
 				infix_count++;
