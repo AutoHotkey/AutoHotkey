@@ -2970,6 +2970,18 @@ LPTSTR ConvertSpaceEscapeSequences(LPTSTR aBuf)
 
 
 
+bool CharIsEscaped(LPCTSTR aChar, LPCTSTR aBuf)
+{
+	// Only the escape char can escape itself, so any odd number of preceding
+	// escape chars means this quote mark is escaped; e.g. `" or ```".
+	bool escaped = false;
+	while (aChar > aBuf && aChar[-1] == g_EscapeChar)
+		escaped = !escaped, --aChar;
+	return escaped;
+}
+
+
+
 int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
 // Returns the index of the next delimiter, taking into account quotes, parentheses, etc.
 // If the delimiter is not found, returns the length of aBuf.

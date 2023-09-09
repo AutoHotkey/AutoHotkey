@@ -4186,18 +4186,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 			case '"':
 			case '\'':
 				for (quote = aLineText[i--]; i > 0; --i)
-				{
-					if (aLineText[i] == quote)
-					{
-						// Only the escape char can escape itself, so any odd number of preceding
-						// escape chars means this quote mark is escaped; e.g. `" or ```".
-						bool escaped = false;
-						while (i > 0 && aLineText[i - 1] == g_EscapeChar)
-							escaped = !escaped, --i;
-						if (!escaped)
-							break;
-					}
-				}
+					if (aLineText[i] == quote && !CharIsEscaped(aLineText + i, aLineText))
+						break;
 			}
 		}
 		ASSERT(!open);

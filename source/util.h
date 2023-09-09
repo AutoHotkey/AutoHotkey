@@ -733,6 +733,7 @@ LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap);
 LPTSTR ConvertEscapeSequences(LPTSTR aDst, size_t aDstSize, LPCTSTR aSrc, size_t aSrcLen);
 size_t UnescapedLength(LPCTSTR aSrc, size_t aSrcLen);
 LPTSTR ConvertSpaceEscapeSequences(LPTSTR aBuf);
+bool CharIsEscaped(LPCTSTR aChar, LPCTSTR aBuf);
 int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
 int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
 #define MAX_BALANCEEXPR_DEPTH 100 // The maximum depth at which BalanceExpr() can validate symbols (the size of aExpect[]).
