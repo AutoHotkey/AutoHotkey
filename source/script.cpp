@@ -1700,7 +1700,6 @@ ResultType Script::LoadIncludedFile(TextStream *fp, int aFileIndex)
 
 	LPTSTR hotkey_flag, hotstring_start, hotstring_options;
 	LineNumberType saved_line_number;
-	HookActionType hook_action;
 	bool hotstring_execute;
 	ResultType hotkey_validity;
 
@@ -1753,7 +1752,6 @@ process_completed_line:
 
 		hotstring_start = NULL;
 		hotkey_flag = NULL;
-		bool hotkey_uses_otb = false; // used for hotstrings too.
 		if (buf[0] == ':' && buf[1])
 		{
 			hotstring_options = buf + 1; // Point it to the hotstring's option letters, if any.
@@ -1904,41 +1902,14 @@ process_completed_line:
 			hotkey_flag += HOTKEY_FLAG_LENGTH;  // Now hotkey_flag is the hotkey's action, if any.
 			
 			LPTSTR next_nonspace = omit_leading_whitespace(hotkey_flag);
-			hotkey_uses_otb = *next_nonspace == '{' && !next_nonspace[1]; // Has already been rtrimmed by GetLine().
+			bool hotkey_uses_otb = *next_nonspace == '{' && !next_nonspace[1]; // Has already been rtrimmed by GetLine().
 			if (!hotstring_start || hotstring_execute)
 			{
 				// Mustn't use ltrim(hotkey_flag) because that would cause buf.length to become incorrect:
 				hotkey_flag = next_nonspace;
 			}
 			// else don't trim auto-replace hotstrings since literal spaces in both substrings are significant.
-			if (!hotstring_start)
-			{
-				// To use '{' as remap_dest, escape it.
-				if (hotkey_flag[0] == g_EscapeChar && hotkey_flag[1] == '{')
-					hotkey_flag++;
-
-				auto key_name = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
-				vk_type remap_dest_vk;
-				// v1.0.40: Check if this is a remap rather than hotkey:
-				if (!hotkey_uses_otb   
-					&& *hotkey_flag // This hotkey's action is on the same line as its trigger definition.
-					&& (remap_dest_vk = key_name[1] ? TextToVK(key_name = const_cast<LPTSTR>(Hotkey::TextToModifiers(hotkey_flag, NULL))) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
-					// For above:
-					// Fix for v1.0.44.07: Set remap_dest_vk to 0xFF if hotkey_flag's length is only 1 because:
-					// 1) It allows a destination key that doesn't exist in the keyboard layout (such as 6::ð in
-					//    English).
-					// 2) It improves performance a little by not calling TextToVK except when the destination key
-					//    might be a mouse button or some longer key name whose actual/correct VK value is relied
-					//    upon by other places below.
-				{
-					auto result = ParseRemap(buf, remap_dest_vk, key_name, hotkey_flag);
-					if (!result)
-						return result;
-					if (result != CONDITION_FALSE)
-						goto continue_main_loop;
-					// Since above didn't goto this is not a remap after all:
-				}
-			}
+			HookActionType hook_action; // Becomes valid only when !hotstring_start.
 			
 			auto set_last_hotfunc = [&]()
 			{
@@ -2026,6 +1997,32 @@ process_completed_line:
 			}
 			else // It's a hotkey vs. hotstring.
 			{
+				// To use '{' as remap_dest, escape it.
+				if (hotkey_flag[0] == g_EscapeChar && hotkey_flag[1] == '{')
+					hotkey_flag++;
+
+				auto remap_name = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
+				vk_type remap_dest_vk;
+				// v1.0.40: Check if this is a remap rather than hotkey:
+				if (!hotkey_uses_otb   
+					&& *hotkey_flag // This hotkey's action is on the same line as its trigger definition.
+					&& (remap_dest_vk = remap_name[1] ? TextToVK(remap_name = const_cast<LPTSTR>(Hotkey::TextToModifiers(hotkey_flag, NULL))) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
+					// For above:
+					// Fix for v1.0.44.07: Set remap_dest_vk to 0xFF if hotkey_flag's length is only 1 because:
+					// 1) It allows a destination key that doesn't exist in the keyboard layout (such as 6::ð in
+					//    English).
+					// 2) It improves performance a little by not calling TextToVK except when the destination key
+					//    might be a mouse button or some longer key name whose actual/correct VK value is relied
+					//    upon by other places below.
+				{
+					auto result = ParseRemap(buf, remap_dest_vk, remap_name, hotkey_flag);
+					if (!result)
+						return result;
+					if (result != CONDITION_FALSE)
+						goto continue_main_loop;
+					// Since above didn't goto this is not a remap after all:
+				}
+
 				UCHAR no_suppress;
 				bool hook_is_mandatory;
 				hook_action = Hotkey::ConvertAltTab(hotkey_flag, false);
