@@ -1691,15 +1691,12 @@ ResultType Script::LoadIncludedFile(TextStream *fp, int aFileIndex)
 
 	LineBuffer buf, next_buf;
 	size_t &buf_length = buf.length, &next_buf_length = next_buf.length;
-	bool buf_has_brace;
 
 	// File is now open, read lines from it.
 
 	bool has_continuation_section;
-	TCHAR orig_char;
 
 	LPTSTR hotkey_flag, hotstring_start, hotstring_options;
-	LineNumberType saved_line_number;
 	bool hotstring_execute;
 	ResultType hotkey_validity;
 
@@ -1818,7 +1815,7 @@ process_completed_line:
 				// Note: Hotstrings can't suffer from this type of ambiguity because a leading colon or pair of
 				// colons makes them easier to detect.
 				auto cp = omit_trailing_whitespace(buf, hotkey_flag); // For maintainability.
-				orig_char = *cp;
+				TCHAR orig_char = *cp;
 				*cp = '\0'; // Temporarily terminate.
 				hotkey_validity = Hotkey::TextInterpret(omit_leading_whitespace(buf), NULL); // Passing NULL calls it in validate-only mode.
 				switch (hotkey_validity)
@@ -2119,7 +2116,7 @@ process_completed_line:
 				if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
 					return FAIL;
 			}
-			saved_line_number = mCombinedLineNumber; // Backup in case IsDirective() processes an include file, which would change mCombinedLineNumber's value.
+			auto saved_line_number = mCombinedLineNumber; // Backup in case IsDirective() processes an include file, which would change mCombinedLineNumber's value.
 			switch(IsDirective(buf)) // Note that it may alter the contents of buf
 			{
 			case CONDITION_TRUE:
@@ -2281,6 +2278,7 @@ process_completed_line:
 				}
 				if (!*cp || *cp == '[' || *cp == '{' || (*cp == '=' && cp[1] == '>')) // Property or invalid.
 				{
+					bool buf_has_brace;
 					if (!DefineClassProperty(id, is_static, buf_has_brace))
 						return FAIL;
 					if (!buf_has_brace)
