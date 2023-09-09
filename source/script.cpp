@@ -4049,22 +4049,6 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 
 
 
-void Script::RemoveLabel(Label *aLabel)
-// Remove a label from the linked list.
-// Used by DefineFunc to implement hotkey/hotstring functions.
-{
-	if (aLabel->mPrevLabel)
-		aLabel->mPrevLabel->mNextLabel = aLabel->mNextLabel;
-	else
-		mFirstLabel = aLabel->mNextLabel;
-	if (aLabel->mNextLabel)
-		aLabel->mNextLabel->mPrevLabel = aLabel->mPrevLabel;
-	else
-		mLastLabel = aLabel->mPrevLabel;
-}
-
-
-
 ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 // Returns OK or FAIL.
 // aLineText needs to be a string whose contents are modifiable (though the string won't be made any

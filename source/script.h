@@ -2897,7 +2897,6 @@ private:
 	ResultType ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd);
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
-	void RemoveLabel(Label *aLabel);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, bool aAllArgsAreExpressions = false);
 
 	// These aren't in the Line class because I think they're easier to implement
