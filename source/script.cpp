@@ -1757,9 +1757,8 @@ process_completed_line:
 			hotstring_options = buf + 1; // Point it to the hotstring's option letters, if any.
 			if (buf[1] != ':')
 			{
-				// The following relies on the fact that options should never contain a literal colon.
-				// ALSO, the following doesn't use IS_HOTSTRING_OPTION() for backward compatibility,
-				// performance, and because it seems seldom if ever necessary at this late a stage.
+				// Escape sequences aren't meaningful here; the options always end at the first colon.
+				// For backward compatibility, the following doesn't use IS_HOTSTRING_OPTION().
 				if (   !(hotstring_start = _tcschr(hotstring_options, ':'))   )
 					hotstring_start = NULL; // Indicate that this isn't a hotstring after all.
 				else
@@ -1768,7 +1767,7 @@ process_completed_line:
 			else // Double-colon, so it's a hotstring if there's more after this (but this means no options are present).
 				if (buf[2])
 					hotstring_start = buf + 2;
-				//else it's just a naked "::", which is considered to be an ordinary label whose name is colon.
+				//else it's just a naked "::", which is nothing valid.
 		}
 
 		if (hotstring_start)
@@ -1781,7 +1780,7 @@ process_completed_line:
 					hotstring_execute = cp[1] != '0';
 					break;
 				}
-			// Find the hotstring's final double-colon by considering escape sequences to its left.
+			// Find the hotstring's delimiting double-colon, while considering escape sequences.
 			// This is necessary for it to handle cases such as the following:
 			// ::abc```:::Replacement String
 			// The above hotstring translates literally into "abc`:".
@@ -1814,8 +1813,8 @@ process_completed_line:
 					// for colon as a remap target would require larger/more complicated code; 3) such hotkeys
 					// are hard for a human to read/interpret.
 				// v1.0.40: It appears to be a hotkey, but validate it as such before committing to processing
-				// it as a hotkey.  If it fails validation as a hotkey, treat it as a command that just happens
-				// to contain a double-colon somewhere.  This avoids the need to escape double colons in scripts.
+				// it as a hotkey.  If it fails validation as a hotkey, try to interpret it as a statement in
+				// case the double-colon is within a quoted string.
 				// Note: Hotstrings can't suffer from this type of ambiguity because a leading colon or pair of
 				// colons makes them easier to detect.
 				auto cp = omit_trailing_whitespace(buf, hotkey_flag); // For maintainability.
@@ -1879,13 +1878,7 @@ process_completed_line:
 			if (hotstring_start)
 			{
 				if (!*hotstring_start)
-				{
-					// The following error message won't indicate the correct line number because
-					// the hotstring (as a label) does not actually exist as a line.  But it seems
-					// best to report it this way in case the hotstring is inside a #Include file,
-					// so that the correct file name and approximate line number are shown:
 					return ScriptError(_T("This hotstring is missing its abbreviation."), buf); // Display buf vs. hotkey_flag in case the line is simply "::::".
-				}
 				// In the case of hotstrings, hotstring_start is the beginning of the hotstring itself,
 				// i.e. the character after the second colon.  hotstring_options is the first character
 				// in the options list (which is terminated by a colon).  hotkey_flag is blank or the
@@ -1929,9 +1922,8 @@ process_completed_line:
 				} 
 				else if (mLastHotFunc)
 				{
-					// It is autoreplace but an earlier hotkey or hotstring
-					// is "stacked" above, treat it as and error as it doesn't
-					// make sense. Otherwise one could write something like:
+					// It is autoreplace but an earlier hotkey or hotstring is "stacked" above.  Treat it
+					// as an error as it doesn't make sense.  Otherwise one could write something like:
 					/*
 					::abc:: 
 					::def::text
@@ -1941,18 +1933,19 @@ process_completed_line:
 					::abc::
 					x::action
 					*/
-					// Note that if it is ":X:def::action" instead, we do not end up here and
-					// "::abc::" will also trigger "action".
-					mCombinedLineNumber--;	// It must be the previous line.
+					// Note that if it is ":X:def::action" instead, we do not end up here and "::abc::"
+					// will also trigger "action".  The line number determined below may be incorrect,
+					// but is better than reporting the line of this autoreplace hotstring.
+					mCombinedLineNumber--;
 					return ScriptError(ERR_HOTKEY_MISSING_BRACE);
 				}
 				
 				ConvertEscapeSequences(hotstring_start);
-				if (  !(hotstring_execute || hotkey_uses_otb)  )
+				if (!mLastHotFunc)
 					ConvertEscapeSequences(hotkey_flag);
 
 				if (!Hotstring::AddHotstring(buf, mLastHotFunc, hotstring_options
-					, hotstring_start, hotstring_execute || hotkey_uses_otb ? _T("") : hotkey_flag, has_continuation_section))
+					, hotstring_start, mLastHotFunc ? _T("") : hotkey_flag, has_continuation_section))
 					return FAIL;
 				if (!mLastHotFunc)
 					goto continue_main_loop;
@@ -2040,7 +2033,6 @@ process_completed_line:
 							return FAIL; // It already displayed the error.
 						// This hotkey uses a single-character key name, which could be valid on some other
 						// keyboard layout.  Allow the script to start, but warn the user about the problem.
-						// Note that this hotkey's label is still valid even though the hotkey wasn't created.
 #ifndef AUTOHOTKEYSC
 						if (!mValidateThenExit) // Current keyboard layout is not relevant in /validate mode.
 #endif

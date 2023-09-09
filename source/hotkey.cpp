@@ -2418,7 +2418,7 @@ ResultType Hotstring::AddHotstring(LPCTSTR aName, IObjectPtr aCallback, LPCTSTR 
 
 Hotstring::Hotstring(LPCTSTR aName, IObjectPtr aCallback, LPCTSTR aOptions, LPCTSTR aHotstring, LPCTSTR aReplacement
 	, bool aHasContinuationSection, UCHAR aSuspend)
-	: mCallback(aCallback)  // Any NULL value will cause failure further below.
+	: mCallback(aCallback)
 	, mName(NULL)
 	, mString(NULL), mReplacement(NULL), mStringLength(0)
 	, mHotCriterion(g->HotCriterion)
