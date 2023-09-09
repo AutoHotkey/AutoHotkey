@@ -1698,12 +1698,10 @@ ResultType Script::LoadIncludedFile(TextStream *fp, int aFileIndex)
 	bool has_continuation_section;
 	TCHAR orig_char;
 
-	LPTSTR hotkey_flag, cp, cp1, hotstring_start, hotstring_options;
-	Hotkey *hk;
+	LPTSTR hotkey_flag, hotstring_start, hotstring_options;
 	LineNumberType saved_line_number;
 	HookActionType hook_action;
-	bool hook_is_mandatory, hotstring_execute;
-	UCHAR no_suppress;
+	bool hotstring_execute;
 	ResultType hotkey_validity;
 
 	// Init both for main file and any included files loaded by this function:
@@ -1779,7 +1777,7 @@ process_completed_line:
 		{
 			// Check for 'X' option early since escape sequence processing depends on it.
 			hotstring_execute = g_HSSameLineAction;
-			for (cp = hotstring_options; cp < hotstring_start; ++cp)
+			for (auto cp = hotstring_options; cp < hotstring_start; ++cp)
 				if (ctoupper(*cp) == 'X')
 				{
 					hotstring_execute = cp[1] != '0';
@@ -1789,12 +1787,12 @@ process_completed_line:
 			// This is necessary for it to handle cases such as the following:
 			// ::abc```:::Replacement String
 			// The above hotstring translates literally into "abc`:".
-			for (cp = hotstring_start; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
+			for (auto cp = hotstring_start; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
 			{
 				for (; *cp && *cp != g_EscapeChar && *cp != ':'; ++cp);  // Find the next escape char or colon.
 				if (!*cp) // end of string.
 					break;
-				cp1 = cp + 1;
+				auto cp1 = cp + 1;
 				if (*cp == ':')
 				{
 					// v2: Use the first non-escaped double-colon, not the last, since it seems more likely
@@ -1864,7 +1862,7 @@ process_completed_line:
 				// to contain a double-colon somewhere.  This avoids the need to escape double colons in scripts.
 				// Note: Hotstrings can't suffer from this type of ambiguity because a leading colon or pair of
 				// colons makes them easier to detect.
-				cp = omit_trailing_whitespace(buf, hotkey_flag); // For maintainability.
+				auto cp = omit_trailing_whitespace(buf, hotkey_flag); // For maintainability.
 				orig_char = *cp;
 				*cp = '\0'; // Temporarily terminate.
 				hotkey_validity = Hotkey::TextInterpret(omit_leading_whitespace(buf), NULL); // Passing NULL calls it in validate-only mode.
@@ -1919,7 +1917,7 @@ process_completed_line:
 				if (hotkey_flag[0] == g_EscapeChar && hotkey_flag[1] == '{')
 					hotkey_flag++;
 
-				cp = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
+				auto cp = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
 				vk_type remap_dest_vk;
 				// v1.0.40: Check if this is a remap rather than hotkey:
 				if (!hotkey_uses_otb   
@@ -2015,7 +2013,9 @@ process_completed_line:
 						{
 							if (!CreateHotFunc())
 									return FAIL;
-							hk = Hotkey::FindHotkeyByTrueNature(aKey, no_suppress, hook_is_mandatory);
+							UCHAR no_suppress;
+							bool hook_is_mandatory;
+							auto hk = Hotkey::FindHotkeyByTrueNature(aKey, no_suppress, hook_is_mandatory);
 							if (hk)
 							{
 								if (!hk->AddVariant(mLastHotFunc, no_suppress))
@@ -2083,7 +2083,7 @@ process_completed_line:
 						if (!define_remap_func()) // the "down" function.
 							return FAIL;
 						if (remap_wheel) // Mapping key-down to wheel or vice versa is sufficient; mapping key-up to wheel would cause double scrolling.
-							goto continue_main_loop;
+							return OK;
 						//
 						// "Down" is finished, proceed with "Up":
 						//
@@ -2100,7 +2100,7 @@ process_completed_line:
 						);
 						if (!define_remap_func()) // define the "up" function.
 							return FAIL;
-						goto continue_main_loop;
+						return OK;
 					}
 					// Since above didn't goto this is not a remap after all:
 				}
@@ -2192,8 +2192,10 @@ process_completed_line:
 			}
 			else // It's a hotkey vs. hotstring.
 			{
+				UCHAR no_suppress;
+				bool hook_is_mandatory;
 				hook_action = Hotkey::ConvertAltTab(hotkey_flag, false);
-				if (hk = Hotkey::FindHotkeyByTrueNature(buf, no_suppress, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
+				if (auto hk = Hotkey::FindHotkeyByTrueNature(buf, no_suppress, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
 					if (hook_action) // no_suppress has always been ignored for these types (alt-tab hotkeys).
 					{
@@ -2303,7 +2305,7 @@ process_completed_line:
 			// v2.0: Require label names to use the same set of characters as other identifiers.
 			// Aside from consistency and ensuring readability, this might enable future changes
 			// to the parser or new syntax.
-			cp = find_identifier_end<LPTSTR>(buf);
+			auto cp = find_identifier_end<LPTSTR>(buf);
 			if ((cp - buf + 1) == buf_length && cp > buf)
 			{
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
@@ -2374,7 +2376,7 @@ process_completed_line:
 					mClassObject[mClassObjectCount]->EndClassDefinition(); // Remove instance variables from the class object.
 					mClassObject[mClassObjectCount]->Release();
 					// Revert to the name of the class this class is nested inside, or "" if none.
-					if (cp1 = _tcsrchr(mClassName, '.'))
+					if (auto cp1 = _tcsrchr(mClassName, '.'))
 						*cp1 = '\0';
 					else
 						*mClassName = '\0';
@@ -2481,6 +2483,7 @@ process_completed_line:
 					return FAIL;
 				goto continue_main_loop;
 			}
+			LPCTSTR cp;
 			for (cp = id; IS_IDENTIFIER_CHAR(*cp) || *cp == '.'; ++cp);
 			if (cp > id) // i.e. buf begins with an identifier.
 			{
