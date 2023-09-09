@@ -2919,38 +2919,13 @@ LPTSTR ConvertEscapeSequences(LPTSTR aDst, size_t aDstSize, LPCTSTR aSrc, size_t
 
 
 
-LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap)
+LPTSTR ConvertEscapeSequences(LPTSTR aBuf)
 // Replaces any escape sequences in aBuf with their reduced equivalent.  For example, if aEscapeChar
 // is accent, Each `n would become a literal linefeed.  aBuf's length should always be the same or
 // lower than when the process started, so there is no chance of overflow.
 {
-	int i;
-	for (i = 0; ; ++i)  // Increment to skip over the symbol just found by the inner for().
-	{
-		for (; aBuf[i] && aBuf[i] != g_EscapeChar; ++i);  // Find the next escape char.
-		if (!aBuf[i]) // end of string.
-			break;
-		LPTSTR cp1 = aBuf + i + 1;
-		switch (*cp1)
-		{
-			// Only lowercase is recognized for these:
-			case 'a': *cp1 = '\a'; break;  // alert (bell) character
-			case 'b': *cp1 = '\b'; break;  // backspace
-			case 'f': *cp1 = '\f'; break;  // formfeed
-			case 'n': *cp1 = '\n'; break;  // newline
-			case 'r': *cp1 = '\r'; break;  // carriage return
-			case 't': *cp1 = '\t'; break;  // horizontal tab
-			case 'v': *cp1 = '\v'; break;  // vertical tab
-			case 's': *cp1 = ' '; break;   // space
-		}
-		// Replace escape-sequence with its single-char value.  This is done even if the pair isn't
-		// a recognizable escape sequence (e.g. `? becomes ?), which is the Microsoft approach and
-		// might not be a bad way of handling things. Below has a final +1 to include the terminator:
-		tmemmove(aBuf + i, cp1, _tcslen(cp1) + 1);
-		if (aLiteralMap)
-			aLiteralMap[i] = 1;  // In the map, mark this char as literal.
-	}
-	return aBuf;
+	size_t len = _tcslen(aBuf);
+	return ConvertEscapeSequences(aBuf, len + 1, aBuf, len);
 }
 
 
