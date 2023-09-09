@@ -1781,66 +1781,24 @@ process_completed_line:
 					hotstring_execute = cp[1] != '0';
 					break;
 				}
-			// Find the hotstring's final double-colon by considering escape sequences from left to right.
+			// Find the hotstring's final double-colon by considering escape sequences to its left.
 			// This is necessary for it to handle cases such as the following:
 			// ::abc```:::Replacement String
 			// The above hotstring translates literally into "abc`:".
-			for (auto cp = hotstring_start; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
+			// v2.0: Use the first non-escaped double-colon, not the last, since it seems more likely
+			// that the user intends to produce text with "::" in it rather than typing "::" to trigger
+			// the hotstring, and generally the trigger should be short.  By contrast, the v1 policy
+			// behaved inconsistently with an odd number of colons, such as:
+			//   ::foo::::bar  ; foo:: -> bar
+			//   ::foo:::bar   ; foo -> :bar
+			for (LPTSTR cp = hotstring_start; cp = _tcsstr(cp, HOTKEY_FLAG); ++cp) // Only increment by 1, since colons 2-3 in both `::: and `:::: are the hotkey flag.
 			{
-				for (; *cp && *cp != g_EscapeChar && *cp != ':'; ++cp);  // Find the next escape char or colon.
-				if (!*cp) // end of string.
+				if (!CharIsEscaped(cp, hotstring_start))
+				{
+					hotkey_flag = cp;
 					break;
-				auto cp1 = cp + 1;
-				if (*cp == ':')
-				{
-					// v2: Use the first non-escaped double-colon, not the last, since it seems more likely
-					// that the user intends to produce text with "::" in it rather than typing "::" to trigger
-					// the hotstring, and generally the trigger should be short.  By contrast, the v1 policy
-					// behaved inconsistently with an odd number of colons, such as:
-					//   ::foo::::bar  ; foo:: -> bar
-					//   ::foo:::bar   ; foo -> :bar
-					if (!hotkey_flag && *cp1 == ':') // Found a non-escaped double-colon, so this is the right one.
-					{
-						hotkey_flag = cp++;  // Increment to have loop skip over both colons.
-						if (hotstring_execute)
-							break; // Let ParseAndAddLine() properly handle any escape sequences.
-						// else continue with the loop so that escape sequences in the replacement
-						// text (if there is replacement text) are also translated.
-					}
-					// else just a single colon, or the second colon of an escaped pair (`::), so continue.
-					continue;
 				}
-				switch (*cp1)
-				{
-					// Only lowercase is recognized for these:
-					case 'a': *cp1 = '\a'; break;  // alert (bell) character
-					case 'b': *cp1 = '\b'; break;  // backspace
-					case 'f': *cp1 = '\f'; break;  // formfeed
-					case 'n': *cp1 = '\n'; break;  // newline
-					case 'r': *cp1 = '\r'; break;  // carriage return
-					case 't': *cp1 = '\t'; break;  // horizontal tab
-					case 'v': *cp1 = '\v'; break;  // vertical tab
-					case 's': *cp1 = ' '; break;   // space
-					// Otherwise, if it's not one of the above, the escape-char is considered to
-					// mark the next character as literal, regardless of what it is. Examples:
-					// `` -> `
-					// `: -> : (so `::: means a literal : followed by hotkey_flag)
-					// `; -> ;
-					// `c -> c (i.e. unknown escape sequences resolve to the char after the `)
-				}
-				// Below has a final +1 to include the terminator:
-				tmemmove(cp, cp1, _tcslen(cp1) + 1);
-				buf_length--;
-				// v2: The following is not done because 1) it is counter-intuitive for ` to affect two
-				// characters and 2) it hurts flexibility by preventing the escaping of a single colon
-				// immediately prior to the double-colon, such as ::lbl`:::.  Older comment:
-				// Since single colons normally do not need to be escaped, this increments one extra
-				// for double-colons to skip over the entire pair so that its second colon
-				// is not seen as part of the hotstring's final double-colon.  Example:
-				// ::ahc```::::Replacement String
-				//if (*cp == ':' && *cp1 == ':')
-				//	++cp;
-			} // for()
+			}
 			if (!hotkey_flag)
 				hotstring_start = NULL;  // Indicate that this isn't a hotstring after all.
 		}
@@ -1989,6 +1947,10 @@ process_completed_line:
 					return ScriptError(ERR_HOTKEY_MISSING_BRACE);
 				}
 				
+				ConvertEscapeSequences(hotstring_start);
+				if (  !(hotstring_execute || hotkey_uses_otb)  )
+					ConvertEscapeSequences(hotkey_flag);
+
 				if (!Hotstring::AddHotstring(buf, mLastHotFunc, hotstring_options
 					, hotstring_start, hotstring_execute || hotkey_uses_otb ? _T("") : hotkey_flag, has_continuation_section))
 					return FAIL;
