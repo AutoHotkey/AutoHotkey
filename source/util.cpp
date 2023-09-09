@@ -2872,36 +2872,48 @@ size_t UnescapedLength(LPCTSTR aSrc, size_t aSrcLen)
 
 LPTSTR ConvertEscapeSequences(LPTSTR aDst, size_t aDstSize, LPCTSTR aSrc, size_t aSrcLen)
 // Copies aSrc to aDst, replacing any escape sequences with their reduced equivalent.
-// aDst must be at least UnescapedLength(aSrc, aSrcLen)+1 TCHARs (+1 for null termination).
-// Should work for aSrc == aDst, but is not optimized for it.
+// String will be truncated if aDstSize - 1 < UnescapedLength(aSrc, aSrcLen).
+// aSrc == aDst is permitted and should not do any unnecessary "copying".
 {
-	auto cp = aDst;
-	auto src_last = aSrc + aSrcLen - 1;
-	for ( ; aDstSize > 1; ++aSrc, ++cp, --aDstSize)
+	auto src = aSrc, src_end = aSrc + aSrcLen;
+	auto dst = aDst, dst_end = aDst + aDstSize - 1;
+	for (LPCTSTR esc;; ++dst, src = esc + 1)
 	{
-		if (*aSrc != g_EscapeChar)
+		for (esc = src; esc < src_end && *esc != g_EscapeChar; ++esc); // Find the next escape char.
+		size_t seg_len = esc - src; // Calculate length of text segment preceding esc.
+		if (dst != src) // No need to copy or check for overflow when dst == src.
 		{
-			*cp = *aSrc;
-			continue;
+			if (dst + seg_len >= dst_end) // Avoid overflow.
+			{
+				tmemmove(dst, src, dst_end - dst); // This may truncate the string if aDstSize-1 < aSrcLen.
+				*dst_end = '\0';
+				break;
+			}
+			//else there's room for seg_len and at least one more character.
+			tmemmove(dst, src, seg_len);
 		}
-		if (aSrc != src_last) // Should always be true since ` can't occur at the end of a quoted string.
-			++aSrc;
-		//else treat the trailing ` like ``, and leave aSrcLen == 1 so the loop's --aSrcLen will make it 0.
-		switch (*aSrc)
+		src += seg_len;
+		dst += seg_len;
+		if (esc + 1 >= src_end) // No escape char, or just a trailing escape char.
+		{
+			*dst = '\0';
+			break;
+		}
+		esc++;
+		switch (*esc)
 		{
 			// Only lowercase is recognized for these:
-			case 'a': *cp = '\a'; break;  // alert (bell) character
-			case 'b': *cp = '\b'; break;  // backspace
-			case 'f': *cp = '\f'; break;  // formfeed
-			case 'n': *cp = '\n'; break;  // newline
-			case 'r': *cp = '\r'; break;  // carriage return
-			case 't': *cp = '\t'; break;  // horizontal tab
-			case 'v': *cp = '\v'; break;  // vertical tab
-			case 's': *cp = ' '; break;   // space
-			default: *cp = *aSrc; break;
+			case 'a': *dst = '\a'; break;  // alert (bell) character
+			case 'b': *dst = '\b'; break;  // backspace
+			case 'f': *dst = '\f'; break;  // formfeed
+			case 'n': *dst = '\n'; break;  // newline
+			case 'r': *dst = '\r'; break;  // carriage return
+			case 't': *dst = '\t'; break;  // horizontal tab
+			case 'v': *dst = '\v'; break;  // vertical tab
+			case 's': *dst = ' '; break;   // space
+			default: *dst = *esc; break;
 		}
 	}
-	*cp = '\0'; // Terminate separately since aSrc[aSrcLen] might not be a null-terminator.
 	return aDst;
 }
 
