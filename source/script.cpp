@@ -1917,12 +1917,12 @@ process_completed_line:
 				if (hotkey_flag[0] == g_EscapeChar && hotkey_flag[1] == '{')
 					hotkey_flag++;
 
-				auto cp = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
+				auto key_name = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
 				vk_type remap_dest_vk;
 				// v1.0.40: Check if this is a remap rather than hotkey:
 				if (!hotkey_uses_otb   
 					&& *hotkey_flag // This hotkey's action is on the same line as its trigger definition.
-					&& (remap_dest_vk = hotkey_flag[1] ? TextToVK(cp = const_cast<LPTSTR>(Hotkey::TextToModifiers(hotkey_flag, NULL))) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
+					&& (remap_dest_vk = key_name[1] ? TextToVK(key_name = const_cast<LPTSTR>(Hotkey::TextToModifiers(hotkey_flag, NULL))) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
 					// For above:
 					// Fix for v1.0.44.07: Set remap_dest_vk to 0xFF if hotkey_flag's length is only 1 because:
 					// 1) It allows a destination key that doesn't exist in the keyboard layout (such as 6::ð in
@@ -1930,178 +1930,12 @@ process_completed_line:
 					// 2) It improves performance a little by not calling TextToVK except when the destination key
 					//    might be a mouse button or some longer key name whose actual/correct VK value is relied
 					//    upon by other places below.
-					// Fix for v1.0.40.01: Since remap_dest_vk is also used as the flag to indicate whether
-					// this line qualifies as a remap, must do it last in the statement above.  Otherwise,
-					// the statement might short-circuit and leave remap_dest_vk as non-zero even though
-					// the line shouldn't be a remap.  For example, I think a hotkey such as "x & y::return"
-					// would trigger such a bug.
 				{
-					
-					vk_type remap_source_vk;
-					TCHAR remap_source[32], remap_dest[32], remap_dest_modifiers[8]; // Must fit the longest key name (currently Browser_Favorites [17]), but buffer overflow is checked just in case.
-					bool remap_source_is_combo, remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse, remap_wheel;
-
-					// These will be ignored in other stages if it turns out not to be a remap later below:
-					LPCTSTR cp1;
-					remap_source_vk = TextToVK(cp1 = Hotkey::TextToModifiers(buf, NULL)); // An earlier stage verified that it's a valid hotkey, though VK could be zero.
-					remap_source_is_combo = _tcsstr(cp1, COMPOSITE_DELIMITER);
-					remap_source_is_mouse = IsMouseVK(remap_source_vk);
-					remap_dest_is_mouse = IsMouseVK(remap_dest_vk);
-					remap_keybd_to_mouse = !remap_source_is_mouse && remap_dest_is_mouse;
-					remap_wheel = IS_WHEEL_VK(remap_source_vk) || IS_WHEEL_VK(remap_dest_vk);
-					sntprintf(remap_source, _countof(remap_source), _T("%s%s%s")
-						, remap_source_is_combo ? _T("") : _T("*") // v1.1.27.01: Omit * when the remap source is a custom combo.
-						, _tcslen(cp1) == 1 && IsCharUpper(*cp1) ? _T("+") : _T("")  // Allow A::b to be different than a::b.
-						, static_cast<LPTSTR>(buf)); // Include any modifiers too, e.g. ^b::c.
-					if (*cp == '"' || *cp == g_EscapeChar) // Need to escape these.
-					{
-						*remap_dest = g_EscapeChar;
-						remap_dest[1] = *cp;
-						remap_dest[2] = '\0';
-					}
-					else
-						tcslcpy(remap_dest, cp, _countof(remap_dest));  // But exclude modifiers here; they're wanted separately.
-					tcslcpy(remap_dest_modifiers, hotkey_flag, _countof(remap_dest_modifiers));
-					if (cp - hotkey_flag < _countof(remap_dest_modifiers)) // Avoid reading beyond the end.
-						remap_dest_modifiers[cp - hotkey_flag] = '\0';   // Terminate at the proper end of the modifier string.
-					
-					if (remap_dest_vk == VK_PAUSE
-						&& !*remap_dest_modifiers // If modifiers are present, it can't be a call to the Pause function.
-						&& (!_tcsicmp(remap_dest, _T("Pause")))) // Specifically "Pause", not "vk13".
-					{
-						// Pause is excluded because it is more common to create a hotkey to pause the script than
-						// to remap something to the Pause/Break key, and that's how it was in v1.  Any other key
-						// names are interpreted as remapping even if the user defines a function with that name.
-						// Doing otherwise would be complicated and probably undesirable.
-					}
-					else
-					{
-						// It is a remapping. Create one "down" and one "up" hotkey,
-						// eg, "x::y" yields,
-						// *x::
-						// {
-						// SetKeyDelay(-1), Send("{Blind}{y DownR}")
-						// }
-						// *x up::
-						// {
-						// SetKeyDelay(-1), Send("{Blind}{y Up}")
-						// }
-						// Using one line to facilitate code.
-
-						// For remapping, decided to use a "macro expansion" approach because I think it's considerably
-						// smaller in code size and complexity than other approaches would be.  I originally wanted to
-						// do it with the hook by changing the incoming event prior to passing it back out again (for
-						// example, a::b would transform an incoming 'a' keystroke into 'b' directly without having
-						// to suppress the original keystroke and simulate a new one).  Unfortunately, the low-level
-						// hooks apparently do not allow this.  Here is the test that confirmed it:
-						// if (event.vkCode == 'A')
-						// {
-						//	event.vkCode = 'B';
-						//	event.scanCode = 0x30; // Or use vk_to_sc(event.vkCode).
-						//	return CallNextHookEx(g_KeybdHook, aCode, wParam, lParam);
-						// }
-
-						if (mLastHotFunc)		
-							// Checking this to disallow stacking, eg
-							// x::
-							// y::z
-							// which would cause x:: to just do the "down"
-							// part of y::z.
-							return ScriptError(ERR_HOTKEY_MISSING_BRACE);
-
-						auto make_remap_hotkey = [&](LPTSTR aKey)
-						{
-							if (!CreateHotFunc())
-									return FAIL;
-							UCHAR no_suppress;
-							bool hook_is_mandatory;
-							auto hk = Hotkey::FindHotkeyByTrueNature(aKey, no_suppress, hook_is_mandatory);
-							if (hk)
-							{
-								if (!hk->AddVariant(mLastHotFunc, no_suppress))
-									return FAIL;
-							}
-							else if (!Hotkey::AddHotkey(mLastHotFunc, HK_NORMAL, aKey, no_suppress))
-								return FAIL;
-							return OK;
-						};
-						// Start with the "down" hotkey:
-						if (!make_remap_hotkey(remap_source)) 
-							return FAIL;
-						
-						TCHAR remap_buf[LINE_SIZE];
-						cp = remap_buf;
-						cp += _stprintf(cp
-							, _T("%s(-1),") // Does NOT need to be "-1, -1" for SetKeyDelay (see below).
-							, remap_dest_is_mouse ? _T("SetMouseDelay") : _T("SetKeyDelay") // Using the full function names vs. Set%sDelay might help size due to string pooling.
-						);
-						// It seems unnecessary to set press-duration to -1 even though the auto-exec section might
-						// have set it to something higher than -1 because:
-						// 1) Press-duration doesn't apply to normal remappings since they use down-only and up-only events.
-						// 2) Although it does apply to remappings such as a::B and a::^b (due to press-duration being
-						//    applied after a change to modifier state), those remappings are fairly rare and supporting
-						//    a non-negative-one press-duration (almost always 0) probably adds a degree of flexibility
-						//    that may be desirable to keep.
-						// 3) SendInput may become the predominant SendMode, so press-duration won't often be in effect anyway.
-						// 4) It has been documented that remappings use the auto-execute section's press-duration.
-						// The primary reason for adding Key/MouseDelay -1 is to minimize the chance that a one of
-						// these hotkey threads will get buried under some other thread such as a timer, which
-						// would disrupt the remapping if #MaxThreadsPerHotkey is at its default of 1.
-						if (remap_keybd_to_mouse && !remap_wheel)
-						{
-							// Since source is keybd and dest is mouse, prevent keyboard auto-repeat from auto-repeating
-							// the mouse button (since that would be undesirable 90% of the time).  This is done
-							// by inserting a single extra IF-statement above the Send that produces the down-event:
-							cp += _stprintf(cp, _T("!GetKeyState(\"%s\")&&"), remap_dest); // Should be no risk of buffer overflow due to prior validation.
-						}
-						// Otherwise, remap_keybd_to_mouse==false.
-
-						TCHAR blind_mods[17], *next_blind_mod = blind_mods;
-						const auto mod_string = MODLR_STRING;
-						auto &hk = *Hotkey::shk[Hotkey::sHotkeyCount - 1];
-						for (int i = 0; i < 8; ++i)
-							if (hk.mModifiersConsolidatedLR & (1 << i))
-								if (!_tcschr(remap_dest_modifiers, mod_string[i*2+1])) // This works around an issue with {Blind+}+x releasing RShift to press LShift.
-								{
-									*next_blind_mod++ = mod_string[i*2]; // < or >
-									*next_blind_mod++ = mod_string[i*2+1]; // One of ^!+#
-								}
-						*next_blind_mod = '\0';
-						LPTSTR extra_event = _T(""); // Set default.
-						cp += _stprintf(cp
-							, _T("Send(\"{Blind%s}%s%s{%s%s}\")") // DownR vs. Down. See Send's DownR handler for details.
-							, blind_mods, extra_event, remap_dest_modifiers, remap_dest, remap_wheel ? _T("") : _T(" DownR"));
-
-						auto define_remap_func = [&]()
-						{
-							if (!AddLine(ACT_BLOCK_BEGIN)
-								|| !ParseAndAddLine(remap_buf)
-								|| !AddLine(ACT_BLOCK_END))
-								return FAIL;
-							return OK;
-						};
-						if (!define_remap_func()) // the "down" function.
-							return FAIL;
-						if (remap_wheel) // Mapping key-down to wheel or vice versa is sufficient; mapping key-up to wheel would cause double scrolling.
-							return OK;
-						//
-						// "Down" is finished, proceed with "Up":
-						//
-						_stprintf(remap_buf
-							, _T("%s up") // Key-up hotkey, e.g. *LButton up::
-							, remap_source);
-						if (!make_remap_hotkey(remap_buf)) 
-							return FAIL;
-						_stprintf(remap_buf
-							, _T("%s(-1),")
-							_T("Send(\"{Blind}{%s Up}\")\n") // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
-							, remap_dest_is_mouse ? _T("SetMouseDelay") : _T("SetKeyDelay") // Using the full function names vs. Set%sDelay might help size due to string pooling.
-							, remap_dest
-						);
-						if (!define_remap_func()) // define the "up" function.
-							return FAIL;
-						return OK;
-					}
+					auto result = ParseRemap(buf, remap_dest_vk, key_name, hotkey_flag);
+					if (!result)
+						return result;
+					if (result != CONDITION_FALSE)
+						goto continue_main_loop;
 					// Since above didn't goto this is not a remap after all:
 				}
 			}
@@ -2558,6 +2392,170 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		return ScriptError(ERR_HOTKEY_MISSING_BRACE);
 
 	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
+	return OK;
+}
+
+
+
+ResultType Script::ParseRemap(LPCTSTR aSource, vk_type remap_dest_vk, LPCTSTR aDestName, LPCTSTR aDestMods)
+{
+	TCHAR remap_source[32], remap_dest[32], remap_dest_modifiers[8]; // Must fit the longest key name (currently Browser_Favorites [17]), but buffer overflow is checked just in case.
+	LPCTSTR cp1;
+	auto remap_source_vk = TextToVK(cp1 = Hotkey::TextToModifiers(aSource, NULL)); // An earlier stage verified that it's a valid hotkey, though VK could be zero.
+	bool remap_source_is_combo = _tcsstr(cp1, COMPOSITE_DELIMITER);
+	bool remap_source_is_mouse = IsMouseVK(remap_source_vk);
+	bool remap_dest_is_mouse = IsMouseVK(remap_dest_vk);
+	bool remap_keybd_to_mouse = !remap_source_is_mouse && remap_dest_is_mouse;
+	bool remap_wheel = IS_WHEEL_VK(remap_source_vk) || IS_WHEEL_VK(remap_dest_vk);
+	sntprintf(remap_source, _countof(remap_source), _T("%s%s%s")
+		, remap_source_is_combo ? _T("") : _T("*") // v1.1.27.01: Omit * when the remap source is a custom combo.
+		, _tcslen(cp1) == 1 && IsCharUpper(*cp1) ? _T("+") : _T("")  // Allow A::b to be different than a::b.
+		, aSource); // Include any modifiers too, e.g. ^b::c.
+	if (*aDestName == '"' || *aDestName == g_EscapeChar) // Need to escape these.
+	{
+		*remap_dest = g_EscapeChar;
+		remap_dest[1] = *aDestName;
+		remap_dest[2] = '\0';
+	}
+	else
+		tcslcpy(remap_dest, aDestName, _countof(remap_dest));  // But exclude modifiers here; they're wanted separately.
+	tcslcpy(remap_dest_modifiers, aDestMods, min(_countof(remap_dest_modifiers), aDestName - aDestMods + 1));
+
+	if (remap_dest_vk == VK_PAUSE
+		&& !*remap_dest_modifiers // If modifiers are present, it can't be a call to the Pause function.
+		&& (!_tcsicmp(remap_dest, _T("Pause")))) // Specifically "Pause", not "vk13".
+	{
+		// Pause is excluded because it is more common to create a hotkey to pause the script than
+		// to remap something to the Pause/Break key, and that's how it was in v1.  Any other key
+		// names are interpreted as remapping even if the user defines a function with that name.
+		// Doing otherwise would be complicated and probably undesirable.
+		return CONDITION_FALSE;
+	}
+
+	// It is a remapping. Create one "down" and one "up" hotkey,
+	// eg, "x::y" yields,
+	// *x::
+	// {
+	// SetKeyDelay(-1), Send("{Blind}{y DownR}")
+	// }
+	// *x up::
+	// {
+	// SetKeyDelay(-1), Send("{Blind}{y Up}")
+	// }
+	// Using one line to facilitate code.
+
+	// For remapping, decided to use a "macro expansion" approach because I think it's considerably
+	// smaller in code size and complexity than other approaches would be.  I originally wanted to
+	// do it with the hook by changing the incoming event prior to passing it back out again (for
+	// example, a::b would transform an incoming 'a' keystroke into 'b' directly without having
+	// to suppress the original keystroke and simulate a new one).  Unfortunately, the low-level
+	// hooks apparently do not allow this.  Here is the test that confirmed it:
+	// if (event.vkCode == 'A')
+	// {
+	//	event.vkCode = 'B';
+	//	event.scanCode = 0x30; // Or use vk_to_sc(event.vkCode).
+	//	return CallNextHookEx(g_KeybdHook, aCode, wParam, lParam);
+	// }
+
+	if (mLastHotFunc)
+		// Checking this to disallow stacking, eg
+		// x::
+		// y::z
+		// which would cause x:: to just do the "down"
+		// part of y::z.
+		return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+
+	auto make_remap_hotkey = [&](LPTSTR aKey)
+		{
+			if (!CreateHotFunc())
+				return FAIL;
+			UCHAR no_suppress;
+			bool hook_is_mandatory;
+			auto hk = Hotkey::FindHotkeyByTrueNature(aKey, no_suppress, hook_is_mandatory);
+			if (hk)
+			{
+				if (!hk->AddVariant(mLastHotFunc, no_suppress))
+					return FAIL;
+			}
+			else if (!Hotkey::AddHotkey(mLastHotFunc, HK_NORMAL, aKey, no_suppress))
+				return FAIL;
+			return OK;
+		};
+	// Start with the "down" hotkey:
+	if (!make_remap_hotkey(remap_source))
+		return FAIL;
+
+	TCHAR remap_buf[LINE_SIZE];
+	auto cp = remap_buf;
+	cp += _stprintf(cp
+		, _T("%s(-1),") // Does NOT need to be "-1, -1" for SetKeyDelay (see below).
+		, remap_dest_is_mouse ? _T("SetMouseDelay") : _T("SetKeyDelay") // Using the full function names vs. Set%sDelay might help size due to string pooling.
+	);
+	// It seems unnecessary to set press-duration to -1 even though the auto-exec section might
+	// have set it to something higher than -1 because:
+	// 1) Press-duration doesn't apply to normal remappings since they use down-only and up-only events.
+	// 2) Although it does apply to remappings such as a::B and a::^b (due to press-duration being
+	//    applied after a change to modifier state), those remappings are fairly rare and supporting
+	//    a non-negative-one press-duration (almost always 0) probably adds a degree of flexibility
+	//    that may be desirable to keep.
+	// 3) SendInput may become the predominant SendMode, so press-duration won't often be in effect anyway.
+	// 4) It has been documented that remappings use the auto-execute section's press-duration.
+	// The primary reason for adding Key/MouseDelay -1 is to minimize the chance that a one of
+	// these hotkey threads will get buried under some other thread such as a timer, which
+	// would disrupt the remapping if #MaxThreadsPerHotkey is at its default of 1.
+	if (remap_keybd_to_mouse && !remap_wheel)
+	{
+		// Since source is keybd and dest is mouse, prevent keyboard auto-repeat from auto-repeating
+		// the mouse button (since that would be undesirable 90% of the time).  This is done
+		// by inserting a single extra IF-statement above the Send that produces the down-event:
+		cp += _stprintf(cp, _T("!GetKeyState(\"%s\")&&"), remap_dest); // Should be no risk of buffer overflow due to prior validation.
+	}
+	// Otherwise, remap_keybd_to_mouse==false.
+
+	TCHAR blind_mods[17], *next_blind_mod = blind_mods;
+	const auto mod_string = MODLR_STRING;
+	auto &hk = *Hotkey::shk[Hotkey::sHotkeyCount - 1];
+	for (int i = 0; i < 8; ++i)
+		if (hk.mModifiersConsolidatedLR & (1 << i))
+			if (!_tcschr(remap_dest_modifiers, mod_string[i*2+1])) // This works around an issue with {Blind+}+x releasing RShift to press LShift.
+			{
+				*next_blind_mod++ = mod_string[i*2]; // < or >
+				*next_blind_mod++ = mod_string[i*2+1]; // One of ^!+#
+			}
+	*next_blind_mod = '\0';
+	LPTSTR extra_event = _T(""); // Set default.
+	cp += _stprintf(cp
+		, _T("Send(\"{Blind%s}%s%s{%s%s}\")") // DownR vs. Down. See Send's DownR handler for details.
+		, blind_mods, extra_event, remap_dest_modifiers, remap_dest, remap_wheel ? _T("") : _T(" DownR"));
+
+	auto define_remap_func = [&]()
+		{
+			if (!AddLine(ACT_BLOCK_BEGIN)
+				|| !ParseAndAddLine(remap_buf)
+				|| !AddLine(ACT_BLOCK_END))
+				return FAIL;
+			return OK;
+		};
+	if (!define_remap_func()) // the "down" function.
+		return FAIL;
+	if (remap_wheel) // Mapping key-down to wheel or vice versa is sufficient; mapping key-up to wheel would cause double scrolling.
+		return OK;
+	//
+	// "Down" is finished, proceed with "Up":
+	//
+	_stprintf(remap_buf
+		, _T("%s up") // Key-up hotkey, e.g. *LButton up::
+		, remap_source);
+	if (!make_remap_hotkey(remap_buf))
+		return FAIL;
+	_stprintf(remap_buf
+		, _T("%s(-1),")
+		_T("Send(\"{Blind}{%s Up}\")\n") // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
+		, remap_dest_is_mouse ? _T("SetMouseDelay") : _T("SetKeyDelay") // Using the full function names vs. Set%sDelay might help size due to string pooling.
+		, remap_dest
+	);
+	if (!define_remap_func()) // define the "up" function.
+		return FAIL;
 	return OK;
 }
 
