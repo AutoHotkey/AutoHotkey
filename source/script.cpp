@@ -311,7 +311,6 @@ Script::Script()
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mOnClipboardChangeIsRunning(false)
 	, mFirstLabel(NULL), mLastLabel(NULL)
-	, mLastHotFunc(nullptr), mUnusedHotFunc(nullptr)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mOpenBlock(NULL), mNextLineIsFunctionBody(false)
@@ -1361,17 +1360,13 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 	// All of a function's non-dynamic local variables are created before variable names
 	// are resolved in nested functions.
 	if (!PreparseExpressions(mFirstLine)
-		|| !PreparseExpressions(mHotFuncs) // mHotFuncs first in case they have nested functions, which would be in mFuncs.
 		|| !PreparseExpressions(mFuncs))
 		return LOADING_FAILED; // Error was already displayed by the above call.
 
 	// Do some processing of local variables to support closures.
 	// This must be done after PreparseExpressions() has resolved all variable references.
-	if (!PreprocessLocalVars(mHotFuncs) // mHotFuncs first in case they have nested functions, which would be in mFuncs.
-		|| !PreprocessLocalVars(mFuncs))
+	if (!PreprocessLocalVars(mFuncs))
 		return LOADING_FAILED;
-
-	free(mHotFuncs.mItem); // Not needed beyond this point.
 
 	// Resolve any unresolved base classes.
 	if (mUnresolvedClasses)
@@ -1835,11 +1830,7 @@ process_completed_line:
 
 		if (hotkey_flag && hotkey_flag > buf) // It's a hotkey/hotstring label.
 		{
-			
-			// Allow a current function if it is mLastHotFunc, this allows stacking,
-			// x::			// mLastHotFunc created here
-			// y::action	// parsing "y::" now.
-			if ( (g->CurrentFunc && g->CurrentFunc != mLastHotFunc) || mClassObjectCount)
+			if (g->CurrentFunc || mClassObjectCount)
 			{
 				// The reason for not allowing hotkeys and hotstrings inside a function's body is that it
 				// would create a nested function that could be called without ever calling the outer function.
@@ -1864,13 +1855,6 @@ process_completed_line:
 			// else don't trim auto-replace hotstrings since literal spaces in both substrings are significant.
 			HookActionType hook_action; // Becomes valid only when !hotstring_start.
 			
-			auto set_last_hotfunc = [&]()
-			{
-				if (!mLastHotFunc)
-					return CreateHotFunc();
-				else
-					return mLastHotFunc;
-			};
 			if (hotstring_start)
 			{
 				if (!*hotstring_start)
@@ -1909,19 +1893,20 @@ process_completed_line:
 						hotkey_uses_otb = false;
 				}
 
+				LPCTSTR replacement;
+
 				// The hotstring never uses otb if it uses X or T options (either explicitly or via #hotstring).
-				if ( (!*hotkey_flag || hotkey_uses_otb) || hotstring_execute)
+				if (!*hotkey_flag || hotkey_uses_otb || hotstring_execute)
 				{
 					// It is not auto-replace
-					if (!set_last_hotfunc())
-						return FAIL;
-				} 
-				else if (mLastHotFunc)
+					replacement = nullptr;
+				}
+				else if (mPendingHotkey)
 				{
 					// It is autoreplace but an earlier hotkey or hotstring is "stacked" above.  Treat it
 					// as an error as it doesn't make sense.  Otherwise one could write something like:
 					/*
-					::abc:: 
+					::abc::
 					::def::text
 					x::action
 					 which would work as,
@@ -1933,18 +1918,20 @@ process_completed_line:
 					// will also trigger "action".  The line number determined below may be incorrect,
 					// but is better than reporting the line of this autoreplace hotstring.
 					mCombinedLineNumber--;
-					return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+					return ScriptError(ERR_HOTKEY_MISSING_BRACE, mPendingHotkey);
 				}
+				else
+					replacement = hotkey_flag;
 				
 				ConvertEscapeSequences(hotstring_start);
-				if (!mLastHotFunc)
+				if (replacement)
 					ConvertEscapeSequences(hotkey_flag);
 
-				if (!Hotstring::AddHotstring(buf, mLastHotFunc, hotstring_options
-					, hotstring_start, mLastHotFunc ? _T("") : hotkey_flag, has_continuation_section))
+				if (!Hotstring::AddHotstring(buf, nullptr, hotstring_options, hotstring_start, replacement, has_continuation_section))
 					return FAIL;
-				if (!mLastHotFunc)
+				if (replacement)
 					goto continue_main_loop;
+				mPendingHotkey = Hotstring::shs[Hotstring::sHotstringCount-1]->mName; // For error-reporting.
 			}
 			else // It's a hotkey vs. hotstring.
 			{
@@ -1977,7 +1964,8 @@ process_completed_line:
 				UCHAR no_suppress;
 				bool hook_is_mandatory;
 				hook_action = Hotkey::ConvertAltTab(hotkey_flag, false);
-				if (auto hk = Hotkey::FindHotkeyByTrueNature(buf, no_suppress, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
+				auto hk = Hotkey::FindHotkeyByTrueNature(buf, no_suppress, hook_is_mandatory);
+				if (hk) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
 					if (hook_action) // no_suppress has always been ignored for these types (alt-tab hotkeys).
 					{
@@ -1996,9 +1984,7 @@ process_completed_line:
 							mCurrLine = NULL;  // Prevents showing unhelpful vicinity lines.
 							return ScriptError(_T("Duplicate hotkey."), buf);
 						}
-						if (!set_last_hotfunc())
-							return FAIL;
-						if (!hk->AddVariant(mLastHotFunc, no_suppress))
+						if (!hk->AddVariant(nullptr, no_suppress))
 							return ScriptError(ERR_OUTOFMEM, buf);
 						if (hook_is_mandatory || g_ForceKeybdHook)
 						{
@@ -2011,18 +1997,14 @@ process_completed_line:
 				}
 				else // No parent hotkey yet, so create it.
 				{
-					if (hook_action != HK_NORMAL && mLastHotFunc)
+					if (hook_action != HK_NORMAL && mPendingHotkey)
 						// A hotkey is stacked above, eg,
 						// x::
 						// y & z::altTab
 						// Not supported.
-						return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+						return ScriptError(ERR_HOTKEY_MISSING_BRACE, mPendingHotkey);
 					
-					if (hook_action == HK_NORMAL 
-						&& !set_last_hotfunc())
-						return FAIL;
-					
-					hk = Hotkey::AddHotkey(mLastHotFunc, hook_action, buf, no_suppress);
+					hk = Hotkey::AddHotkey(nullptr, hook_action, buf, no_suppress);
 					if (!hk)
 					{
 						if (hotkey_validity != CONDITION_TRUE)
@@ -2039,6 +2021,8 @@ process_completed_line:
 						}
 					}
 				}
+				if (hook_action == HK_NORMAL && hk) // For simplicity, there's no detection of invalid stacking of "inactive" single-letter hotkeys (see above).
+					mPendingHotkey = hk->mName;
 			}
 			if (*hotkey_flag) // This hotkey's/hotstring's action is on the same line as its label.
 			{
@@ -2057,7 +2041,6 @@ process_completed_line:
 					// {
 					// msgbox
 					// }
-					ASSERT(mLastHotFunc && mLastHotFunc == g->CurrentFunc);
 					// Remove the hotkey from buf.
 					buf_length -= hotkey_flag - buf;
 					tmemmove(buf, hotkey_flag, buf_length);
@@ -2098,8 +2081,8 @@ process_completed_line:
 				}
 				else
 				{
-					if (mLastHotFunc) // It is a label in a "stack" of hotkeys.
-						return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+					if (mPendingHotkey) // It is a label in a "stack" of hotkeys.
+						return ScriptError(ERR_HOTKEY_MISSING_BRACE, mPendingHotkey);
 					if (!AddLabel(buf, false))
 						return FAIL;
 				}
@@ -2334,10 +2317,8 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 	if (mPendingParentLine) // If, Else, Loop, etc. without a block or action.
 		return mPendingParentLine->LineUnexpectedError();
 
-	if (mLastHotFunc)
-		// A hotkey at the end of the file, with no function body.  Checking for this here
-		// ensures mJumpToLine is always non-null for later stages.
-		return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+	if (mPendingHotkey)
+		return ScriptError(ERR_HOTKEY_MISSING_BRACE, mPendingHotkey);
 
 	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
 	return OK;
@@ -2405,27 +2386,28 @@ ResultType Script::ParseRemap(LPCTSTR aSource, vk_type remap_dest_vk, LPCTSTR aD
 	//	return CallNextHookEx(g_KeybdHook, aCode, wParam, lParam);
 	// }
 
-	if (mLastHotFunc)
+	if (mPendingHotkey)
 		// Checking this to disallow stacking, eg
 		// x::
 		// y::z
 		// which would cause x:: to just do the "down"
 		// part of y::z.
-		return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+		return ScriptError(ERR_HOTKEY_MISSING_BRACE, mPendingHotkey);
 
 	auto make_remap_hotkey = [&](LPTSTR aKey)
 		{
-			if (!CreateHotFunc())
+			auto func = CreateHotFunc();
+			if (!func)
 				return FAIL;
 			UCHAR no_suppress;
 			bool hook_is_mandatory;
 			auto hk = Hotkey::FindHotkeyByTrueNature(aKey, no_suppress, hook_is_mandatory);
 			if (hk)
 			{
-				if (!hk->AddVariant(mLastHotFunc, no_suppress))
+				if (!hk->AddVariant(func, no_suppress))
 					return FAIL;
 			}
-			else if (!Hotkey::AddHotkey(mLastHotFunc, HK_NORMAL, aKey, no_suppress))
+			else if (!Hotkey::AddHotkey(func, HK_NORMAL, aKey, no_suppress))
 				return FAIL;
 			return OK;
 		};
@@ -3548,9 +3530,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	// L4: Handle #HotIf (expression) directive.
 	if (IS_DIRECTIVE_MATCH(_T("#HotIf")))
 	{
-		// Disallow #HotIf inside a function or class, but allow it interspersed with hotkey labels;
-		// i.e. g->CurrentFunc and mLastHotFunc must both be null or the same non-null value.
-		if (mClassObjectCount || g->CurrentFunc != mLastHotFunc) 
+		// Disallow #HotIf inside a function or class.
+		if (mClassObjectCount || g->CurrentFunc)
 			return ScriptError(ERR_INVALID_USAGE);
 
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
@@ -3566,20 +3547,19 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (g->HotCriterion = FindHotkeyIfExpr(parameter))
 			return CONDITION_TRUE;
 
-		auto pending_hotfunc = mLastHotFunc;
-		
+		auto pending_hotkey = mPendingHotkey;
+		mPendingHotkey = nullptr;
+
 		// Create a function to return the result of the expression
 		// specified by "parameter":
 
-		CreateHotFunc();
+		auto func = CreateHotFunc();
 		
-		auto fr = Hotkey::IfExpr(mLastHotFunc); // Set the new criterion.
+		auto fr = Hotkey::IfExpr(func); // Set the new criterion.
 		if (fr != OK) // Only OK and FR_E_OUTOFMEM should be possible given how it's called.
 			return fr == FR_E_OUTOFMEM ? ScriptError(ERR_OUTOFMEM) : FAIL;
 
 		g->HotCriterion->OriginalExpr = SimpleHeap::Alloc(parameter);
-		
-		auto func = mLastHotFunc; // AddLine will set mLastHotFunc to nullptr below
 		
 		if (!AddLine(ACT_BLOCK_BEGIN)
 			|| !ParseAndAddLine(parameter, ACT_HOTKEY_IF) // PreparseExpressions will change this to ACT_RETURN
@@ -3588,8 +3568,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		func->mJumpToLine->mAttribute = g->HotCriterion;	// Must be set for PreparseHotkeyIfExpr
 
-		ASSERT(!g->CurrentFunc && !mLastHotFunc); // Should be null due to ACT_BLOCK_END and prior checks.
-		g->CurrentFunc = mLastHotFunc = pending_hotfunc; // Restore any pending hotkey function.
+		ASSERT(!g->CurrentFunc); // Should be null due to ACT_BLOCK_END and prior checks.
+		mPendingHotkey = pending_hotkey;
 		
 		return CONDITION_TRUE;
 	}
@@ -4813,11 +4793,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	if (aActionType == ACT_INVALID)
 		return ScriptError(_T("DEBUG: BAD AddLine"), aArgc > 0 ? aArg[0] : _T(""));
 #endif
-	if (mLastHotFunc)
+	if (mPendingHotkey)
 	{
 		if (aActionType != ACT_BLOCK_BEGIN)
-			return ScriptError(ERR_HOTKEY_MISSING_BRACE);
-		mLastHotFunc = nullptr;
+			return ScriptError(ERR_HOTKEY_MISSING_BRACE, mPendingHotkey);
+		if (!CreateHotFunc())
+			return FAIL;
+		mPendingHotkey = nullptr;
 	}
 	if (aActionType == ACT_BLOCK_BEGIN && mIgnoreNextBlockBegin)
 	{
@@ -5557,23 +5539,22 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 }
 
 
+
+UserFunc* Script::CreateHotFunc()
+{
+	if (!DefineFunc(_T("<Hotkey>(ThisHotkey)")))
+		return nullptr;
+	return g->CurrentFunc;
+}
+
+
+
 ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 // Returns OK or FAIL.
 {
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
 	int insert_pos;
 	
-	auto last_hotfunc = mLastHotFunc;
-	if (last_hotfunc)
-	{
-		// This means we are defining a function under a "trigger::".
-		// Then mLastHotFunc will not be used, instead all variants which have set it as its
-		// mJumpLabel will replace it with the new function defined in this call.
-		ASSERT(last_hotfunc == g->CurrentFunc);
-		g->CurrentFunc =					// To avoid nesting the new function inside it.
-			mLastHotFunc = nullptr;			// To avoid the next call AddLine demanding a ACT_BLOCK_BEGIN.										
-	}
-
 	bool is_method = mClassObjectCount && !g->CurrentFunc && !aIsInExpression;
 	if (is_method) // Class method or property getter/setter.
 	{
@@ -5827,8 +5808,12 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 	}
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
 	
-	if (last_hotfunc)
+	if (mPendingHotkey)
 	{
+		if (func.mMinParams > 1 || (func.mParamCount == 0 && !func.mIsVariadic))
+			// func must accept at least one parameter (or use *), any remaining parameters must be optional.
+			return ScriptError(ERR_HOTKEY_FUNC_PARAMS, aBuf);
+
 		// Check all hotkeys, since there might be multiple
 		// hotkeys stacked:
 		// ^a::
@@ -5837,7 +5822,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
 		{
 			for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
-				if (v->mCallback == last_hotfunc)
+				if (!v->mCallback)
 				{
 					v->mCallback = &func;
 					v->mOriginalCallback = &func;	// To make scripts more maintainable and to
@@ -5858,7 +5843,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		// Check hotstrings as well (even if a hotkey was found):
 		for (int i = Hotstring::sHotstringCount - 1; i >= 0; --i) // Start with the last one defined, for performance.
 		{
-			if (Hotstring::shs[i]->mCallback != last_hotfunc)
+			if (Hotstring::shs[i]->mCallback || Hotstring::shs[i]->mReplacement)
 				// This hotstring has a function or is auto-replace.
 				// Since hotstrings are listed in order of definition and we're iterating in
 				// the reverse order, there's no need to continue.
@@ -5866,13 +5851,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 			Hotstring::shs[i]->mCallback = &func;
 		}
 
-		if (func.mMinParams > 1 || (func.mParamCount == 0 && !func.mIsVariadic))
-			// func must accept at least one parameter (or use *), any remaining parameters must be optional.
-			return ScriptError(func.mParamCount == 0 ? ERR_PARAM_REQUIRED : ERR_HOTKEY_FUNC_PARAMS, aBuf);
-		
-		mUnusedHotFunc = last_hotfunc;	// This function not used now, so reuse it for the 
-										// next hotkey which needs a function.
-		mHotFuncs.mCount--;				// Consider it gone from the list.
+		mPendingHotkey = nullptr;
 	}
 
 	// At this point, param_start points to ')'.
@@ -6724,7 +6703,10 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 	// since the script currently always exits if an error occurs anywhere below:
 	LPTSTR new_name = SimpleHeap::Alloc(aFuncName, aFuncNameLength);
 
-	if (!aClassObject && *new_name && !Var::ValidateName(new_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
+	// new_name can legitimately be blank for some callers, or something like <Hotkey>.
+	// Invalid chars are excluded by preventing recognition as a function definition,
+	// but names beginning with numbers can reach this point.
+	if (!aClassObject && *new_name && *new_name != '<' && !Var::ValidateName(new_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
 		return nullptr; // Above already displayed the error for us.
 
 	auto the_new_func = new UserFunc(new_name);
@@ -6769,7 +6751,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
 		// and automatic cleanup of objects in static vars on program exit.
 	}
-	else
+	else if (*new_name != '<') // i.e. not <Hotkey>
 	{
 		ResultType result = OK;
 		VarList *varlist;

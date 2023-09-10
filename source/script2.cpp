@@ -944,42 +944,6 @@ LPTSTR Script::DefaultDialogTitle()
 	return (mFileName && *mFileName) ? mFileName : T_AHK_NAME_VERSION;
 }
 
-UserFunc* Script::CreateHotFunc()
-{
-	// Should only be called during load time.
-	// Creates a new function for hotkeys and hotstrings.
-	// Caller should abort loading if this function returns nullptr.
-	
-	if (mUnusedHotFunc)
-	{
-		auto tmp = mLastHotFunc = g->CurrentFunc = mUnusedHotFunc;
-		mUnusedHotFunc = nullptr;
-		mHotFuncs.mCount++;			// DefineFunc "removed" this func previously.
-		ASSERT(mHotFuncs.mItem[mHotFuncs.mCount - 1] == tmp);
-		return tmp;
-	}
-	
-	static LPCTSTR sName = _T("<Hotkey>");
-	auto func = new UserFunc(sName);
-	
-	g->CurrentFunc = func; // Must do this before calling AddVar
-
-	// Add one parameter to hold the name of the hotkey/hotstring when triggered:
-	func->mParam = SimpleHeap::Alloc<FuncParam>();
-	if ( !(func->mParam[0].var = AddVar(_T("ThisHotkey"), 10, &func->mVars, 0, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM)) )
-		return nullptr;
-
-	func->mParam[0].default_type = PARAM_DEFAULT_NONE;
-	func->mParam[0].is_byref = false;
-	func->mParamCount = 1;
-	func->mMinParams = 1;
-	func->mIsFuncExpression = false;
-	
-	mLastHotFunc = func;
-	mHotFuncs.Insert(func, mHotFuncs.mCount);
-	return func;
-}
-
 
 
 /////////////////////////

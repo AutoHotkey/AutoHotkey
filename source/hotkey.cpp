@@ -1511,9 +1511,9 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aCallback, UCHAR aNoSuppress)
 	// mRunAgainAfterFinished
 	// mRunAgainTime
 	// mPriority (default priority is always 0)
+	// mOriginalCallback
 	HotkeyVariant &v = *vp;
 	v.mCallback = aCallback;
-	v.mOriginalCallback = g_script.mLastHotFunc;
 	v.mMaxThreads = g_MaxThreadsPerHotkey;    // The values of these can vary during load-time.
 	v.mMaxThreadsBuffer = g_MaxThreadsBuffer; //
 	v.mInputLevel = g_InputLevel;
@@ -2446,7 +2446,7 @@ Hotstring::Hotstring(LPCTSTR aName, IObjectPtr aCallback, LPCTSTR aOptions, LPCT
 		return;
 	}
 	mStringLength = (UCHAR)_tcslen(mString);
-	if (*aReplacement)
+	if (aReplacement && *aReplacement)
 	{
 		// SimpleHeap is not used for the replacement as it can be changed at runtime by Hotstring().
 		if (   !(mReplacement = _tcsdup(aReplacement))   )

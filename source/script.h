@@ -180,7 +180,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_TOO_MANY_PARAMS _T("Too many parameters passed to function.") // L31
 #define ERR_TOO_FEW_PARAMS _T("Too few parameters passed to function.") // L31
 #define ERR_BAD_OPTIONAL_PARAM _T("Expected \":=\"")
-#define ERR_HOTKEY_FUNC_PARAMS _T("Only the first parameter of a hotkey function is permitted to be non-optional.")
+#define ERR_HOTKEY_FUNC_PARAMS _T("A hotkey function must not require more or less than 1 parameter.")
 #define ERR_HOTKEY_MISSING_BRACE _T("Hotkey or hotstring is missing its opening brace.")
 #define ERR_ELSE_WITH_NO_IF _T("ELSE with no matching IF")
 #define ERR_UNTIL_WITH_NO_LOOP _T("UNTIL with no matching LOOP")
@@ -2821,21 +2821,12 @@ private:
 #endif
 	FuncList mFuncs;
 	
-	UserFunc *mLastHotFunc;		// For hotkey/hotstring functions
-	UserFunc *mUnusedHotFunc;	// If defining a named function under a "trigger::" the implicit
-								// function stored in mLastHotFunc will not be used, store it in this
-								// variable for reuse.
-	FuncList mHotFuncs;			// All implicit hotkey funcs, stored for some delayed processing.
-								// This list is not sorted, all insertions are done at the end.
-								// In particular, note that DefineFunc and CreateHotFunc directly
-								// change mCount. This list's member mItem is freed after being
-								// passed to PreprocessLocalVars. Do not use this list after that. 
-
 	VarList mVars; // Sorted list of global variables.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 	Line *mPendingParentLine, *mPendingRelatedLine;
 	Line *mLastParamInitializer;
+	LPCTSTR mPendingHotkey = nullptr; // The name of a hotkey or hotstring awaiting its block/function.
 	PartialExpression *mExprContainingThisFunc = nullptr;
 	SymbolType mDefaultReturn = SYM_STRING;
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
