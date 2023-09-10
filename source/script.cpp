@@ -1362,8 +1362,7 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 	// are resolved in nested functions.
 	if (!PreparseExpressions(mFirstLine)
 		|| !PreparseExpressions(mHotFuncs) // mHotFuncs first in case they have nested functions, which would be in mFuncs.
-		|| !PreparseExpressions(mFuncs)
-		|| !PreparseVarRefs())
+		|| !PreparseExpressions(mFuncs))
 		return LOADING_FAILED; // Error was already displayed by the above call.
 
 	// Do some processing of local variables to support closures.
@@ -7064,9 +7063,6 @@ Var *Script::FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner
 	// At this point, all var refs used in declarations, assignments or &var in the outer
 	// function should have already been parsed, while it's possible that some read-refs
 	// have not.  Ignore all variables that lack an assignment, &var or declaration.
-	//  - Avoids an issue where only read-refs ABOVE the nested function are accessible
-	//    (which could also be fixed by changing PreparseVarRefs to parse one function
-	//    at a time, parsing outer in its entirety before inner).
 	//  - Avoids inconsistency between read-refs and write-refs: when the outer var is created
 	//    by a read-ref, closures which only read would capture it, while closures which write
 	//    would create their own local.
@@ -7310,9 +7306,9 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 		// Skip any function bodies.
 		while (line->mActionType == ACT_BLOCK_BEGIN && line->mAttribute)
 			if (  !(line = line->mRelatedLine)  )
-				return OK;
+				goto break_outer;
 		if (line->mActionType == ACT_BLOCK_END && line->mAttribute)
-			return OK; // End of this function.
+			break; // End of this function.
 
 		mCurrLine = line; // For error reporting in FindVar() and perhaps other places.
 
@@ -7340,7 +7336,11 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 				return FAIL; // The function above already displayed the error msg.
 		}
 	}
-	return OK;
+break_outer:
+	// Now that all assignments and &refs have been parsed within this scope, preparse the
+	// remaining variable references.  Doing it one function at a time improves modularity
+	// (may facilitate new features), and could perform better due to locality of reference.
+	return PreparseVarRefs(aStartingLine);
 }
 
 
@@ -12159,17 +12159,16 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 
 
 
-ResultType Script::PreparseVarRefs()
+ResultType Script::PreparseVarRefs(Line *aStartingLine)
 {
-	// AddLine() and ExpressionToPostfix() currently leave validation of output variables
-	// and lvalues to this function, to reduce code size.  Search for "VarIsReadOnlyError".
-	for (Line *line = mFirstLine; line; line = line->mNextLine)
+	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
-		switch (line->mActionType)
-		{ // Establish context for FindOrAddVar:
-		case ACT_BLOCK_BEGIN: if (line->mAttribute) g->CurrentFunc = (UserFunc *)line->mAttribute; break;
-		case ACT_BLOCK_END: if (line->mAttribute) g->CurrentFunc = g->CurrentFunc->mOuterFunc; break;
-		}
+		// Skip any function bodies.
+		while (line->mActionType == ACT_BLOCK_BEGIN && line->mAttribute)
+			if (  !(line = line->mRelatedLine)  )
+				return OK;
+		if (line->mActionType == ACT_BLOCK_END && line->mAttribute)
+			return OK; // End of this function.
 		
 		mCurrLine = line; // For error-reporting.
 

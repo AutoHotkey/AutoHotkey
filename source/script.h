@@ -3113,7 +3113,7 @@ public:
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
 	ResultType PreprocessLocalVars(UserFunc &aFunc);
-	ResultType PreparseVarRefs();
+	ResultType PreparseVarRefs(Line *aStartingLine);
 	void CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName);
 
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType, Object *aPrototype = nullptr);
