@@ -2148,10 +2148,9 @@ process_completed_line:
 			}
 			else // Normal block begin/end.
 			{
-				auto end_func = *buf != '{' ? g->CurrentFunc : nullptr;
 				if (!AddLine(*buf == '{' ? ACT_BLOCK_BEGIN : ACT_BLOCK_END))
 					return FAIL;
-				if (mExprContainingThisFunc && end_func == mExprContainingThisFunc->func)
+				if (mExprContainingThisFunc && *buf != '{' && mLastLine->mAttribute == mExprContainingThisFunc->func)
 				{
 					if (IS_IDENTIFIER_CHAR(buf[1])) // Prevent (a(){...}b) from producing (ab).
 						return ScriptError(ERR_EXPR_SYNTAX, buf);
