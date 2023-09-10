@@ -314,7 +314,7 @@ Script::Script()
 	, mLastHotFunc(nullptr), mUnusedHotFunc(nullptr)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
-	, mOpenBlock(NULL), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
+	, mOpenBlock(NULL), mNextLineIsFunctionBody(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
@@ -5077,7 +5077,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// UPDATE: In addition, keep searching backward through the labels until a non-NULL
 	// mJumpToLine is found.  All the ones with a NULL should point to this new line to
 	// support cases where one label immediately follows another in the script.
-	if (!mNoUpdateLabels)
+	// v2.1: mNoUpdateLabels was originally used by some callers who are inserting lines
+	// which shouldn't be associated with any pending labels, but was superseded in v2.0
+	// by searching only g->CurrentFunc, which has no labels in those cases.
+	//if (!mNoUpdateLabels)
 	{
 		for (Label *label = g->CurrentFunc ? g->CurrentFunc->mLastLabel : mLastLabel;
 			label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
@@ -5492,12 +5495,7 @@ ResultType Script::ParseFatArrow(LPTSTR aArgText, DerefList &aDeref
 ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd)
 {
 	TCHAR orig_end;
-
-	// Avoid pointing any pending labels at the fat arrow function's body (let the caller
-	// finish adding the line which contains this expression and make it the label's target).
-	bool nolabels = mNoUpdateLabels; // Could be true if this line is a static declaration.
 	Line *parent_line = mPendingParentLine;
-	mNoUpdateLabels = true;
 
 	if (*aPrmEnd == ')') // `() => e` or `fn() => e`, not `v => e`.
 	{
@@ -5550,7 +5548,6 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	else // No name, so AddFunc() inserted it at position 0.
 		fr.var = g->CurrentFunc ? g->CurrentFunc->mVars.mItem[0] : GlobalVars()->mItem[0];
 
-	mNoUpdateLabels = nolabels;
 	if (parent_line)
 	{
 		mPendingParentLine = parent_line;
@@ -6356,10 +6353,11 @@ ResultType Script::DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject
 
 	Line *prl = mPendingRelatedLine; // This was set by AddLine(ACT_BLOCK_END) if DefineClassInit() was just called.
 	mPendingRelatedLine = nullptr;
-	mNoUpdateLabels = true;
+	// No need to account for pending labels because 1) labels aren't allowed in a class body,
+	// 2) any label above the class would already point to the implied "initialization" line,
+	// 3) AddLine will only check for pending labels in g->CurrentFunc (i.e. init_func).
 	if (!ParseAndAddLine(aBuf, aActionType))
 		return FAIL; // Above already displayed the error.
-	mNoUpdateLabels = false;
 	mPendingRelatedLine = prl;
 
 	if (init_func->mJumpToLine == block_end) // This can be true only for the first static initializer.
