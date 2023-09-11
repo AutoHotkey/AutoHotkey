@@ -1893,6 +1893,7 @@ ResultType Object::NestedNew(ResultToken &aResultToken, StructInfo *si)
 		// Now it needs to have mRefCount == 0 to reflect that there aren't any external references.
 		nested->mRefCount--;
 		mRefCount--;
+		aResultToken.symbol = SYM_INTEGER; // New has set this to nested.  Reset to default without calling Release().
 		ASSERT(nested->mRefCount == 0 && mRefCount);
 		if (result == FAIL || result == EARLY_EXIT)
 			return result;
