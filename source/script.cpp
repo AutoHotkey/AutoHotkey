@@ -2155,15 +2155,6 @@ process_completed_line:
 				// hotstring duplicates (and performs a lot worse if a script has thousands of
 				// hotstrings) because of all the hotstring options.
 
-				if (hotstring_execute && (!*hotkey_flag || hotkey_uses_otb))
-					// Do not allow execute option with blank line or OTB.
-					// Without this check, this
-					// :X:x::
-					// {
-					// }
-					// would execute the block. But X is supposed to mean "execute this line".
-					return ScriptError(ERR_EXPECTED_ACTION);
-
 				if (hotkey_uses_otb)
 				{
 					// Never use otb if text or raw mode is in effect for this hotstring.
