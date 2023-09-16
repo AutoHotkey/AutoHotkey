@@ -313,7 +313,7 @@ Script::Script()
 	, mFirstLabel(NULL), mLastLabel(NULL)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
-	, mOpenBlock(NULL), mNextLineIsFunctionBody(false)
+	, mNextLineIsFunctionBody(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
@@ -1681,7 +1681,7 @@ ResultType Script::LoadIncludedFile(TextStream *fp, int aFileIndex)
 	// correct file number even when some #include's have been encountered in the middle of the script:
 	int source_file_index = aFileIndex;
 
-	bool blocks_previously_open = mOpenBlock || mClassObjectCount; // For error detection.
+	bool blocks_previously_open = mLineParent || mClassObjectCount; // For error detection.
 
 	LineBuffer buf, next_buf;
 	size_t &buf_length = buf.length, &next_buf_length = next_buf.length;
@@ -2073,8 +2073,8 @@ process_completed_line:
 			if ((cp - buf + 1) == buf_length && cp > buf)
 			{
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
-				if (!_tcsicmp(buf, _T("Default")) && mOpenBlock && mOpenBlock->mPrevLine // "Default:" case.
-					&& mOpenBlock->mPrevLine->mActionType == ACT_SWITCH) // It's a normal label in any other case.
+				if (!_tcsicmp(buf, _T("Default")) && mLineParent && mLineParent->mPrevLine // "Default:" case.
+					&& mLineParent->mPrevLine->mActionType == ACT_SWITCH) // It's a normal label in any other case.
 				{
 					if (!AddLine(ACT_CASE))
 						return FAIL;
@@ -2168,11 +2168,6 @@ process_completed_line:
 					tmemmove(buf + expr->length, expr->func->mName, extra); // Insert automatic name, if any.
 					buf_length += expr->length + extra;
 					mCombinedLineNumber = expr->line_no;
-					// Restoring mPendingParentLine ensures that both the new line's mParentLine and the
-					// parent line's mRelatedLine will be set correctly.  By contrast, mPendingRelatedLine
-					// shouldn't be changed since mRelatedLine for any prior line was already handled, and
-					// mPendingRelatedLine should now point to end_func's block-begin.
-					mPendingParentLine = expr->pending_parent;
 					mExprContainingThisFunc = expr->outer;
 					delete expr;
 					mCurrLine = NULL; // See comments below.
@@ -2301,20 +2296,20 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 	// that another file might follow this one and fill in the missing part, it's much more
 	// likely to be an error.  blocks_previously_open is checked rather than source_file_index
 	// so that errors in auto-includes are detected.
+	
+	if (mLineParent && mLineParent->mActionType != ACT_BLOCK_BEGIN) // If, Else, Loop, etc. without a block or action.
+		return mLineParent->LineUnexpectedError();
 
-	if (!blocks_previously_open && (mOpenBlock || mClassObjectCount))
+	if (!blocks_previously_open && (mLineParent || mClassObjectCount))
 	{
-		if (mOpenBlock)
-			return mOpenBlock->LineError(ERR_MISSING_CLOSE_BRACE);
+		if (mLineParent)
+			return mLineParent->LineError(ERR_MISSING_CLOSE_BRACE);
 		// A class definition has not been closed with "}".  Previously this was detected by adding
 		// the open and close braces as lines, but this way is simpler and has less overhead.
 		// The downside is that the line number won't be shown; however, the class name will.
 		// Seems okay not to show mClassProperty->mName since the class is missing "}" as well.
 		return ScriptError(ERR_MISSING_CLOSE_BRACE, mClassName);
 	}
-
-	if (mPendingParentLine) // If, Else, Loop, etc. without a block or action.
-		return mPendingParentLine->LineUnexpectedError();
 
 	if (mPendingHotkey)
 		return ScriptError(ERR_HOTKEY_MISSING_BRACE, mPendingHotkey);
@@ -4811,10 +4806,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		*aArg = _T("unset");
 		aArgc = 1;
 	}
-	else if (aActionType == ACT_BLOCK_END && g->CurrentFunc && mOpenBlock && g->CurrentFunc == mOpenBlock->mAttribute // This is the block-end of a function.
+	else if (aActionType == ACT_BLOCK_END && mLineParent && mLineParent->mActionType == ACT_BLOCK_BEGIN
+		&& mLineParent->mAttribute == g->CurrentFunc && g->CurrentFunc // This is the block-end of a function.
 		&& mDefaultReturn == SYM_MISSING // It should default to unset, and doesn't end with a return.
-		&& !mPendingParentLine // There's no misplaced IF/LOOP/etc. at the end of the function.
-		&& (mLastLine->mActionType != ACT_RETURN || mLastLine->mParentLine != mOpenBlock)) // It wouldn't be "unreachable".
+		&& (mLastLine->mActionType != ACT_RETURN || mLastLine->mParentLine != mLineParent)) // It wouldn't be "unreachable".
 	{
 		if (!AddLine(ACT_RETURN, nullptr, 0, true)) // The recursive call will detect that this needs to be `return unset`.
 			return FAIL;
@@ -4929,6 +4924,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (aArgc > 0 && !g->CurrentFunc)
 			return ScriptError(_T("Return's parameter should be blank except inside a function."));
 	}
+	
+	if (mNextLineIsFunctionBody)
+	{
+		g->CurrentFunc->mJumpToLine = the_new_line;
+		mNextLineIsFunctionBody = false;
+	}
 
 	// This next section and the block-begin/end sections below are responsible
 	// for setting up the relationships of lines (mParentLine and mRelatedLine).
@@ -4938,11 +4939,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	switch (aActionType)
 	{
 	case ACT_CASE:
-		if (!(mOpenBlock && mOpenBlock->mPrevLine && mOpenBlock->mPrevLine->mActionType == ACT_SWITCH)
-			|| mPendingParentLine)
+		if (!(mLineParent && mLineParent->mPrevLine && mLineParent->mPrevLine->mActionType == ACT_SWITCH))
 			return line.LineUnexpectedError();
+		ASSERT(mLineParent->mActionType == ACT_BLOCK_BEGIN);
 		Line *last_case;
-		if ((last_case = mOpenBlock->mNextLine) && last_case != &line)
+		if ((last_case = mLineParent->mNextLine) && last_case != &line)
 		{
 			// Form a linked list of CASE lines for this SWITCH.
 			while (last_case->mRelatedLine)
@@ -5007,32 +5008,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (break_time)
 			break;
 	}
-	if (mPendingParentLine) // A line waiting for block or single-line action.
-	{
-		line.mParentLine = mPendingParentLine;
-		if (aActionType != ACT_BLOCK_BEGIN)
-			mPendingRelatedLine = mPendingParentLine; // The next line will be the parent's mRelatedLine.
-		mPendingParentLine = nullptr;
-	}
+
+	line.mParentLine = mLineParent;
 	if (ACT_IS_LINE_PARENT(aActionType))
 	{
-		mPendingParentLine = &line;
-		mPendingRelatedLine = nullptr;
+		mLineParent = &line;
 	}
-	// If no parent line was determined above, this line belongs to the current block.
-	if (!line.mParentLine)
-		line.mParentLine = mOpenBlock;
-
-	if (mNextLineIsFunctionBody)
+	else if (aActionType == ACT_BLOCK_BEGIN)
 	{
-		g->CurrentFunc->mJumpToLine = the_new_line;
-		mNextLineIsFunctionBody = false;
-	}
-
-	// Now that we've finished using the previous value of mOpenBlock, check the following:
-	if (aActionType == ACT_BLOCK_BEGIN)
-	{
-		mOpenBlock = the_new_line;
+		mLineParent = &line;
 		// It's only necessary to check the last func, not the one(s) that come before it, to see if its
 		// mJumpToLine is NULL.  This is because our caller has made it impossible for a function
 		// to ever have been defined in the first place if it lacked its opening brace.  Search on
@@ -5045,6 +5029,16 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// first line is another open-brace or the function's close-brace (i.e. an empty function):
 			mNextLineIsFunctionBody = true;
 		}
+	}
+	else if (mLineParent && mLineParent->mActionType != ACT_BLOCK_BEGIN)
+	{
+		 // A parent line's action was just added, and isn't itself a parent.
+		if (mLineParent->mActionType == ACT_SWITCH)
+			return mLineParent->LineError(ERR_MISSING_OPEN_BRACE);
+		mPendingRelatedLine = mLineParent; // The next line will be the parent's mRelatedLine.
+		do
+			mLineParent = mLineParent->mParentLine;
+		while (mLineParent && mLineParent->mActionType != ACT_BLOCK_BEGIN);
 	}
 	// See further below for ACT_BLOCK_END.
 
@@ -5102,28 +5096,35 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	if (aActionType == ACT_BLOCK_END)
 	{
-		if (!mOpenBlock || line.mParentLine != mOpenBlock)
+		if (!mLineParent || mLineParent->mActionType != ACT_BLOCK_BEGIN)
 			return line.LineUnexpectedError();
-		mPendingRelatedLine = mOpenBlock; // The next line will be the block-begin's mRelatedLine, and possibly its parent's mRelatedLine.
+		mPendingRelatedLine = mLineParent; // The next line will be the block-begin's mRelatedLine, and possibly its parent's mRelatedLine.
 
 		// Rather than checking whether each newly added line is being added into a Switch,
-		// just verify here that the first line of each Switch is valid:
-		if (mOpenBlock->mPrevLine && mOpenBlock->mPrevLine->mActionType == ACT_SWITCH
-			&& mOpenBlock->mNextLine->mActionType != ACT_CASE
-			&& mOpenBlock->mNextLine != &line)
-			return mOpenBlock->mNextLine->LineError(_T("Expected Case/Default."));
+		// just verify here that the first line of each Switch's block is valid:
+		if (mLineParent->mPrevLine && mLineParent->mPrevLine->mActionType == ACT_SWITCH
+			&& mLineParent->mNextLine->mActionType != ACT_CASE
+			&& mLineParent->mNextLine != &line)
+			return mLineParent->mNextLine->LineError(_T("Expected Case/Default."));
 
-		if (g->CurrentFunc && g->CurrentFunc == mOpenBlock->mAttribute)
+		if (g->CurrentFunc && g->CurrentFunc == mLineParent->mAttribute)
 		{
 			line.mAttribute = g->CurrentFunc;  // Flag this ACT_BLOCK_END as the ending brace of this function's body.
 			g->CurrentFunc = g->CurrentFunc->mOuterFunc;  // Step out of this function.
 			if (g->CurrentFunc && !g->CurrentFunc->mJumpToLine)
 				// The outer function has no body yet, so it probably began with one or more nested functions.
 				mNextLineIsFunctionBody = true;
+			// If the function's block-begin's parent is not a block-begin, the function must be
+			// a fat arrow function.  Don't look further up the chain in that case because the next
+			// line should be a child of the same parent as the block-begin.
+			mLineParent = mLineParent->mParentLine;
 		}
-		do
-			mOpenBlock = mOpenBlock->mParentLine;
-		while (mOpenBlock && mOpenBlock->mActionType != ACT_BLOCK_BEGIN);
+		else
+		{
+			do
+				mLineParent = mLineParent->mParentLine;
+			while (mLineParent && mLineParent->mActionType != ACT_BLOCK_BEGIN);
+		}
 	}
 
 	return OK;
@@ -5475,8 +5476,6 @@ ResultType Script::ParseFatArrow(LPTSTR aArgText, DerefList &aDeref
 ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd)
 {
 	TCHAR orig_end;
-	Line *parent_line = mPendingParentLine;
-
 	if (*aPrmEnd == ')') // `() => e` or `fn() => e`, not `v => e`.
 	{
 		orig_end = aPrmEnd[1];
@@ -5527,12 +5526,6 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 		fr.var = FindVar(name, 0); // Find the Var already added by AddFunc().
 	else // No name, so AddFunc() inserted it at position 0.
 		fr.var = g->CurrentFunc ? g->CurrentFunc->mVars.mItem[0] : GlobalVars()->mItem[0];
-
-	if (parent_line)
-	{
-		mPendingParentLine = parent_line;
-		mPendingRelatedLine = block_begin; // This ensures block_begin->mRelatedLine is set for PreparseExpressions.
-	}
 
 	return OK;
 }

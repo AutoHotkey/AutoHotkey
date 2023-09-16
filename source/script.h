@@ -2801,7 +2801,6 @@ private:
 	struct PartialExpression
 	{
 		PartialExpression *outer;
-		Line *pending_parent;
 		UserFunc *func = nullptr;
 		LPTSTR code;
 		size_t length;
@@ -2809,7 +2808,6 @@ private:
 		PartialExpression(LPTSTR aCode, size_t aLen, Script &aScript)
 			: code(aCode), length(aLen)
 			, outer(aScript.mExprContainingThisFunc)
-			, pending_parent(aScript.mPendingParentLine)
 			, line_no(aScript.mCombinedLineNumber) {}
 		~PartialExpression() { free(code); }
 	};
@@ -2823,8 +2821,8 @@ private:
 	
 	VarList mVars; // Sorted list of global variables.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
-	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
-	Line *mPendingParentLine, *mPendingRelatedLine;
+	Line *mLineParent = nullptr; // While loading the script, the parent line or block-begin for the next line to be added.
+	Line *mPendingRelatedLine;
 	Line *mLastParamInitializer;
 	LPCTSTR mPendingHotkey = nullptr; // The name of a hotkey or hotstring awaiting its block/function.
 	PartialExpression *mExprContainingThisFunc = nullptr;
