@@ -5525,10 +5525,8 @@ ResultType GuiType::ControlParseOptions(LPCTSTR aOptions, GuiControlOptionsType 
 						goto return_error;
 					}
 					if (aOpt.color_bk != CLR_DEFAULT && aControl.RequiresBackgroundBrush())
-					{
 						aControl.background_brush = CreateSolidBrush(aOpt.color_bk);
-						aControl.background_color = aOpt.color_bk;
-					}
+					aControl.background_color = aOpt.color_bk;
 				}
 				//else +Background (the traditional way to revert -Background).
 				// background_brush and background_color were already reset above.

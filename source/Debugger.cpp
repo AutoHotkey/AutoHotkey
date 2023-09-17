@@ -917,12 +917,17 @@ DEBUGGER_COMMAND(Debugger::breakpoint_list)
 	
 	mResponseBuf.WriteF("<response command=\"breakpoint_list\" transaction_id=\"%e\">", aTransactionId);
 	
+	int last_id = -1;
 	Line *line;
 	for (line = g_script.mFirstLine; line; line = line->mNextLine)
 	{
-		if (line->mBreakpoint)
+		if (line->mBreakpoint && last_id != line->mBreakpoint->id)
 		{
 			WriteBreakpointXml(line->mBreakpoint, line);
+			// A breakpoint could be on a group of lines that have the same number, but might
+			// not be consecutive lines (i.e. some lines in-between might have no breakpoint).
+			// So just track the last ID to avoid writing the same breakpoint multiple times.
+			last_id = line->mBreakpoint->id;
 		}
 	}
 
@@ -2885,7 +2890,7 @@ void DbgStack::GetLocalVars(int aDepth,  VarList *&aVars, VarList *&aStaticVars,
 	DbgStack::Entry *se = mTop - aDepth;
 	for (;;)
 	{
-		if (se <= mBottom)
+		if (se < mBottom)
 			return;
 		if (se->type == DbgStack::SE_UDF)
 			break;
