@@ -3592,6 +3592,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			return CONDITION_TRUE;
 
 		auto pending_hotfunc = mLastHotFunc;
+		if (pending_hotfunc)
+			mHotFuncs.mCount--; // See comments toward the end.
 		
 		// Create a function to return the result of the expression
 		// specified by "parameter":
@@ -3615,6 +3617,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		ASSERT(!g->CurrentFunc && !mLastHotFunc); // Should be null due to ACT_BLOCK_END and prior checks.
 		g->CurrentFunc = mLastHotFunc = pending_hotfunc; // Restore any pending hotkey function.
+		if (pending_hotfunc)
+			// Ensure mLastHotFunc is always the last item, as DefineFunc requires it.
+			mHotFuncs.Insert(pending_hotfunc, mHotFuncs.mCount);
 		
 		return CONDITION_TRUE;
 	}
