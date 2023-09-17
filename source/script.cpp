@@ -2160,17 +2160,19 @@ process_completed_line:
 					// was encountered by ParseAndAddLine().  expr->code includes up to (and including)
 					// the function name.  Append this current line to form the final expression (unless
 					// there's another function definition, in which case, rinse and repeat).
-					// If the function had no explicit name, AddFunc has given it one we can insert here.
-					size_t extra = !IS_IDENTIFIER_CHAR(expr->code[expr->length - 1]) ? _tcslen(expr->func->mName) : 0;
+					// A special marker is inserted so that ParseOperands() can reference the function.
+					size_t extra = FDE_SUBSTITUTE_STRING_LENGTH;
 					if (!buf.EnsureCapacity(--buf_length + expr->length + extra))
 						return MemoryError();
 					tmemmove(buf + expr->length + extra, buf + 1, buf_length + 1);
 					tmemmove(buf, expr->code, expr->length);
-					tmemmove(buf + expr->length, expr->func->mName, extra); // Insert automatic name, if any.
+					tmemmove(buf + expr->length, FDE_SUBSTITUTE_STRING, extra);
 					buf_length += expr->length + extra;
 					mCombinedLineNumber = expr->line_no;
 					mCurrLine = NULL; // See comments below.
 					mExprContainingThisFunc = expr->outer;
+					if (!mExprFuncs.Insert(expr->func, mExprFuncs.mCount))
+						return FAIL;
 					if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
 						return FAIL;
 					if (!expr->action && IsFunctionDefinition(buf, next_buf))
@@ -2184,7 +2186,7 @@ process_completed_line:
 							|| expr->add_block_end_after && !AddLine(ACT_BLOCK_END)  )
 							return FAIL;
 					}
-					if (mExprContainingThisFunc != expr->outer) // fn(a:=fn(){}){}
+					if (mExprContainingThisFunc != expr->outer) // (f1(){},f2(){}) or f2(a:=f1(){}){}
 					{
 						mExprContainingThisFunc->pending_hotkey = expr->pending_hotkey;
 						mExprContainingThisFunc->rejoin_first_line = expr->rejoin_first_line;
@@ -4156,10 +4158,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 		if (!code)
 			return MemoryError();
 		tmemcpy(code, aLineText, len);
-		code[open_paren - aLineText] = '\0';
+		code[len] = '\0';
 		auto expr = new PartialExpression(code, len, aActionType, *this); // Save the prefix code and some current script state.
 		// Parse the start of the function definition, including the open brace.
-		if (!DefineFunc(id, false, true))
+		if (!DefineFunc(id, false, FuncDefExpression))
 		{
 			delete expr;
 			return FAIL;
@@ -5280,6 +5282,31 @@ ResultType Script::ParseOperands(LPTSTR aArgText, DerefList &aDeref, int *aPos, 
 							return FAIL;
 						continue;
 					}
+					else if (!_tcsnicmp(op_begin, FDE_SUBSTITUTE_STRING, FDE_SUBSTITUTE_STRING_LENGTH))
+					{
+						int index = mExprContainingThisFunc ? mExprContainingThisFunc->first_index : 0;
+						if (index >= mExprFuncs.mCount)
+							return ScriptError(ERR_EXPR_SYNTAX, FDE_SUBSTITUTE_STRING);
+						auto func = mExprFuncs.mItem[index];
+						memcpy(mExprFuncs.mItem + index, mExprFuncs.mItem + index + 1, (mExprFuncs.mCount - index) * sizeof(UserFunc*));
+						mExprFuncs.mCount--;
+						func->mOuterFunc = g->CurrentFunc;
+						auto var = AddFuncVar(func);
+						if (!var || !AddFuncToList(func))
+							return FAIL;
+
+						DerefType *d = aDeref.count ? aDeref.Last() : nullptr;
+						if (d && d->type == DT_VAR && d->marker + d->length == op_begin)
+							d->length += FDE_SUBSTITUTE_STRING_LENGTH;
+						else if (!aDeref.Push())
+							return FAIL;
+						else
+							d = aDeref.Last(), d->marker = op_begin, d->length = FDE_SUBSTITUTE_STRING_LENGTH;
+						d->type = DT_FUNCREF;
+						d->var = var;
+						op_begin = d->marker + d->length;
+						continue;
+					}
 				}
 			}
 			if (!ParseOperands(aArgText, aDeref, &j, close_char))
@@ -5524,7 +5551,7 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	{
 		orig_end = aPrmEnd[1];
 		aPrmEnd[1] = '\0';
-		if (!DefineFunc(aPrmStart, false, true))
+		if (!DefineFunc(aPrmStart, false, FuncDefFatArrow))
 			return FAIL;
 		aPrmEnd[1] = orig_end;
 	}
@@ -5533,7 +5560,7 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 		// Format the parameter list as needed for DefineFunc().
 		TCHAR prm[MAX_VAR_NAME_LENGTH + 4];
 		sntprintf(prm, _countof(prm), _T("(%.*s)"), aPrmEnd - aPrmStart, aPrmStart);
-		if (!DefineFunc(prm, false, true))
+		if (!DefineFunc(prm, false, FuncDefFatArrow))
 			return FAIL;
 	}
 
@@ -5598,7 +5625,7 @@ UserFunc* Script::CreateHotFunc()
 
 
 
-ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
+ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, FuncDefType aIsInExpression)
 // Returns OK or FAIL.
 {
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
@@ -5624,14 +5651,14 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		*param_start = '('; // Undo temporary termination.
 
 		// Below passes class_object for AddFunc() to store the func "by reference" in it:
-		if (  !(g->CurrentFunc = AddFunc(full_name, -1, class_object))  )
+		if (  !(g->CurrentFunc = AddFunc(full_name, -1, aIsInExpression, class_object))  )
 			return FAIL;
 	}
 	else
 	{
 		// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
 		// relies upon it having been done.
-		if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf))   )
+		if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf, aIsInExpression))   )
 			return FAIL; // It already displayed the error.
 	}
 
@@ -6722,7 +6749,7 @@ Func *Script::GetBuiltInFunc(LPTSTR aFuncName)
 
 
 
-UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aClassObject)
+UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, FuncDefType aIsInExpression, Object *aClassObject)
 // Returns the address of the new function or NULL on failure.
 // The caller must already have verified that this isn't a duplicate function.
 {
@@ -6766,6 +6793,12 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 
 	auto the_new_func = new UserFunc(new_name);
 
+	if (aIsInExpression == FuncDefExpression)
+	{
+		the_new_func->mOuterFunc = g->CurrentFunc; // For parsing purposes; may be corrected by ParseOperands.
+		return the_new_func; // Defer the rest until the outer scope can be confirmed.
+	}
+
 	if (aClassObject)
 	{
 		LPTSTR key = _tcsrchr(new_name, '.'); // DefineFunc() always passes "ClassName.MethodName".
@@ -6808,59 +6841,74 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 	}
 	else if (*new_name != '<') // i.e. not <Hotkey>
 	{
-		ResultType result = OK;
-		VarList *varlist;
-		int insert_pos;
-		int scope = (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL);
 		if (is_static)
-		{
 			the_new_func->mIsStatic = true;
-			scope |= VAR_LOCAL_STATIC;
-		}
-		if (!aFuncNameLength) // Anonymous.
-		{
-			// Give it a name for debugging purposes and to allow function definition expressions to
-			// be anonymous (since they currently work by preprocessing/replacing the definition with
-			// just its name).  Starting with a digit ensures it will never conflict.
-			TCHAR buf[16];
-			static UINT sCount = 0;
-			aFuncNameLength = _stprintf(buf, _T("%ufn"), ++sCount);
-			the_new_func->mName = aFuncName = SimpleHeap::Alloc(buf, aFuncNameLength); // The previous value of the_new_func->mName was the constant _T("").
-		}
-		Var *var = aFuncNameLength ? FindVar(aFuncName, aFuncNameLength, FINDVAR_NO_BIF | scope, &varlist, &insert_pos, &result) : NULL;
-		if (var)
-		{
-			// Anything found at this early stage must have been created by a prior declaration
-			// or predefined.  Treat it as an error even if var is uninitialized, otherwise:
-			//  1) "static x" or "global x" prior to the function would affect its scope/duration
-			//     in a way that is problematic for closures and probably unintentional.
-			//  2) It would be possible to declare the function as local/global prior to defining
-			//     it, but not afterward (as the conflict would be detected by ParseAndAddLine).
-			ConflictingDeclarationError(_T("function"), var);
+		if (!AddFuncVar(the_new_func))
 			return nullptr;
-		}
-		var = AddVar(aFuncName, aFuncNameLength, varlist, insert_pos, scope | ADDVAR_NO_VALIDATE); // Already validated, or invalid in the case of anonymous functions.
-		if (!var)
-			return nullptr;
-		var->Assign(the_new_func);
-		var->MakeReadOnly();
 	}
 
-	the_new_func->mOuterFunc = g->CurrentFunc;
+	return AddFuncToList(the_new_func);
+}
+
+
+
+Var *Script::AddFuncVar(UserFunc *aFunc)
+{
+	ResultType result = OK;
+	VarList *varlist;
+	int insert_pos;
+	int scope = (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL);
+	if (aFunc->mIsStatic)
+		scope |= VAR_LOCAL_STATIC;
+	size_t name_length = _tcslen(aFunc->mName);
+	Var *var = name_length ? FindVar(aFunc->mName, name_length, FINDVAR_NO_BIF | scope, &varlist, &insert_pos, &result) : NULL;
+	if (var && var->IsDeclared())
+	{
+		// Anything found at this early stage must have been created by a prior declaration
+		// or predefined.  Treat it as an error even if var is uninitialized, otherwise:
+		//  1) "static x" or "global x" prior to the function would affect its scope/duration
+		//     in a way that is problematic for closures and probably unintentional.
+		//  2) It would be possible to declare the function as local/global prior to defining
+		//     it, but not afterward (as the conflict would be detected by ParseAndAddLine).
+		ConflictingDeclarationError(_T("function"), var);
+		return nullptr;
+	}
+	if (!var)
+	{
+		if (!name_length)
+		{
+			insert_pos = 0;
+			varlist = g->CurrentFunc ? &g->CurrentFunc->mVars : GlobalVars();
+		}
+		var = AddVar(aFunc->mName, name_length, varlist, insert_pos, scope | ADDVAR_NO_VALIDATE); // Already validated, or invalid in the case of anonymous functions.
+		if (!var)
+			return nullptr;
+	}
+	ASSERT(var->IsUninitialized());
+	var->Assign(aFunc);
+	var->MakeReadOnly();
+	return var;
+}
+
+
+	
+UserFunc *Script::AddFuncToList(UserFunc *aFunc)
+{
+	aFunc->mOuterFunc = g->CurrentFunc;
 	
 	// The general rule is that a nested function's namespace includes all of the names that
 	// were in the outer function's namespace by default.  In other words, if the outer function
 	// is assume-global, the nested function should also default to assume-global.
-	if (the_new_func->mOuterFunc && the_new_func->mOuterFunc->IsAssumeGlobal())
-		the_new_func->mDefaultVarType = VAR_GLOBAL; // Not VAR_DECLARE_GLOBAL, which would prevent referencing of outer vars.
+	if (aFunc->mOuterFunc && aFunc->mOuterFunc->IsAssumeGlobal() && aFunc->mDefaultVarType == VAR_DECLARE_LOCAL)
+		aFunc->mDefaultVarType = VAR_GLOBAL; // Not VAR_DECLARE_GLOBAL, which would prevent referencing of outer vars.
 
-	if (!mFuncs.Insert(the_new_func, mFuncs.mCount))
+	if (!mFuncs.Insert(aFunc, mFuncs.mCount))
 	{
 		ScriptError(ERR_OUTOFMEM);
 		return nullptr;
 	}
 
-	return the_new_func;
+	return aFunc;
 }
 
 
@@ -7130,7 +7178,7 @@ Var *Script::FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner
 	// At this point aInner doesn't have a variable by this name, so create one:
 	int insert_pos;
 	aInner.mVars.Find(aVarName, &insert_pos);
-	Var *inner_var = AddVar(aVarName, aVarNameLength, &aInner.mVars, insert_pos, VAR_LOCAL | VAR_DECLARED); // VAR_DECLARED suppresses checking for a global for #Warn LocalSameAsGlobal or when #Warn UseUnset is triggered.
+	Var *inner_var = AddVar(aVarName, aVarNameLength, &aInner.mVars, insert_pos, VAR_LOCAL | VAR_DECLARED | ADDVAR_NO_VALIDATE); // VAR_DECLARED suppresses checking for a global for #Warn LocalSameAsGlobal or when #Warn UseUnset is triggered.
 	if (!inner_var)
 	{
 		if (aDisplayError)

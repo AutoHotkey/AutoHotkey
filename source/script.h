@@ -419,6 +419,13 @@ struct ArgStruct
 	int max_stack, max_alloc;
 };
 
+enum FuncDefType : UCHAR
+{
+	FuncDefNormal = FALSE,
+	FuncDefFatArrow,
+	FuncDefExpression
+};
+
 __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 
 #define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
@@ -1559,7 +1566,7 @@ public:
 	int mClosureCount = 0;
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
-	bool mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
+	FuncDefType mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
 	bool mIsStatic = false; // Whether the "static" keyword was used with a function (not method); this prevents a nested function from becoming a closure.
 #define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)
 #define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
@@ -2806,15 +2813,19 @@ private:
 		size_t length;
 		Line *rejoin_first_line = nullptr, *rejoin_last_line = nullptr;
 		LPCTSTR pending_hotkey = nullptr;
+		int first_index;
 		LineNumberType line_no;
 		ActionTypeType action;
 		bool add_block_end_after = false;
 		PartialExpression(LPTSTR aCode, size_t aLen, ActionTypeType aAct, Script &aScript)
 			: code(aCode), length(aLen), action(aAct)
 			, outer(aScript.mExprContainingThisFunc)
+			, first_index(aScript.mExprFuncs.mCount)
 			, line_no(aScript.mCombinedLineNumber) {}
 		~PartialExpression() { free(code); }
 	};
+#define FDE_SUBSTITUTE_STRING L"(\u2026){}"
+#define FDE_SUBSTITUTE_STRING_LENGTH (_countof(FDE_SUBSTITUTE_STRING)-1)
 
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
@@ -2822,6 +2833,7 @@ private:
 	int mLabelCount;
 #endif
 	FuncList mFuncs;
+	FuncList mExprFuncs; // Pending function definition expressions, from within an expression yet to be parsed.
 	
 	VarList mVars; // Sorted list of global variables.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
@@ -2999,7 +3011,7 @@ public:
 	void DeleteTimer(IObject *aCallback);
 	LPTSTR DefaultDialogTitle();
 	UserFunc* CreateHotFunc();
-	ResultType DefineFunc(LPTSTR aBuf, bool aStatic = false, bool aIsInExpression = false);
+	ResultType DefineFunc(LPTSTR aBuf, bool aStatic = false, FuncDefType aIsInExpression = FuncDefNormal);
 #ifndef AUTOHOTKEYSC
 	struct FuncLibrary
 	{
@@ -3013,7 +3025,9 @@ public:
 	Func *FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
 	static Func *GetBuiltInFunc(LPTSTR aFuncName);
 	static Func *GetBuiltInMdFunc(LPTSTR aFuncName);
-	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aClassObject = NULL);
+	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, FuncDefType aIsInExpression = FuncDefNormal, Object *aClassObject = nullptr);
+	Var *AddFuncVar(UserFunc *aFunc);
+	UserFunc *AddFuncToList(UserFunc *aFunc);
 
 	ResultType DefineClass(LPTSTR aBuf);
 	UserFunc *DefineClassInit(bool aStatic);
