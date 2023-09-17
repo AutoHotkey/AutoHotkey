@@ -768,8 +768,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					|| !((UserFunc *)this_token.object)->mInstances)
 				{
 					// target_var definitely isn't a local var of the function being called,
-					// so it's safe to pass as SYM_VAR.
-					this_token.SetVarRef(target_var);
+					// so it's safe to pass as SYM_VAR.  Pass right.var and not target_var,
+					// otherwise GetRef() won't be able to identify the existing VarRef and
+					// may create a new VarRef and a circular reference.
+					this_token.SetVarRef(right.var);
 					goto push_this_token;
 				}
 			}
