@@ -5046,7 +5046,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			break;
 	}
 
-	line.mParentLine = mLineParent;
+	if (!line.mParentLine)
+		line.mParentLine = mLineParent;
 	if (ACT_IS_LINE_PARENT(aActionType))
 	{
 		mLineParent = &line;
