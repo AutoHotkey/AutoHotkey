@@ -2549,6 +2549,8 @@ bool Script::EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker)
 // Returns true if aBuf_marker is the end of an operator, excluding ++ and --.
 {
 	LPTSTR cp = aBuf_marker; // Caller has omitted trailing whitespace.
+	if (*cp == '.') // It's only a meaningful end-of-line operator if preceded by a space; something like "2." should not cause continuation.
+		return cp > aBuf && IS_SPACE_OR_TAB(cp[-1]);
 	if (_tcschr(EXPR_OPERATOR_SYMBOLS, *cp) // It's a binary operator or ++ or --.
 		&& !((*cp == '+' || *cp == '-') && cp > aBuf && cp[-1] == *cp)) // Not ++ or --.
 		return true;
