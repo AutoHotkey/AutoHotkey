@@ -2804,9 +2804,13 @@ private:
 		UserFunc *func = nullptr;
 		LPTSTR code;
 		size_t length;
+		Line *rejoin_first_line = nullptr, *rejoin_last_line = nullptr;
+		LPCTSTR pending_hotkey = nullptr;
 		LineNumberType line_no;
-		PartialExpression(LPTSTR aCode, size_t aLen, Script &aScript)
-			: code(aCode), length(aLen)
+		ActionTypeType action;
+		bool add_block_end_after = false;
+		PartialExpression(LPTSTR aCode, size_t aLen, ActionTypeType aAct, Script &aScript)
+			: code(aCode), length(aLen), action(aAct)
 			, outer(aScript.mExprContainingThisFunc)
 			, line_no(aScript.mCombinedLineNumber) {}
 		~PartialExpression() { free(code); }
@@ -2883,6 +2887,7 @@ private:
 	ResultType ParseFatArrow(LPTSTR aArgText, DerefList &aDeref
 		, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd);
 	ResultType ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd);
+	ResultType ParseAndAddLineInBlock(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID);
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, bool aAllArgsAreExpressions = false);

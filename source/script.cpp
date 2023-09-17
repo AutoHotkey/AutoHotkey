@@ -2047,10 +2047,11 @@ process_completed_line:
 					buf[buf_length] = '\0';
 					// Before adding the line, apply expression line-continuation logic, which hasn't
 					// been applied yet because hotkey labels can contain unbalanced ()[]{}:
-					if (   !GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section)
-						|| !AddLine(ACT_BLOCK_BEGIN)			// Implicit start of function
-						|| !ParseAndAddLine(buf)				// Function body - one line
-						|| !AddLine(ACT_BLOCK_END))				// Implicit end of function
+					if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
+						return FAIL;
+					if (IsFunctionDefinition(buf, next_buf)) // x::y(ThisHotkey){
+						goto process_completed_line;
+					if (!ParseAndAddLineInBlock(buf)) // Function body - one line
 						return FAIL;
 				}
 			}
@@ -2168,10 +2169,44 @@ process_completed_line:
 					tmemmove(buf + expr->length, expr->func->mName, extra); // Insert automatic name, if any.
 					buf_length += expr->length + extra;
 					mCombinedLineNumber = expr->line_no;
-					mExprContainingThisFunc = expr->outer;
-					delete expr;
 					mCurrLine = NULL; // See comments below.
-					goto process_completed_line;
+					mExprContainingThisFunc = expr->outer;
+					if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
+						return FAIL;
+					if (!expr->action && IsFunctionDefinition(buf, next_buf))
+					{
+						if (!DefineFunc(buf))
+							return FAIL;
+					}
+					else
+					{
+						if (  !ParseAndAddLine(buf, expr->action)
+							|| expr->add_block_end_after && !AddLine(ACT_BLOCK_END)  )
+							return FAIL;
+					}
+					if (mExprContainingThisFunc != expr->outer) // fn(a:=fn(){}){}
+					{
+						mExprContainingThisFunc->pending_hotkey = expr->pending_hotkey;
+						mExprContainingThisFunc->rejoin_first_line = expr->rejoin_first_line;
+						mExprContainingThisFunc->rejoin_last_line = expr->rejoin_last_line;
+					}
+					else if (expr->pending_hotkey) // #HotIf fn(){}
+					{
+						mPendingHotkey = expr->pending_hotkey;
+						ASSERT(expr->func->mOuterFunc->mJumpToLine->mActionType == ACT_HOTKEY_IF);
+						expr->func->mOuterFunc->mJumpToLine->mAttribute = g->HotCriterion;
+					}
+					else if (expr->rejoin_first_line) // Used by DefineClassVarInit().
+					{
+						mLastLine->mNextLine = expr->rejoin_first_line;
+						expr->rejoin_first_line->mPrevLine = mLastLine;
+						g->CurrentFunc = nullptr;
+						mLastLine = expr->rejoin_last_line;
+						if (mLastLine->mActionType == ACT_BLOCK_END)
+							mPendingRelatedLine = mLastLine->mParentLine;
+					}
+					delete expr;
+					goto continue_main_loop;
 				}
 			}
 			// Allow the remainder of the line to be treated as a separate line:
@@ -3555,15 +3590,16 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		g->HotCriterion->OriginalExpr = SimpleHeap::Alloc(parameter);
 		
-		if (!AddLine(ACT_BLOCK_BEGIN)
-			|| !ParseAndAddLine(parameter, ACT_HOTKEY_IF) // PreparseExpressions will change this to ACT_RETURN
-			|| !AddLine(ACT_BLOCK_END))
+		if (!ParseAndAddLineInBlock(parameter, ACT_HOTKEY_IF)) // PreparseExpressions will change this to ACT_RETURN
 			return ScriptError(ERR_OUTOFMEM);
 
-		func->mJumpToLine->mAttribute = g->HotCriterion;	// Must be set for PreparseHotkeyIfExpr
-
-		ASSERT(!g->CurrentFunc); // Should be null due to ACT_BLOCK_END and prior checks.
-		mPendingHotkey = pending_hotkey;
+		if (mExprContainingThisFunc)
+			mExprContainingThisFunc->pending_hotkey = pending_hotkey;
+		else
+		{
+			mPendingHotkey = pending_hotkey;
+			func->mJumpToLine->mAttribute = g->HotCriterion; // Must be set for PreparseHotkeyIfExpr
+		}
 		
 		return CONDITION_TRUE;
 	}
@@ -4104,6 +4140,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 		LPTSTR id = open_paren;
 		while (id > aLineText && IS_IDENTIFIER_CHAR(id[-1]))
 			--id;
+		if (id == aLineText && !aActionType)
+		{
+			// This catches any lines *starting with* a function definition that somehow make it here instead of
+			// going to DefineFunc().  Without this, the definition might be called since the preprocessed line
+			// will look like a function call statement.
+			mCurrLine = nullptr;
+			return ScriptError(ERR_UNEXPECTED_DECL, aLineText);
+		}
 		// Save everything up to (but not including) the open parentheses.  When the close brace
 		// is found, anything following it will be appended to this code, effectively forming an
 		// expression which references the function by name.
@@ -4113,7 +4157,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 			return MemoryError();
 		tmemcpy(code, aLineText, len);
 		code[open_paren - aLineText] = '\0';
-		auto expr = new PartialExpression(code, len, *this); // Save the prefix code and some current script state.
+		auto expr = new PartialExpression(code, len, aActionType, *this); // Save the prefix code and some current script state.
 		// Parse the start of the function definition, including the open brace.
 		if (!DefineFunc(id, false, true))
 		{
@@ -5493,21 +5537,14 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 			return FAIL;
 	}
 
-	if (!AddLine(ACT_BLOCK_BEGIN))
-		return FAIL;
-	auto block_begin = mLastLine;
+	auto &func = *g->CurrentFunc;
 
 	for (; aExprEnd > aExpr && IS_SPACE_OR_TAB(aExprEnd[-1]); --aExprEnd);
 	orig_end = *aExprEnd;
 	*aExprEnd = '\0';
-	if (!ParseAndAddLine(aExpr, ACT_RETURN))
+	if (!ParseAndAddLineInBlock(aExpr, ACT_RETURN))
 		return FAIL;
 	*aExprEnd = orig_end;
-
-	auto name = g->CurrentFunc->mName; // Must be done before AddLine(ACT_BLOCK_END).
-
-	if (!AddLine(ACT_BLOCK_END))
-		return FAIL;
 
 	if (*aPrmStart == '(' || *aPrmEnd != ')') // Anonymous function is not yet preceded by a DT_VAR.
 	{
@@ -5522,12 +5559,32 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	fr.type = DT_FUNCREF;
 	fr.marker = aPrmStart; // Mark the entire fat arrow expression as a function deref.
 	fr.length = DerefLengthType(aExprEnd - aPrmStart); // Relies on the fact that an arg can't be longer than the max deref length (because ArgLengthType == DerefLengthType).
-	if (*name)
-		fr.var = FindVar(name, 0); // Find the Var already added by AddFunc().
-	else // No name, so AddFunc() inserted it at position 0.
-		fr.var = g->CurrentFunc ? g->CurrentFunc->mVars.mItem[0] : GlobalVars()->mItem[0];
+	// Find the Var already added by AddFunc(), or inserted at position 0 if anonymous.
+	// Avoid using FindVar() because g->CurrentFunc is not set appropriately if aExpr
+	// contains the start of a function definition expression.
+	auto &vars = func.mOuterFunc ? func.mOuterFunc->mVars : *GlobalVars();
+	fr.var = *func.mName ? vars.Find(func.mName) : vars.mItem[0];
+	ASSERT(fr.var && vars.mCount);
 
 	return OK;
+}
+
+
+ResultType Script::ParseAndAddLineInBlock(LPTSTR aLineText, ActionTypeType aActionType)
+{
+	if (!AddLine(ACT_BLOCK_BEGIN))
+		return FAIL;
+
+	auto expr = mExprContainingThisFunc;
+	if (!ParseAndAddLine(aLineText, aActionType))
+		return FAIL;
+
+	if (mExprContainingThisFunc != expr)
+	{
+		mExprContainingThisFunc->add_block_end_after = true;
+		return OK;
+	}
+	return AddLine(ACT_BLOCK_END);
 }
 
 
@@ -5860,9 +5917,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		param_start = omit_leading_whitespace(param_start + 2);
 		if (!*param_start)
 			return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
-		if (!AddLine(ACT_BLOCK_BEGIN)
-			|| !ParseAndAddLine(param_start, ACT_RETURN)
-			|| !AddLine(ACT_BLOCK_END))
+		if (!ParseAndAddLineInBlock(param_start, ACT_RETURN))
 			return FAIL;
 	}
 	else
@@ -6320,6 +6375,8 @@ ResultType Script::DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject
 	mLastLine = block_end->mPrevLine; // i.e. insert before block_end.
 	mLastLine->mNextLine = nullptr; // For maintainability; AddLine() should overwrite it regardless.
 	mCurrLine = nullptr; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
+	if (init_func->mJumpToLine == block_end) // This can be true only for the first static initializer.
+		mNextLineIsFunctionBody = true;
 
 	Line *prl = mPendingRelatedLine; // This was set by AddLine(ACT_BLOCK_END) if DefineClassInit() was just called.
 	mPendingRelatedLine = nullptr;
@@ -6328,18 +6385,24 @@ ResultType Script::DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject
 	// 3) AddLine will only check for pending labels in g->CurrentFunc (i.e. init_func).
 	if (!ParseAndAddLine(aBuf, aActionType))
 		return FAIL; // Above already displayed the error.
-	mPendingRelatedLine = prl;
-
-	if (init_func->mJumpToLine == block_end) // This can be true only for the first static initializer.
-		init_func->mJumpToLine = mLastLine;
-	// Rejoin the function's block-end (and any lines following it) to the main script.
-	mLastLine->mNextLine = block_end;
-	block_end->mPrevLine = mLastLine;
-	// mFirstLine should be left as it is: if it was NULL, it now contains a pointer to our
-	// __init function's block-begin, which is now the very first executable line in the script.
-	g->CurrentFunc = nullptr;
-	// Restore mLastLine so that any subsequent script lines are added at the correct point.
-	mLastLine = script_last_line;
+	if (mExprContainingThisFunc)
+	{
+		// aBuf contained the start of a function definition expression, so defer the rest.
+		mExprContainingThisFunc->rejoin_first_line = block_end;
+		mExprContainingThisFunc->rejoin_last_line = script_last_line;
+	}
+	else
+	{
+		mPendingRelatedLine = prl;
+		// Rejoin the function's block-end (and any lines following it) to the main script.
+		mLastLine->mNextLine = block_end;
+		block_end->mPrevLine = mLastLine;
+		// mFirstLine should be left as it is: if it was NULL, it now contains a pointer to our
+		// __init function's block-begin, which is now the very first executable line in the script.
+		g->CurrentFunc = nullptr;
+		// Restore mLastLine so that any subsequent script lines are added at the correct point.
+		mLastLine = script_last_line;
+	}
 	return OK;
 }
 
