@@ -2893,7 +2893,7 @@ void DbgStack::GetLocalVars(int aDepth,  VarList *&aVars, VarList *&aStaticVars,
 	DbgStack::Entry *se = mTop - aDepth;
 	for (;;)
 	{
-		if (se <= mBottom)
+		if (se < mBottom)
 			return;
 		if (se->type == DbgStack::SE_UDF)
 			break;
