@@ -4141,6 +4141,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 			mCurrLine = nullptr;
 			return ScriptError(ERR_UNEXPECTED_DECL, aLineText);
 		}
+		if (end_marker) // Action name was parsed from aLineText, so to repeat that we must reset aActionType.
+			aActionType = ACT_INVALID; // Store the original value passed by our caller.
 		// Save everything up to (but not including) the open parentheses.  When the close brace
 		// is found, anything following it will be appended to this code, effectively forming an
 		// expression which references the function by name.
