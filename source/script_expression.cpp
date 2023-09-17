@@ -694,6 +694,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_AND:			// v2: These don't need it either since even numeric strings are considered "true".
 		case SYM_OR:			// right_is_number isn't used at all in these cases since they are handled early.
 		case SYM_OR_MAYBE:		//
+		case SYM_IFF_THEN:		//
 		case SYM_LOWNOT:		//
 		case SYM_HIGHNOT:		//
 		case SYM_REF:
