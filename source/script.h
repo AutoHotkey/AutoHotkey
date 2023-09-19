@@ -421,7 +421,8 @@ enum FuncDefType : UCHAR
 {
 	FuncDefNormal = FALSE,
 	FuncDefFatArrow,
-	FuncDefExpression
+	FuncDefExpression,
+	FuncDefExpressionResolved
 };
 
 __int64 pow_ll(__int64 base, __int64 exp); // integer power function
@@ -2811,14 +2812,14 @@ private:
 		size_t length;
 		Line *rejoin_first_line = nullptr, *rejoin_last_line = nullptr;
 		LPCTSTR pending_hotkey = nullptr;
-		int first_index;
+		int funcs_index;
 		LineNumberType line_no;
 		ActionTypeType action;
 		bool add_block_end_after = false;
 		PartialExpression(LPTSTR aCode, size_t aLen, ActionTypeType aAct, Script &aScript)
 			: code(aCode), length(aLen), action(aAct)
 			, outer(aScript.mExprContainingThisFunc)
-			, first_index(aScript.mExprFuncs.mCount)
+			, funcs_index(aScript.mFuncs.mCount + 1) // +1 to exclude func itself.
 			, line_no(aScript.mCombinedLineNumber) {}
 		~PartialExpression() { free(code); }
 	};
@@ -2831,7 +2832,6 @@ private:
 	int mLabelCount;
 #endif
 	FuncList mFuncs;
-	FuncList mExprFuncs; // Pending function definition expressions, from within an expression yet to be parsed.
 	
 	VarList mVars; // Sorted list of global variables.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
@@ -2840,6 +2840,7 @@ private:
 	Line *mLastParamInitializer;
 	LPCTSTR mPendingHotkey = nullptr; // The name of a hotkey or hotstring awaiting its block/function.
 	PartialExpression *mExprContainingThisFunc = nullptr;
+	int mExprFuncIndex = INT_MAX;
 	SymbolType mDefaultReturn = SYM_STRING;
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mIgnoreNextBlockBegin;

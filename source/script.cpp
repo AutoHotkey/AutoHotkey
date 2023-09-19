@@ -2162,8 +2162,6 @@ process_completed_line:
 					mCombinedLineNumber = expr->line_no;
 					mCurrLine = NULL; // See comments below.
 					mExprContainingThisFunc = expr->outer;
-					if (!mExprFuncs.Insert(expr->func, mExprFuncs.mCount))
-						return FAIL;
 					if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
 						return FAIL;
 					if (!expr->action && IsFunctionDefinition(buf, next_buf))
@@ -5278,15 +5276,16 @@ ResultType Script::ParseOperands(LPTSTR aArgText, DerefList &aDeref, int *aPos, 
 					}
 					else if (!_tcsnicmp(op_begin, FDE_SUBSTITUTE_STRING, FDE_SUBSTITUTE_STRING_LENGTH))
 					{
-						int index = mExprContainingThisFunc ? mExprContainingThisFunc->first_index : 0;
-						if (index >= mExprFuncs.mCount)
-							return ScriptError(ERR_EXPR_SYNTAX, FDE_SUBSTITUTE_STRING);
-						auto func = mExprFuncs.mItem[index];
-						memcpy(mExprFuncs.mItem + index, mExprFuncs.mItem + index + 1, (mExprFuncs.mCount - index) * sizeof(UserFunc*));
-						mExprFuncs.mCount--;
+						// Find the next unresolved FDE at the current nesting level.
+						int &index = mExprContainingThisFunc ? mExprContainingThisFunc->funcs_index : mExprFuncIndex;
+						for (; index < mFuncs.mCount && mFuncs.mItem[index]->mIsFuncExpression != FuncDefExpression; ++index);
+						if (index >= mFuncs.mCount)
+							return ScriptError(ERR_EXPR_SYNTAX, FDE_SUBSTITUTE_STRING); // The source code likely included FDE_SUBSTITUTE_STRING, but it might have been a prior one.
+						auto func = mFuncs.mItem[index++];
+						func->mIsFuncExpression = FuncDefExpressionResolved; // Allow outer functions to skip over this one when looking for their own FDE.
 						func->mOuterFunc = g->CurrentFunc;
 						auto var = AddFuncVar(func);
-						if (!var || !AddFuncToList(func))
+						if (!var)
 							return FAIL;
 
 						DerefType *d = aDeref.count ? aDeref.Last() : nullptr;
@@ -5674,8 +5673,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, FuncDefType aIsInExpres
 	func.mLineNumber = mCombinedLineNumber;
 	func.mFileIndex = mCurrFileIndex;
 #endif
-
-	func.mIsFuncExpression = aIsInExpression;
 
 	if (is_method)
 	{
@@ -6787,11 +6784,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, FuncDefType
 
 	auto the_new_func = new UserFunc(new_name);
 
-	if (aIsInExpression == FuncDefExpression)
-	{
-		the_new_func->mOuterFunc = g->CurrentFunc; // For parsing purposes; may be corrected by ParseOperands.
-		return the_new_func; // Defer the rest until the outer scope can be confirmed.
-	}
+	the_new_func->mIsFuncExpression = aIsInExpression;
 
 	if (aClassObject)
 	{
@@ -6833,7 +6826,8 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, FuncDefType
 		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
 		// and automatic cleanup of objects in static vars on program exit.
 	}
-	else if (*new_name != '<') // i.e. not <Hotkey>
+	else if (*new_name != '<' // i.e. not <Hotkey>
+		&& aIsInExpression != FuncDefExpression) // Defer the following for these.
 	{
 		if (is_static)
 			the_new_func->mIsStatic = true;
@@ -6890,13 +6884,23 @@ UserFunc *Script::AddFuncToList(UserFunc *aFunc)
 {
 	aFunc->mOuterFunc = g->CurrentFunc;
 	
-	// The general rule is that a nested function's namespace includes all of the names that
-	// were in the outer function's namespace by default.  In other words, if the outer function
-	// is assume-global, the nested function should also default to assume-global.
-	if (aFunc->mOuterFunc && aFunc->mOuterFunc->IsAssumeGlobal() && aFunc->mDefaultVarType == VAR_DECLARE_LOCAL)
-		aFunc->mDefaultVarType = VAR_GLOBAL; // Not VAR_DECLARE_GLOBAL, which would prevent referencing of outer vars.
+	// Function definition expressions are parsed before the expression which "contains" them,
+	// which puts the FDE before its outer function in mFuncs, in cases like `outer() => FDE(){`.
+	// To correct that, insert new non-FDE functions before the first unresolved FDE.
+	int &index = mExprContainingThisFunc ? mExprContainingThisFunc->funcs_index : mExprFuncIndex;
+	int new_index = mFuncs.mCount;
+	if (index == INT_MAX && aFunc->mIsFuncExpression == FuncDefExpression)
+		index = new_index;
+	if (aFunc->mIsFuncExpression != FuncDefExpression && index <= new_index) // <= vs < keeps it pointing beyond the end when there aren't any FDEs.
+	{
+		// index might not point to an FDE if functions were defined within a previous FDE,
+		// or if a previous FDE was resolved prior to this definition.  This might not be
+		// necessary, but keeps mFuncs in a sensible order:
+		for (; index < mFuncs.mCount && mFuncs.mItem[index]->mIsFuncExpression != FuncDefExpression; ++index);
+		new_index = index++; // Insert here and increment index so it still points to the same item.
+	}
 
-	if (!mFuncs.Insert(aFunc, mFuncs.mCount))
+	if (!mFuncs.Insert(aFunc, new_index))
 	{
 		ScriptError(ERR_OUTOFMEM);
 		return nullptr;
@@ -7429,6 +7433,16 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
 		UserFunc &func = *aFuncs.mItem[i];
+		
+		// Variables that were assignable in the outer function should also be assignable
+		// in the inner function by default; i.e. assume-global mode should be inherited.
+		// This must be done before assignments are parsed, and can't be done when the
+		// function is first added because a function definition expression's initial value
+		// for mOuterFunc can be incorrect (if it's inside a parameter default initializer
+		// or fat arrow function, although the latter can't use a global declaration).
+		if (func.mOuterFunc && func.mOuterFunc->IsAssumeGlobal() && func.mDefaultVarType == VAR_DECLARE_LOCAL)
+			func.mDefaultVarType = VAR_GLOBAL; // Not VAR_DECLARE_GLOBAL, which would prevent referencing of outer vars.
+
 		g->CurrentFunc = &func;
 		if (!PreparseExpressions(func.mJumpToLine)) // Preparse this function's body.
 			return FAIL;
