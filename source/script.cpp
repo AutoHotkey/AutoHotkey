@@ -2518,6 +2518,8 @@ bool Script::EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker)
 // Returns true if aBuf_marker is the end of an operator, excluding ++ and --.
 {
 	LPTSTR cp = aBuf_marker; // Caller has omitted trailing whitespace.
+	if (*cp == '.') // It's only a meaningful end-of-line operator if preceded by a space; something like "2." should not cause continuation.
+		return cp > aBuf && IS_SPACE_OR_TAB(cp[-1]);
 	if (_tcschr(EXPR_OPERATOR_SYMBOLS, *cp) // It's a binary operator or ++ or --.
 		&& !((*cp == '+' || *cp == '-') && cp > aBuf && cp[-1] == *cp)) // Not ++ or --.
 		return true;
@@ -9175,6 +9177,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					bool is_post_op = (infix_symbol == SYM_POST_INCREMENT || infix_symbol == SYM_POST_DECREMENT);
 					if (   is_post_op
 						|| infix_symbol != SYM_DOT && infix_symbol != SYM_OPAREN // Do not apply the "++" to the "x.y" part of "++x.y.z" (SYM_DOT) or "++x.y.%z%" (SYM_OPAREN).
+							&& infix_symbol != SYM_OBRACKET // or the "x.y" in "x.y[z]", or "x[y]" in "x[y][z]".
 						&& (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)   )
 					{
 						auto get_token = this_postfix;
