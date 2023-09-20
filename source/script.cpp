@@ -9057,6 +9057,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					bool is_post_op = (infix_symbol == SYM_POST_INCREMENT || infix_symbol == SYM_POST_DECREMENT);
 					if (   is_post_op
 						|| infix_symbol != SYM_DOT && infix_symbol != SYM_OPAREN // Do not apply the "++" to the "x.y" part of "++x.y.z" (SYM_DOT) or "++x.y.%z%" (SYM_OPAREN).
+							&& infix_symbol != SYM_OBRACKET // or the "x.y" in "x.y[z]", or "x[y]" in "x[y][z]".
 						&& (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)   )
 					{
 						auto get_token = this_postfix;
