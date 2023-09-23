@@ -2686,6 +2686,7 @@ public:
 
 	void Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent = GUI_EVENT_NONE, UINT_PTR aEventInfo = 0);
 	bool ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR &aRetVal);
+	bool MsgMonitor(UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg, INT_PTR *aRetVal);
 
 	static WORD TextToHotkey(LPCTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);

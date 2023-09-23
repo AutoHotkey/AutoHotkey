@@ -589,10 +589,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			// at the very least, WM_KEYDOWN (VK_ESC) must be intercepted for GuiEscape to work.
 			if (pgui->mControlCount || msg.message != WM_SYSCHAR)
 			{
-				g->CalledByIsDialogMessageOrDispatch = true;
-				g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
+				g_CalledByIsDialogMessageOrDispatch = &msg;
 				msg_was_handled = IsDialogMessage(pgui->mHwnd, &msg); // Pass the dialog HWND, not msg.hwnd, which is often a control.
-				g->CalledByIsDialogMessageOrDispatch = false;
+				g_CalledByIsDialogMessageOrDispatch = nullptr;
 				if (msg_was_handled) // This message was handled by IsDialogMessage() above.
 					continue; // Continue with the main message loop.
 			}
@@ -1441,24 +1440,20 @@ break_out_of_main_switch:
 		{
 			if (IsWindowStandardDialog(fore_window))  // MsgBox, InputBox, FileSelect, DirSelect dialog.
 			{
-				g->CalledByIsDialogMessageOrDispatch = true; // In case there is any way IsDialogMessage() can call one of our own window proc's rather than that of a MsgBox, etc.
-				g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
-				if (IsDialogMessage(fore_window, &msg))  // This message is for it, so let it process it.
-				{
-					g->CalledByIsDialogMessageOrDispatch = false;
+				g_CalledByIsDialogMessageOrDispatch = &msg; // In case there is any way IsDialogMessage() can call one of our own window proc's rather than that of a MsgBox, etc.
+				msg_was_handled = IsDialogMessage(fore_window, &msg);  // This message is for it, so let it process it.
+				g_CalledByIsDialogMessageOrDispatch = nullptr;
+				if (msg_was_handled)
 					continue;  // This message is done, so start a new iteration to get another msg.
-				}
-				g->CalledByIsDialogMessageOrDispatch = false;
 			}
 		}
 		// Translate keyboard input for any of our thread's windows that need it:
 		if (!g_hAccelTable || !TranslateAccelerator(g_hWnd, g_hAccelTable, &msg))
 		{
-			g->CalledByIsDialogMessageOrDispatch = true; // Relies on the fact that the types of messages we dispatch can't result in a recursive call back to this function.
-			g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11. Do it prior to Translate & Dispatch in case either one of them changes the message number (it is already known that IsDialogMessage can change message numbers).
+			g_CalledByIsDialogMessageOrDispatch = &msg;
 			TranslateMessage(&msg);
 			DispatchMessage(&msg); // This is needed to send keyboard input and other messages to various windows and for some WM_TIMERs.
-			g->CalledByIsDialogMessageOrDispatch = false;
+			g_CalledByIsDialogMessageOrDispatch = nullptr;
 		}
 	} // infinite-loop
 }

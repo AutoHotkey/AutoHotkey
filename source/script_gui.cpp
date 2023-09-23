@@ -8211,28 +8211,16 @@ int GuiType::FindFont(FontType &aFont)
 LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
 	// If a message pump other than our own is running -- such as that of a dialog like MsgBox -- it will
-	// dispatch messages directly here.  This is detected by means of g->CalledByIsDialogMessageOrDispatch==false.
+	// dispatch messages directly here.  This is detected by means of !g_CalledByIsDialogMessageOrDispatch.
 	// Such messages need to be checked here because MsgSleep hasn't seen the message and thus hasn't
-	// done the check. The g->CalledByIsDialogMessageOrDispatch method relies on the fact that we never call
-	// MsgSleep here for the types of messages dispatched from MsgSleep, which seems true.  Also, if
-	// we do launch a monitor thread here via MsgMonitor, that means g->CalledByIsDialogMessageOrDispatch==false.
-	// Therefore, any calls to MsgSleep made by the new thread can't corrupt our caller's settings of
-	// g->CalledByIsDialogMessageOrDispatch because in that case, our caller isn't MsgSleep's IsDialog/Dispatch.
-	// As an added precaution against the complexity of these message issues (only one of several such scenarios
-	// is described above), CalledByIsDialogMessageOrDispatch is put into the g-struct rather than being
-	// a normal global.  That way, a thread's calls to MsgSleep can't interfere with the value of
-	// CalledByIsDialogMessageOrDispatch for any threads beneath it.  Although this may technically be
-	// unnecessary, it adds maintainability.
+	// done the check.  The value of g_CalledByIsDialogMessageOrDispatch only needs to be retained between
+	// the IsDialog/DispatchMessage call that dispatches the message and this or a similar check.
+	MSG *pmsg = nullptr;
 	LRESULT msg_reply;
-	if (g->CalledByIsDialogMessageOrDispatch && g->CalledByIsDialogMessageOrDispatchMsg == iMsg)
-		g->CalledByIsDialogMessageOrDispatch = false; // Suppress this one message, not any other messages that could be sent due to recursion.
+	if (g_CalledByIsDialogMessageOrDispatch && g_CalledByIsDialogMessageOrDispatch->message == iMsg)
+		swap(pmsg, g_CalledByIsDialogMessageOrDispatch); // Suppress this one message, not any other messages that could be sent due to recursion.
 	else if (g_MsgMonitor.Count() && MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply)) // Count is checked here to avoid function-call overhead.
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
-	//g->CalledByIsDialogMessageOrDispatch = false; // Now done conditionally above.
-	// Fixed for v1.0.40.01: The above line was added to resolve a case where our caller did make the value
-	// true but the message it sent us results in a recursive call to us (such as when the user resizes a
-	// window by dragging its borders: that apparently starts a loop in DefDlgProc that calls this
-	// function recursively).  This fixes OnMessage(0x24, "WM_GETMINMAXINFO") and probably others.
 	// Known limitation: If the above launched a thread but the thread didn't cause it to return,
 	// and iMsg is something like AHK_GUI_ACTION that will be reposted via PostMessage(), the monitor
 	// will be launched again when MsgSleep is called in conjunction with the repost. Given the rarity
@@ -8251,13 +8239,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 	if (pgui->mEvents.IsMonitoring(iMsg, GUI_EVENTKIND_MESSAGE))
 	{
-		ExprTokenType param[] = { pgui, (__int64)wParam, (__int64)(DWORD_PTR)lParam, (__int64)iMsg };
-		InitNewThread(0, false, true);
-		INT_PTR retval;
-		auto result = pgui->mEvents.Call(param, 4, iMsg, GUI_EVENTKIND_MESSAGE, pgui, &retval);
-		ResumeUnderlyingThread();
-		if (result == EARLY_RETURN)
-			return retval;
+		if (pgui->MsgMonitor(iMsg, wParam, lParam, pmsg, &msg_reply))
+			return msg_reply;
 	}
 
 	switch (iMsg)
@@ -9521,6 +9504,19 @@ bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR 
 	ResumeUnderlyingThread();
 
 	// Consider this notification fully handled only if a non-empty value was returned.
+	return result == EARLY_RETURN;
+}
+
+
+bool GuiType::MsgMonitor(UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg, INT_PTR *aRetVal)
+{
+	ExprTokenType param[] = { this, (__int64)awParam, (__int64)(DWORD_PTR)alParam, (__int64)aMsg };
+	InitNewThread(0, false, true);
+	g_script.mLastPeekTime = GetTickCount();
+	if (apMsg)
+		g->EventInfo = apMsg->time;
+	auto result = this->mEvents.Call(param, 4, aMsg, GUI_EVENTKIND_MESSAGE, this, aRetVal);
+	ResumeUnderlyingThread();
 	return result == EARLY_RETURN;
 }
 

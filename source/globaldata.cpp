@@ -40,6 +40,7 @@ HWND g_hWnd = NULL;
 HWND g_hWndEdit = NULL;
 HFONT g_hFontEdit = NULL;
 HACCEL g_hAccelTable = NULL;
+MSG *g_CalledByIsDialogMessageOrDispatch = nullptr;
 
 WNDPROC g_TabClassProc = NULL;
 

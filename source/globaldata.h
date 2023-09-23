@@ -36,6 +36,7 @@ extern HWND g_hWnd;  // The main window
 extern HWND g_hWndEdit;  // The edit window, child of main.
 extern HFONT g_hFontEdit;
 extern HACCEL g_hAccelTable; // Accelerator table for main menu shortcut keys.
+extern MSG *g_CalledByIsDialogMessageOrDispatch; // Helps avoid launching a monitor function twice for the same message.
 
 typedef int (WINAPI *StrCmpLogicalW_type)(LPCWSTR, LPCWSTR);
 extern StrCmpLogicalW_type g_StrCmpLogicalW;

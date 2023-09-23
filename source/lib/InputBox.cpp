@@ -135,8 +135,8 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 {
 	// See GuiWindowProc() for details about this first part:
 	LRESULT msg_reply;
-	if (g->CalledByIsDialogMessageOrDispatch && g->CalledByIsDialogMessageOrDispatchMsg == uMsg)
-		g->CalledByIsDialogMessageOrDispatch = false;
+	if (g_CalledByIsDialogMessageOrDispatch && g_CalledByIsDialogMessageOrDispatch->message == uMsg)
+		g_CalledByIsDialogMessageOrDispatch = nullptr;
 	else if (g_MsgMonitor.Count() && MsgMonitor(hWndDlg, uMsg, wParam, lParam, NULL, msg_reply))
 		return (BOOL)msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
 
