@@ -2468,7 +2468,8 @@ FResult GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	{
 		if (mon)
 			handlers.Delete(mon);
-		ApplyEventStyles(aControl, aEvent, false);
+		if (aEventKind == GUI_EVENTKIND_EVENT)
+			ApplyEventStyles(aControl, aEvent, false);
 		return OK;
 	}
 	bool append = aMaxThreads >= 0;
@@ -2518,7 +2519,8 @@ FResult GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	mon->instance_count = 0;
 	mon->max_instances = aMaxThreads;
 	mon->msg_type = aEventKind;
-	ApplyEventStyles(aControl, aEvent, true);
+	if (aEventKind == GUI_EVENTKIND_EVENT)
+		ApplyEventStyles(aControl, aEvent, true);
 	return OK;
 }
 
