@@ -449,6 +449,16 @@ bif_impl void SetStoreCapsLockMode(BOOL aMode, BOOL &aRetVal)
 	g->StoreCapslockMode = aMode;
 }
 
+BIV_DECL_R(BIV_KeybdHookInstalled)
+{
+	_f_return_i((g_KeybdHook ? 1 : 0) | (SystemHasAnotherKeybdHook() ? 2 : 0));
+}
+
+BIV_DECL_R(BIV_MouseHookInstalled)
+{
+	_f_return_i((g_MouseHook ? 1 : 0) | (SystemHasAnotherMouseHook() ? 2 : 0));
+}
+
 BIV_DECL_R(BIV_Hotkey)
 {
 	if (aVarName[2] == 'M') // A_MaxHotkeysPerInterval
