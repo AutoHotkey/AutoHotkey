@@ -2844,6 +2844,15 @@ BOOL MsgMonitorList::IsMonitoring(UINT aMsg, UCHAR aMsgType)
 }
 
 
+BOOL MsgMonitorList::IsMonitoringGuiMsg()
+{
+	for (int i = 0; i < mCount; ++i)
+		if (mMonitor[i].msg_type == GUI_EVENTKIND_MESSAGE)
+			return TRUE;
+	return FALSE;
+}
+
+
 BOOL MsgMonitorList::IsRunning(UINT aMsg, UCHAR aMsgType)
 // Returns true if there are any monitors for a message currently executing.
 {

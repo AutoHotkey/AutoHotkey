@@ -552,6 +552,7 @@ ObjectMemberMd GuiControlType::sMembers[] =
 	md_member(GuiControlType, Move, CALL, (In_Opt, Int32, X), (In_Opt, Int32, Y), (In_Opt, Int32, Width), (In_Opt, Int32, Height)),
 	md_member(GuiControlType, OnCommand, CALL, (In, Int32, NotifyCode), (In, Variant, Callback), (In_Opt, Int32, AddRemove)),
 	md_member(GuiControlType, OnEvent, CALL, (In, String, EventName), (In, Variant, Callback), (In_Opt, Int32, AddRemove)),
+	md_member(GuiControlType, OnMessage, CALL, (In, UInt32, Number), (In, Variant, Callback), (In_Opt, Int32, AddRemove)),
 	md_member(GuiControlType, OnNotify, CALL, (In, Int32, NotifyCode), (In, Variant, Callback), (In_Opt, Int32, AddRemove)),
 	md_member(GuiControlType, Opt, CALL, (In, String, Options)),
 	md_member(GuiControlType, Redraw, CALL, md_arg_none),
@@ -732,6 +733,13 @@ FResult GuiControlType::OnEvent(StrArg aEventName, ExprTokenType &aCallback, opt
 	if (!event_code || !SupportsEvent(event_code))
 		return FR_E_ARG(0);
 	return gui->OnEvent(this, event_code, GUI_EVENTKIND_EVENT, aCallback, aAddRemove);
+}
+
+
+FResult GuiControlType::OnMessage(UINT aNumber, ExprTokenType &aCallback, optl<int> aAddRemove)
+{
+	CTRL_THROW_IF_DESTROYED;
+	return gui->OnEvent(this, aNumber, GUI_EVENTKIND_MESSAGE, aCallback, aAddRemove);
 }
 
 
@@ -2470,6 +2478,8 @@ FResult GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 			handlers.Delete(mon);
 		if (aEventKind == GUI_EVENTKIND_EVENT)
 			ApplyEventStyles(aControl, aEvent, false);
+		else if (aEventKind == GUI_EVENTKIND_MESSAGE && aControl)
+			ApplySubclassing(aControl);
 		return OK;
 	}
 	bool append = aMaxThreads >= 0;
@@ -2521,6 +2531,8 @@ FResult GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	mon->msg_type = aEventKind;
 	if (aEventKind == GUI_EVENTKIND_EVENT)
 		ApplyEventStyles(aControl, aEvent, true);
+	else if (aEventKind == GUI_EVENTKIND_MESSAGE && aControl)
+		ApplySubclassing(aControl);
 	return OK;
 }
 
@@ -2598,6 +2610,15 @@ void GuiType::ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdde
 		current_style ^= style_bit; // Toggle it.
 		SetWindowLong(hwnd, style_type, current_style);
 	}
+}
+
+
+void GuiType::ApplySubclassing(GuiControlType *aControl)
+{
+	if (aControl->events.IsMonitoringGuiMsg())
+		SetWindowSubclass(aControl->hwnd, ControlWindowProc, (UINT_PTR)aControl, 0);
+	else
+		RemoveWindowSubclass(aControl->hwnd, ControlWindowProc, (UINT_PTR)aControl);
 }
 
 
@@ -8241,7 +8262,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 	if (pgui->mEvents.IsMonitoring(iMsg, GUI_EVENTKIND_MESSAGE))
 	{
-		if (pgui->MsgMonitor(iMsg, wParam, lParam, pmsg, &msg_reply))
+		if (pgui->MsgMonitor(nullptr, iMsg, wParam, lParam, pmsg, &msg_reply))
 			return msg_reply;
 	}
 
@@ -9167,6 +9188,26 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 
 
+LRESULT CALLBACK ControlWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+	if (iMsg == WM_NCDESTROY)
+		RemoveWindowSubclass(hWnd, ControlWindowProc, uIdSubclass);
+
+	MSG *pmsg = nullptr;
+	if (g_CalledByIsDialogMessageOrDispatch && g_CalledByIsDialogMessageOrDispatch->message == iMsg)
+		swap(pmsg, g_CalledByIsDialogMessageOrDispatch);
+
+	LRESULT msg_reply;
+	auto &control = *(GuiControlType*)uIdSubclass;
+	if (control.events.IsMonitoring(iMsg, GUI_EVENTKIND_MESSAGE)
+		&& control.gui->MsgMonitor(&control, iMsg, wParam, lParam, pmsg, &msg_reply))
+		return msg_reply;
+
+	return DefSubclassProc(hWnd, iMsg, wParam, lParam);
+}
+
+
+
 LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
 	// Variables are kept separate up here for future expansion of this function (to handle
@@ -9510,14 +9551,15 @@ bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR 
 }
 
 
-bool GuiType::MsgMonitor(UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg, INT_PTR *aRetVal)
+bool GuiType::MsgMonitor(GuiControlType *aControl, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg, INT_PTR *aRetVal)
 {
 	ExprTokenType param[] = { this, (__int64)awParam, (__int64)(DWORD_PTR)alParam, (__int64)aMsg };
 	InitNewThread(0, false, true);
 	g_script.mLastPeekTime = GetTickCount();
 	if (apMsg)
 		g->EventInfo = apMsg->time;
-	auto result = this->mEvents.Call(param, 4, aMsg, GUI_EVENTKIND_MESSAGE, this, aRetVal);
+	auto &events = aControl ? aControl->events : this->mEvents;
+	auto result = events.Call(param, 4, aMsg, GUI_EVENTKIND_MESSAGE, this, aRetVal);
 	ResumeUnderlyingThread();
 	return result == EARLY_RETURN;
 }
