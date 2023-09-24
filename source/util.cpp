@@ -1479,12 +1479,18 @@ bool DoesFilePatternExist(LPCTSTR aFilePattern, DWORD *aFileAttr, DWORD aRequire
 		// Skip . and .., which appear to always be listed first (for dir\* and dir\*.*).
 		while (wfd.cFileName[0] == '.' && (!wfd.cFileName[1] || wfd.cFileName[1] == '.' && !wfd.cFileName[2]))
 			if (!FindNextFile(hFile, &wfd))
+			{
+				FindClose(hFile);
 				return false;
+			}
 		if (aRequiredAttr) // Caller wants to check for a file/folder with specific attributes.
 		{
 			while ((wfd.dwFileAttributes & aRequiredAttr) != aRequiredAttr)
 				if (!FindNextFile(hFile, &wfd))
+				{
+					FindClose(hFile);
 					return false;
+				}
 			// Since above didn't return, a file/folder with the required attribute was found.
 		}
 		FindClose(hFile);
