@@ -916,15 +916,9 @@ FResult GuiControlType::CB_SetCue(StrArg aCueText)
 	return SendMessage(hwnd, CB_SETCUEBANNER, 0, (LPARAM)aCueText) ? OK : FR_E_FAILED;
 }
 
-FResult GuiControlType::Edit_SetCue(StrArg aCueText, optl<BOOL> aActivate)
+FResult GuiControlType::Edit_SetCue(StrArg aCueText, optl<BOOL> aShowWhenFocused)
 {
-	LONG style = GetWindowLong(hwnd, GWL_STYLE);
-	if (!(style & ES_MULTILINE)) // cue banner cannot be set on multiline edit controls
-	{
-		BOOL whole_match = aActivate.value_or(FALSE);
-		return SendMessage(hwnd, EM_SETCUEBANNER, whole_match, (LPARAM)aCueText) ? OK : FR_E_FAILED;
-	}
-	return NULL;
+	return SendMessage(hwnd, EM_SETCUEBANNER, aShowWhenFocused.value_or(FALSE), (LPARAM)aCueText) ? OK : FR_E_FAILED;
 }
 
 FResult GuiControlType::Tab_UseTab(ExprTokenType *aTab, optl<BOOL> aExact)
