@@ -6401,7 +6401,10 @@ ResultType Script::DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject
 	mLastLine->mNextLine = nullptr; // For maintainability; AddLine() should overwrite it regardless.
 	mCurrLine = nullptr; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
 	if (init_func->mJumpToLine == block_end) // This can be true only for the first static initializer.
+	{
+		init_func->mJumpToLine = nullptr; // Without this, a fat arrow function in aBuf would fail to reset mNextLineIsFunctionBody = true.
 		mNextLineIsFunctionBody = true;
+	}
 
 	Line *prl = mPendingRelatedLine; // This was set by AddLine(ACT_BLOCK_END) if DefineClassInit() was just called.
 	mPendingRelatedLine = nullptr;
