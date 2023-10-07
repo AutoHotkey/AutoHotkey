@@ -8282,7 +8282,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 	if (pgui->mEvents.IsMonitoring(iMsg, GUI_EVENTKIND_MESSAGE))
 	{
-		if (pgui->MsgMonitor(nullptr, iMsg, wParam, lParam, pmsg, &msg_reply))
+		if (pgui->MsgMonitor(nullptr, iMsg, wParam, lParam, pmsg, (INT_PTR*)&msg_reply))
 			return msg_reply;
 	}
 
@@ -9217,7 +9217,7 @@ LRESULT CALLBACK ControlWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM l
 	if (g_CalledByIsDialogMessageOrDispatch && g_CalledByIsDialogMessageOrDispatch->message == iMsg)
 		swap(pmsg, g_CalledByIsDialogMessageOrDispatch);
 
-	LRESULT msg_reply;
+	INT_PTR msg_reply;
 	auto &control = *(GuiControlType*)uIdSubclass;
 	if (control.events.IsMonitoring(iMsg, GUI_EVENTKIND_MESSAGE)
 		&& control.gui->MsgMonitor(&control, iMsg, wParam, lParam, pmsg, &msg_reply))
