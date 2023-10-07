@@ -667,15 +667,20 @@ void GuiControlType::DefineControlClasses()
 		int how_many = 0;
 		switch (i)
 		{
-		case GUI_CONTROL_TAB: more_items = sMembersTab; how_many = _countof(sMembersTab); // Fall through:
-		case GUI_CONTROL_COMBOBOX: more_items = sMembersCB; how_many = _countof(sMembersCB);
-		case GUI_CONTROL_DROPDOWNLIST:
-		case GUI_CONTROL_LISTBOX: base_proto = sPrototypeList; base_class = list_class; break;
+		case GUI_CONTROL_TAB: more_items = sMembersTab; how_many = _countof(sMembersTab); break;
+		case GUI_CONTROL_COMBOBOX: more_items = sMembersCB; how_many = _countof(sMembersCB); break;
 		case GUI_CONTROL_DATETIME: more_items = sMembersDate; how_many = _countof(sMembersDate); break;
 		case GUI_CONTROL_EDIT: more_items = sMembersEdit; how_many = _countof(sMembersEdit); break;
 		case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
 		case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
 		case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
+		}
+		switch (i)
+		{
+		case GUI_CONTROL_TAB:
+		case GUI_CONTROL_COMBOBOX:
+		case GUI_CONTROL_DROPDOWNLIST:
+		case GUI_CONTROL_LISTBOX: base_proto = sPrototypeList; base_class = list_class; break;
 		}
 		TCHAR buf[32];
 		_sntprintf(buf, 32, _T("Gui.%s"), sTypeNames[i]);
