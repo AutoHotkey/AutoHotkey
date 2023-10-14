@@ -252,7 +252,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_VAR_UNSET _T("This variable has not been assigned a value.")
 #define WARNING_ALWAYS_UNSET_VARIABLE _T("This variable appears to never be assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
-#define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed; see #NoEnv.")
+#define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed.")
 #define WARNING_CLASS_OVERWRITE _T("Class may be overwritten.")
 
 //----------------------------------------------------------------------------------
