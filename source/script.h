@@ -1606,8 +1606,6 @@ public:
 		// outermost function call of a line consisting only of function calls, namely ACT_EXPRESSION)
 		// would not be significant because the Return command's expression (arg1) must still be evaluated
 		// in case it calls any functions that have side-effects, e.g. "return LogThisError()".
-		auto prev_func = g->CurrentFunc; // This will be non-NULL when a function is called from inside another function.
-		g->CurrentFunc = this;
 		// Although a GOTO that jumps to a position outside of the function's body could be supported,
 		// it seems best not to for these reasons:
 		// 1) The extreme rarity of a legitimate desire to intentionally do so.
@@ -1654,10 +1652,6 @@ public:
 			result = OK; // Function results should be OK, FAIL or EARLY_EXIT.
 		}
 
-		// Restore the original value in case this function is called from inside another function.
-		// Due to the synchronous nature of recursion and recursion-collapse, this should keep
-		// g->CurrentFunc accurate, even amidst the asynchronous saving and restoring of "g" itself:
-		g->CurrentFunc = prev_func;
 		return result;
 	}
 

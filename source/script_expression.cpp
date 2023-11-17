@@ -2075,6 +2075,9 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 
 		DEBUGGER_STACK_PUSH(&recurse)
 
+		auto prev_func = g->CurrentFunc; // This will be non-NULL when a function is called from inside another function.
+		g->CurrentFunc = this;
+
 		ResultType result = OK;
 		// Execute any default initializers that weren't simple constants.  This is not done in
 		// the loop above for two reasons:
@@ -2096,6 +2099,11 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 
 		if (result == OK)
 			result = Execute(&aResultToken); // Execute the body of the function.
+
+		// Restore the original value in case this function is called from inside another function.
+		// Due to the synchronous nature of recursion and recursion-collapse, this should keep
+		// g->CurrentFunc accurate, even amidst the asynchronous saving and restoring of "g" itself:
+		g->CurrentFunc = prev_func;
 
 		DEBUGGER_STACK_POP()
 		
