@@ -2565,9 +2565,9 @@ bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR ch[], int char_count, HWND 
 
 	if (g_HSBufLength)
 	{
-		TCHAR *cphs, *cpbuf, *cpcase_start, *cpcase_end;
-		int case_capable_characters;
-		bool first_char_with_case_is_upper, first_char_with_case_has_gone_by;
+		TCHAR *cphs, *cpbuf, *cpcase_start, *cpcase_end, *first_char_with_case;
+		bool first_char_with_case_is_upper;
+		int case_capable_characters, skip_chars;
 		CaseConformModes case_conform_mode;
 
 		// Searching through the hot strings in the original, physical order is the documented
@@ -2646,6 +2646,7 @@ bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR ch[], int char_count, HWND 
 			// not be returning to our caller in a timely fashion, which would case the OS to
 			// think the hook is unresponsive, which in turn would cause it to timeout and
 			// route the key through anyway (testing confirms this).
+			first_char_with_case = nullptr;
 			if (!hs.mConformToCase)
 				case_conform_mode = CASE_CONFORM_NONE;
 			else
@@ -2657,16 +2658,15 @@ bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR ch[], int char_count, HWND 
 					--cpcase_end;
 				// Bug-fix for v1.0.19: First find out how many of the characters in the abbreviation
 				// have upper and lowercase versions (i.e. exclude digits, punctuation, etc):
-				for (case_capable_characters = 0, first_char_with_case_is_upper = first_char_with_case_has_gone_by = false
+				for (case_capable_characters = 0, first_char_with_case_is_upper = false
 					, cpcase_start = cpcase_end - hs.mStringLength
 					; cpcase_start < cpcase_end; ++cpcase_start)
 					if (IsCharLower(*cpcase_start) || IsCharUpper(*cpcase_start)) // A case-capable char.
 					{
-						if (!first_char_with_case_has_gone_by)
+						if (!first_char_with_case)
 						{
-							first_char_with_case_has_gone_by = true;
-							if (IsCharUpper(*cpcase_start))
-								first_char_with_case_is_upper = true; // Override default.
+							first_char_with_case = cpcase_start;
+							first_char_with_case_is_upper = IsCharUpper(*cpcase_start);
 						}
 						++case_capable_characters;
 					}
@@ -2721,6 +2721,31 @@ bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR ch[], int char_count, HWND 
 				suppress_hotstring_final_char = true;
 			}
 
+			skip_chars = 0;
+			if (hs.mReplacement)
+			{
+				++cpbuf; // Point it back at the first character.
+				int len = hs.mStringLength - suppress_hotstring_final_char;
+				// Determine how many characters at the start of cpbuf match the replacement text
+				// (taking into account case-conversion), and therefore don't need to be replaced.
+				while (skip_chars < len)
+				{
+					TCHAR c = hs.mReplacement[skip_chars];
+					if (cpbuf[skip_chars] != c)
+					{
+						if (cpbuf[skip_chars] != ltoupper(c))
+							break;
+						// Char differs only by case; is it supposed to be uppercased due to case_conform_mode?
+						if ( !(case_conform_mode == CASE_CONFORM_ALL_CAPS
+							|| case_conform_mode == CASE_CONFORM_FIRST_CAP && cpbuf + skip_chars == first_char_with_case) )
+							break;
+					}
+					skip_chars++;	
+				}
+				if (case_conform_mode == CASE_CONFORM_FIRST_CAP && cpbuf + skip_chars > first_char_with_case)
+					case_conform_mode = CASE_CONFORM_NONE;
+			}
+
 			// Post the message rather than sending it, because Send would need
 			// SendMessageTimeout(), which is undesirable because the whole point of
 			// making this hook thread separate from the main thread is to have it be
@@ -2746,7 +2771,7 @@ bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR ch[], int char_count, HWND 
 				hs.mEndCharRequired  // v1.0.48.04: Fixed to omit "&& hs.mDoBackspace" so that A_EndChar is set properly even for option "B0" (no backspacing).
 					? g_HSBuf[g_HSBufLength - 1]  // Used by A_EndChar and Hotstring::DoReplace().
 					: 0
-				, case_conform_mode);
+				, MAKEWORD(case_conform_mode, skip_chars));
 
 			// Clean up.
 			// The keystrokes to be sent by the other thread upon receiving the message prepared above

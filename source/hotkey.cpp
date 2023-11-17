@@ -2277,12 +2277,13 @@ void Hotstring::DoReplace(LPARAM alParam)
 	TCHAR SendBuf[LINE_SIZE + MAX_HOTSTRING_LENGTH + 10];
 	*SendBuf = '\0';
 	LPTSTR start_of_replacement = SendBuf;  // Set default.
+	int skip_chars = HIBYTE(HIWORD(alParam));
 
 	if (mDoBackspace)
 	{
-		int backspace_count = mStringLength;
+		int backspace_count = mStringLength - skip_chars;
 #ifdef UNICODE
-		for (LPCTSTR cp = mString; *cp; ++cp)
+		for (LPCTSTR cp = mString + skip_chars; *cp; ++cp)
 			if (IS_SURROGATE_PAIR(cp[0], cp[1]))
 				++cp, --backspace_count; // Treat this surrogate pair as a single character (which it is).
 #endif
@@ -2300,8 +2301,8 @@ void Hotstring::DoReplace(LPARAM alParam)
 
 	if (mReplacement)
 	{
-		_tcscpy(start_of_replacement, mReplacement);
-		CaseConformModes case_conform_mode = (CaseConformModes)HIWORD(alParam);
+		_tcscpy(start_of_replacement, mReplacement + skip_chars);
+		CaseConformModes case_conform_mode = (CaseConformModes)LOBYTE(HIWORD(alParam));
 		if (case_conform_mode == CASE_CONFORM_ALL_CAPS)
 			CharUpper(start_of_replacement);
 		else if (case_conform_mode == CASE_CONFORM_FIRST_CAP)
