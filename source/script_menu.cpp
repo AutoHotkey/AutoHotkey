@@ -1245,6 +1245,15 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 			//...
 		}
 	}
+	// This works around an issue observed on Windows 10, where the menu doesn't respond to
+	// keyboard input if none of the script's windows have previously received input:
+	static bool sAppliedWorkaround = false;
+	if (!sAppliedWorkaround)
+	{
+		sAppliedWorkaround = true;
+		PostMessage(change_fore ? g_hWnd : fore_win, WM_KEYUP, 0, 0);
+		SLEEP_WITHOUT_INTERRUPTION(-1);
+	}
 	// Apparently, the HWND parameter of TrackPopupMenuEx() can be g_hWnd even if one of the script's
 	// other (non-main) windows is foreground. The menu still seems to operate correctly.
 	g_MenuIsVisible = MENU_TYPE_POPUP; // It seems this is also set by WM_ENTERMENULOOP because apparently, TrackPopupMenuEx generates WM_ENTERMENULOOP. So it's done here just for added safety in case WM_ENTERMENULOOP isn't ALWAYS generated.
