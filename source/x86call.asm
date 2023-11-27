@@ -26,17 +26,17 @@ DynaCall proc cargs:dword, pargs:dword, pfn:dword, opt:dword
 over:
     call pfn
     
-	ret
+    ret
 DynaCall endp
 
 GetFloatRetval proc
-	; Nothing is actually done here - we just declare the appropriate return type in C++.
-	ret
+    ; Nothing is actually done here - we just declare the appropriate return type in C++.
+    ret
 GetFloatRetval endp
 
 GetDoubleRetval proc
-	; See above.
-	ret
+    ; See above.
+    ret
 GetDoubleRetval endp
 
 end
