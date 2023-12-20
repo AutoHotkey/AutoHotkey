@@ -5562,7 +5562,11 @@ ResultType GuiType::ControlParseOptions(LPCTSTR aOptions, GuiControlOptionsType 
 			if (!_tcsicmp(option + 6, _T("Hdr"))) // Prevents the header from being clickable like a set of buttons.
 				if (adding) aOpt.style_add |= LVS_NOSORTHEADER; else aOpt.style_remove |= LVS_NOSORTHEADER; // Testing shows it can't be changed after the control is created.
 			else // Header is still clickable (unless above is *also* specified), but has no automatic sorting.
+			{
 				aOpt.listview_no_auto_sort = adding;
+				if (aControl.union_lv_attrib)
+					aControl.union_lv_attrib->no_auto_sort = adding;
+			}
 		}
 		else if (aControl.type == GUI_CONTROL_LISTVIEW && !_tcsicmp(option, _T("Grid")))
 			if (adding) aOpt.listview_style |= LVS_EX_GRIDLINES; else aOpt.listview_style &= ~LVS_EX_GRIDLINES;
