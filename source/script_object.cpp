@@ -2723,11 +2723,12 @@ bool FreeVars::FullyReleased(ULONG aRefPendingRelease)
 	--mRefCount; // Now that delete is certain, make this non-zero to prevent reentry.
 	if (circular_closures)
 	{
-		// All closures in downvars have mRefCount == 0, meaning their only reference is the
-		// uncounted one in mVar[].  In order to free the object properly, mRefCount needs to
-		// be restored to 1 prior to Release(), which will be called by Var::Free().
+		// Any closure which is in a downvar and is not also an upvar (i.e. it is defined in this function,
+		// not an outer one) has mRefCount == 0 at this point, meaning its only reference is the uncounted
+		// one in mVar[].  In order to free the object properly, mRefCount needs to be restored to 1 prior
+		// to Release(), which will be called by Var::Free() via ~FreeVars().
 		for (int i = 0; i < mVarCount; ++i)
-			if (mVar[i].Type() == VAR_CONSTANT)
+			if (mVar[i].IsDirectConstant())
 			{
 				auto obj = (ObjectBase *)mVar[i].Object();
 				obj->AddRef();
