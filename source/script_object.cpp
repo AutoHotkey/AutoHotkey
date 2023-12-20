@@ -178,7 +178,7 @@ Object *Object::CloneTo(Object &obj)
 {
 	// Allocate space in destination object.
 	auto field_count = mFields.Length();
-	if (!obj.SetInternalCapacity(field_count))
+	if (field_count && !obj.SetInternalCapacity(field_count))
 	{
 		obj.Release();
 		return NULL;
