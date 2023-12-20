@@ -4230,6 +4230,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTS
 				style = (style & ~(DTS_SHORTDATECENTURYFORMAT | DTS_TIMEFORMAT)) | DTS_LONGDATEFORMAT; // Purify.
 			else if (!_tcsicmp(aText, _T("Time")))
 				style = (style & ~(DTS_SHORTDATECENTURYFORMAT | DTS_LONGDATEFORMAT)) | DTS_TIMEFORMAT;  // Purify.
+			else if (!_tcsicmp(aText, _T("ShortDate")))
+				style = (style & ~(DTS_SHORTDATECENTURYFORMAT | DTS_LONGDATEFORMAT)) | DTS_SHORTDATEFORMAT;
 			else // Custom format. Don't purify (to retain the underlying default in case custom format is ever removed).
 				use_custom_format = true;
 		}
