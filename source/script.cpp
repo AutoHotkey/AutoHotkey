@@ -1559,7 +1559,7 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 		// to support automatic "include once" behavior.  So just ignore repeats:
 		if (!aAllowDuplicateInclude)
 			for (int f = 0; f < source_file_index; ++f) // Here, source_file_index==Line::sSourceFileCount
-				if (!lstrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (testing shows that "Ä" == "ä" in the NTFS, which is hopefully how lstrcmpi works regardless of locale).
+				if (!ostrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (e.g. "Ä" == "ä" in the NTFS).
 					return OK;
 		// The path is copied into persistent memory further below, after the file has been opened,
 		// in case the opening fails and aIgnoreLoadFailure==true.  Initialize for the check below.

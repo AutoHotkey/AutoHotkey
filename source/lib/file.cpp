@@ -531,7 +531,7 @@ static bool FileInstallCopy(LPCTSTR aSource, LPCTSTR aDest, bool aOverwrite)
 	SetCurrentDirectory(g_script.mFileDir);
 	GetFullPathName(aSource, _countof(source_path), source_path, NULL);
 	SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
-	if (!lstrcmpi(source_path, dest_path) // Full paths are equal.
+	if (!ostrcmpi(source_path, dest_path) // Full paths are equal.
 		&& !(GetFileAttributes(source_path) & FILE_ATTRIBUTE_DIRECTORY)) // Source file exists and is not a directory (otherwise, an error should be thrown).
 		return true;
 
