@@ -1559,7 +1559,7 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 		// to support automatic "include once" behavior.  So just ignore repeats:
 		if (!aAllowDuplicateInclude)
 			for (int f = 0; f < source_file_index; ++f) // Here, source_file_index==Line::sSourceFileCount
-				if (!lstrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (testing shows that "Ä" == "ä" in the NTFS, which is hopefully how lstrcmpi works regardless of locale).
+				if (!ostrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (e.g. "Ä" == "ä" in the NTFS).
 					return OK;
 		// The path is copied into persistent memory further below, after the file has been opened,
 		// in case the opening fails and aIgnoreLoadFailure==true.  Initialize for the check below.
@@ -6622,17 +6622,11 @@ void Script::IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErr
 			// Since above didn't "continue", a file exists whose name matches that of the requested function.
 			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
 
-			// g->CurrentFunc is non-NULL when the function-call being resolved is inside
-			// a function.  Save and reset it for correct behaviour in the include file:
-			auto current_func = g->CurrentFunc;
-			g->CurrentFunc = NULL;
-
 			// Fix for v1.1.06.00: If the file contains any lib #includes, it must be loaded AFTER the
 			// above writes sLib[i].path to the iLib file, otherwise the wrong filename could be written.
 			if (!LoadIncludedFile(sLib[i].path, false, false)) // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
 				aErrorWasShown = true; // Above has just displayed its error (e.g. syntax error in a line, failed to open the include file, etc).  So override the default set earlier.
 			
-			g->CurrentFunc = current_func; // Restore.
 			return; // A file was found, so look no further.
 		} // for() each library directory.
 

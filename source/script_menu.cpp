@@ -1244,6 +1244,15 @@ ResultType UserMenu::Display(int aX, int aY, optl<BOOL> aWait)
 		EndMenu();
 		MsgSleep(-1);
 	}
+	// This works around an issue observed on Windows 10, where the menu doesn't respond to
+	// keyboard input if none of the script's windows have previously received input:
+	static bool sAppliedWorkaround = false;
+	if (!sAppliedWorkaround)
+	{
+		sAppliedWorkaround = true;
+		PostMessage(change_fore ? g_hWnd : fore_win, WM_KEYUP, 0, 0);
+		SLEEP_WITHOUT_INTERRUPTION(-1);
+	}
 	MENUINFO mi;
 	mi.cbSize = sizeof(mi);
 	mi.fMask = MIM_STYLE;

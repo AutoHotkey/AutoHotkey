@@ -550,6 +550,11 @@ public:
 		return mType == VAR_ALIAS;
 	}
 
+	bool IsDirectConstant() // Is a constant and not an alias (i.e. downvar/upvar) for a constant.
+	{
+		return mType == VAR_CONSTANT;
+	}
+
 	// Convert VAR_NORMAL to VAR_CONSTANT.
 	void MakeReadOnly()
 	{

@@ -595,6 +595,10 @@ int FTOA(double aValue, LPTSTR aBuf, int aBufSize);
 // returns 0 on failure, but failure occurs only when parameter/flag is invalid, which should never happen in
 // this case.
 #define lstrcmpni(str1, len1, str2, len2) (CompareString(LOCALE_USER_DEFAULT, NORM_IGNORECASE, str1, (int)(len1), str2, (int)(len2)) - 2) // -2 for maintainability
+// Compare string using the operating system uppercasing table, independent of locale but treating non-ASCII
+// letters such as è and È as equivalent.  Documentation indicates it will be consistent with NTFS file names.
+#define ostrcmpni(str1, len1, str2, len2) (CompareStringOrdinal(str1, (int)(len1), str2, (int)(len2), TRUE) - 2) // -2 for maintainability
+#define ostrcmpi(str1, str2) (ostrcmpni(str1, -1, str2, -1))
 
 
 // The following macros simplify and make consistent the calls to MultiByteToWideChar().
