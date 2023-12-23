@@ -10240,17 +10240,10 @@ int GuiType::FindTabIndexByName(GuiControlType &aTabControl, LPTSTR aName, bool 
 	{
 		if (TabCtrl_GetItem(aTabControl.hwnd, i, &tci))
 		{
-			if (aExactMatch)
-			{
-				if (!_tcsicmp(tci.pszText, aName))  // Match found.
-					return i;
-			}
-			else
-			{
+			if (!aExactMatch)
 				tci.pszText[aName_length] = '\0'; // Facilitates checking of only the leading part like strncmp(). Buffer overflow is impossible due to a check higher above.
-				if (!lstrcmpi(tci.pszText, aName)) // Match found.
-					return i;
-			}
+			if (!_tcsicmp(tci.pszText, aName))  // Match found.
+				return i;
 		}
 	}
 
