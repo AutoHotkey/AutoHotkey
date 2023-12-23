@@ -492,7 +492,7 @@ UserMenuItem *UserMenu::FindItem(LPCTSTR aNameOrPos, UserMenuItem *&aPrevItem, b
 		; menu_item
 		; menu_item_prev = menu_item, menu_item = menu_item->mNextMenuItem, ++current_index)
 		if (current_index == index_to_find // Found by index.
-			|| !lstrcmpi(menu_item->mName, aNameOrPos)) // Found by case-insensitive text match.
+			|| !_tcsicmp(menu_item->mName, aNameOrPos)) // Found by case-insensitive text match.
 			break;
 	aPrevItem = menu_item_prev;
 	return menu_item;
