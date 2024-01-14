@@ -1275,10 +1275,19 @@ bif_impl FResult StatusBarWait(optl<StrArg> aText, optl<double> aTimeout, optl<i
 	return OK;
 }
 
-
+void SendMessageCallbackProc(HWND hWnd, UINT uMsg, ULONG_PTR dwData, LRESULT result) {
+	IObject* aFunc = (IObject*)dwData;
+	__int64 number_to_return;
+	ExprTokenType* param;
+	int param_count = 3;
+	param = (ExprTokenType*)_alloca(param_count * sizeof(ExprTokenType));
+	param[0].SetValue((UINT_PTR)hWnd); param[1].SetValue(uMsg); param[2].SetValue(result);
+	CallMethod(aFunc, aFunc, nullptr, param, param_count);
+	aFunc->Release();
+}
 
 static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType *aLParam
-	, CONTROL_PARAMETERS_DECL_OPT, optl<int> aTimeout = nullptr, UINT_PTR *aSendRetVal = nullptr)
+	, CONTROL_PARAMETERS_DECL_OPT, ExprTokenType* aTimeout = nullptr, UINT_PTR *aSendRetVal = nullptr)
 {
 	bool successful = false;
 
@@ -1323,9 +1332,22 @@ static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType 
 		}
 	}
 
-	DWORD_PTR dwResult;
+	DWORD_PTR dwResult = 0;
 	if (aSendRetVal)
-		successful = SendMessageTimeout(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, aTimeout.value_or(5000), &dwResult);
+	{
+		if (aTimeout && aTimeout->symbol == SYM_OBJECT)
+		{
+			IObject* aFunc = TokenToObject(*aTimeout);
+			auto fr = ValidateFunctor(aFunc, 3);
+			if (fr != OK)
+				return fr;
+			successful = SendMessageCallback(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], (SENDASYNCPROC)&SendMessageCallbackProc, (ULONG_PTR)aFunc);
+			if (successful)
+				aFunc->AddRef(); // potential memory leak if the callback function is never called
+		}
+		else
+			successful = SendMessageTimeout(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, aTimeout ? aTimeout->value_int64 : 5000, &dwResult);
+	}
 	else
 		successful = PostMessage(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1]);
 
@@ -1342,7 +1364,7 @@ static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType 
 }
 
 bif_impl FResult ScriptSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType *aLParam
-	, CONTROL_PARAMETERS_DECL_OPT, optl<int> aTimeout, UINT_PTR &aRetVal)
+	, CONTROL_PARAMETERS_DECL_OPT, ExprTokenType *aTimeout, UINT_PTR &aRetVal)
 {
 	return PostSendMessage(aMsg, aWParam, aLParam, CONTROL_PARAMETERS, aTimeout, &aRetVal);
 }

@@ -246,7 +246,7 @@ md_func_v(SendInput, (In, String, Keys))
 md_func(SendLevel, (In, Int32, Level), (Ret, Int32, RetVal))
 
 #undef SendMessage
-md_func_x(SendMessage, ScriptSendMessage, FResult, (In, UInt32, Msg), (In_Opt, Variant, wParam), (In_Opt, Variant, lParam), MD_CONTROL_ARGS_OPT, (In_Opt, Int32, Timeout), (Ret, UIntPtr, RetVal))
+md_func_x(SendMessage, ScriptSendMessage, FResult, (In, UInt32, Msg), (In_Opt, Variant, wParam), (In_Opt, Variant, lParam), MD_CONTROL_ARGS_OPT, (In_Opt, Variant, Timeout), (Ret, UIntPtr, RetVal))
 
 md_func(SendMode, (In, String, Mode), (Ret, Variant, RetVal))
 md_func_v(SendPlay, (In, String, Keys))
