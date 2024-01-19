@@ -9330,7 +9330,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					// be ternary with an object literal, and it currently works that way.
 					// If this is ever changed, it should probably require this_postfix >= chain_end
 					// when `?` is used in the sense of "omit the parameter".
-					if (  !(mActionType == ACT_RETURN || mActionType == ACT_EXPRESSION || mActionType == ACT_ASSIGNEXPR)  )
+					if (  !(mActionType == ACT_RETURN || mActionType == ACT_EXPRESSION || mActionType == ACT_ASSIGNEXPR || mActionType == ACT_STATIC)  )
 						return LineError(_T("This statement's parameters cannot be unset."), FAIL, this_postfix->error_reporting_marker);
 				}
 			}

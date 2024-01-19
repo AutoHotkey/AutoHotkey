@@ -1348,7 +1348,7 @@ push_this_token:
 	// there was more than one token on the stack even for the final function call, or maybe other unforeseen ways.
 	// It seems best to avoid any chance of looking at the result since it might be invalid due to the above
 	// having taken shortcuts (since it knew the result would be discarded).
-	if (mActionType == ACT_EXPRESSION)   // A stand-alone expression whose end result doesn't matter.
+	if (mActionType == ACT_EXPRESSION || mActionType == ACT_STATIC)   // A stand-alone expression whose end result doesn't matter.
 		goto normal_end_skip_output_var; // Can't be any output_var for this action type. Also, leave result_to_return at its default of "".
 
 	if (output_var)
