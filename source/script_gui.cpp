@@ -480,10 +480,12 @@ FResult GuiType::set_Name(StrArg aName)
 
 void GuiType::MethodGetPos(int *aX, int *aY, int *aWidth, int *aHeight, RECT &aPos, HWND aOrigin)
 {
-	MapWindowPoints(aOrigin, mOwner, (LPPOINT)&aPos, 2);
+	// Make coords relative to mOwner (like Move/Show) only if it is the parent window.
+	// This call is also necessary for GetClientPos (which passes mHwnd for aOrigin).
+	MapWindowPoints(aOrigin, (mStyle & WS_CHILD) ? mOwner : NULL, (LPPOINT)&aPos, 2);
 	
-	if (aX)			*aX = Unscale(aPos.left);
-	if (aY)			*aY = Unscale(aPos.top);
+	if (aX)			*aX = aPos.left;
+	if (aY)			*aY = aPos.top;
 	if (aWidth)		*aWidth = Unscale(aPos.right - aPos.left);
 	if (aHeight)	*aHeight = Unscale(aPos.bottom - aPos.top);
 }
