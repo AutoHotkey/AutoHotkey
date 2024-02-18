@@ -185,6 +185,7 @@ VarEntry g_BIV_A[] =
 	A_w(FileEncoding),
 	A_wx(HotkeyInterval, BIV_Hotkey, BIV_Hotkey_Set),
 	A_wx(HotkeyModifierTimeout, BIV_Hotkey, BIV_Hotkey_Set),
+	A_w(HotstringRecognizer),
 	A_x(Hour, BIV_DateTime),
 	A_(IconFile),
 	A_w(IconHidden),

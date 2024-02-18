@@ -489,6 +489,23 @@ BIV_DECL_W(BIV_Hotkey_Set)
 		g_HotkeyModifierTimeout = value;
 }
 
+BIV_DECL_R(BIV_HotstringRecognizer)
+{
+	wcscpy(_f_retval_buf, g_HSBuf);
+	_f_return_p(_f_retval_buf, g_HSBufLength);
+}
+
+BIV_DECL_W(BIV_HotstringRecognizer_Set)
+{
+	auto value = BivRValueToString();
+	auto size = wcslen(value);
+	if (size > (HS_BUF_SIZE - 1)) // Avoid overflow
+		_f_throw_value(ERR_INVALID_LENGTH);
+	wcscpy(g_HSBuf, value);
+	g_HSBufLength = size;
+	g_HShwnd = GetForegroundWindow(); // Also reset active window
+}
+
 BIV_DECL_R(BIV_MenuMaskKey)
 {
 	if (!g_MenuMaskKeyVK && !g_MenuMaskKeySC)

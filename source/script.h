@@ -3168,6 +3168,7 @@ BIV_DECL_RW(BIV_SendMode);
 BIV_DECL_RW(BIV_SendLevel);
 BIV_DECL_RW(BIV_StoreCapsLockMode);
 BIV_DECL_RW(BIV_Hotkey);
+BIV_DECL_RW(BIV_HotstringRecognizer);
 BIV_DECL_R (BIV_KeybdHookInstalled);
 BIV_DECL_R (BIV_MouseHookInstalled);
 BIV_DECL_RW(BIV_MenuMaskKey);
