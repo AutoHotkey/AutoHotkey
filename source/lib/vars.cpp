@@ -498,10 +498,10 @@ BIV_DECL_R(BIV_HotstringRecognizer)
 BIV_DECL_W(BIV_HotstringRecognizer_Set)
 {
 	auto value = BivRValueToString();
-	auto size = wcslen(value);
-	if (size > (HS_BUF_SIZE - 1)) // Avoid overflow
-		_f_throw_value(ERR_INVALID_LENGTH);
-	wcscpy(g_HSBuf, value);
+	auto len = wcslen(value);
+	auto size = min(len, HS_BUF_SIZE - 1); // Avoid overflow
+	wcsncpy(g_HSBuf, &value[len-size], size);
+	g_HSBuf[size] = '\0';
 	g_HSBufLength = size;
 	g_HShwnd = GetForegroundWindow(); // Also reset active window
 }
