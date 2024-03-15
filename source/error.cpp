@@ -160,7 +160,11 @@ ResultType Line::SetThrownToken(global_struct &g, ResultToken *aToken, ResultTyp
 BIF_DECL(BIF_Throw)
 {
 	if (!aParamCount || aParam[aParamCount - 1]->symbol == SYM_MISSING)
+	{
+		if (g->ExcptMode & EXCPTMODE_CAUGHT) // Re-throw.
+			_f_return_FAIL;
 		_f_throw(ERR_EXCEPTION);
+	}
 	auto &param = *aParam[aParamCount - 1];
 	ResultToken* token = new ResultToken;
 	token->mem_to_free = nullptr;
