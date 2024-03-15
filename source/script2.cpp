@@ -1325,7 +1325,8 @@ VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 bif_impl FResult MouseGetPos(int *aX, int *aY, ResultToken *aParent, ResultToken *aChild, optl<int> aFlag)
 {
 	POINT point;
-	GetCursorPos(&point);  // Realistically, can't fail?
+	if (GetCursorPos(&point))  // fails when locked or sleeping
+		return GetLastError();
 
 	POINT origin = {0};
 	CoordToScreen(origin, COORD_MODE_MOUSE);
