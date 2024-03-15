@@ -352,7 +352,8 @@ void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
 		}
 		break;
 	case 'p': if (!_tcsicmp(buf, _T("Ptr")))	{ aDynaParam.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64); return; } break;
-	case 's': if (!_tcsicmp(buf, _T("Str")))	{ aDynaParam.type = DLL_ARG_STR; return; }
+	case 's': if (!_tcsicmp(buf, _T("Str"))
+				&& !aDynaParam.is_unsigned)		{ aDynaParam.type = DLL_ARG_STR; return; }
 			  if (!_tcsicmp(buf, _T("Short")))	{ aDynaParam.type = DLL_ARG_SHORT; return; } break;
 	case 'd': if (!_tcsicmp(buf, _T("Double")))	{ aDynaParam.type = DLL_ARG_DOUBLE; return; } break;
 	case 'f': if (!_tcsicmp(buf, _T("Float")))	{ aDynaParam.type = DLL_ARG_FLOAT; return; } break;

@@ -10971,8 +10971,12 @@ bool Line::EvaluateLoopUntil(ResultType &aResult)
 	aResult = ExpandArgs();
 	if (aResult != OK)
 		return true; // i.e. if it fails, break the loop.
-	aResult = LOOP_BREAK; // Break out of any recursive PerformLoopXxx() calls.
-	return ResultToBOOL(ARG1); // See PerformLoopWhile() above for comments about this line.
+	if (ResultToBOOL(ARG1))
+	{
+		aResult = LOOP_BREAK; // Break out of any recursive PerformLoopXxx() calls.
+		return true;
+	}
+	return false;
 }
 
 

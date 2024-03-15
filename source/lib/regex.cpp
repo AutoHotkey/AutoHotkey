@@ -335,6 +335,7 @@ int RegExCallout(pcret_callout_block *cb)
 	}
 	
 	g->EventInfo = EventInfo_saved;
+	match_object->Release();
 
 	// Behaviour of return values is defined by PCRE.
 	return (int)number_to_return;
