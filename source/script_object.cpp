@@ -1819,7 +1819,7 @@ ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 	}
 	if (auto si = proto->GetStructInfo()) // Typed properties are defined.
 	{
-		if (!mData)
+		if (!mData && si->size)
 		{
 			if (FAILED(AllocDataPtr(si->size)))
 				return aResultToken.MemoryError();
