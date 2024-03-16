@@ -1326,7 +1326,7 @@ bif_impl FResult MouseGetPos(int *aX, int *aY, ResultToken *aParent, ResultToken
 {
 	POINT point;
 	if (GetCursorPos(&point))  // fails when locked or sleeping
-		return GetLastError();
+		return FR_E_WIN32;
 
 	POINT origin = {0};
 	CoordToScreen(origin, COORD_MODE_MOUSE);
