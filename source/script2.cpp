@@ -1325,7 +1325,7 @@ VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 bif_impl FResult MouseGetPos(int *aX, int *aY, ResultToken *aParent, ResultToken *aChild, optl<int> aFlag)
 {
 	POINT point;
-	if (GetCursorPos(&point))  // fails when locked or sleeping
+	if (!GetCursorPos(&point))  // fails when locked or sleeping
 		return FR_E_WIN32;
 
 	POINT origin = {0};
