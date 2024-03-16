@@ -537,7 +537,13 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	if (!aKeyUp) // Set defaults for this down event.
 	{
 		this_key.hotkey_down_was_suppressed = false;
-		this_key.hotkey_to_fire_upon_release = HOTKEY_ID_INVALID;
+		// Don't do the following because key-repeat should not prevent a previously-selected
+		// key-up hotkey from executing (although it can still be overridden by selecting a
+		// different key-up hotkey below).  If this was done, a key-down hotkey which puts a
+		// modifier into effect would not allow the corresponding key-up to execute unless the
+		// key is released prior to key-repeat, or the key-up hotkey explicitly allows it
+		// (which would defeat the purpose of hotkey_to_fire_upon_release).
+		//this_key.hotkey_to_fire_upon_release = HOTKEY_ID_INVALID;
 		// Don't do the following because of the keyboard key-repeat feature.  In other words,
 		// the NO_SUPPRESS_NEXT_UP_EVENT should stay pending even in the face of consecutive
 		// down-events.  Even if it's possible for the flag to never be cleared due to never
