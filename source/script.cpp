@@ -282,6 +282,8 @@ Script::Script()
 		// Since other applications and the user should see any changes the program makes to the clipboard,
 		// don't write-cache it either.
 		clipboard_var->DisableCache();
+	if (Var *clipboard_var = FindOrAddVar(_T("A_Clipboard"))) // Fix for v1.1.37.02.  Alias added in v1.1.35.
+		clipboard_var->DisableCache();
 
 #ifdef _DEBUG
 	if (ID_FILE_EXIT < ID_MAIN_FIRST) // Not a very thorough check.
