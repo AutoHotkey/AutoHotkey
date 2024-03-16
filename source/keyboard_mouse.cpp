@@ -1877,7 +1877,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 			}
 			// The following is done to avoid an extraneous artificial {LCtrl Up} later on,
 			// since the keyboard driver should insert one in response to this {RAlt Up}:
-			if (target_layout_has_altgr && aSC == SC_RALT)
+			if (target_layout_has_altgr == CONDITION_TRUE && aSC == SC_RALT)
 				sEventModifiersLR &= ~MOD_LCONTROL;
 
 			if (do_key_history)
