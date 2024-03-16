@@ -1755,8 +1755,8 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		sPrevEventType = aEventType;
 		sPrevVK = aVK;
 
-		ResultType target_layout_has_altgr = caller_is_keybd_hook ? LayoutHasAltGr(GetFocusedKeybdLayout())
-			: sTargetLayoutHasAltGr;
+		bool target_layout_has_altgr = (caller_is_keybd_hook ? LayoutHasAltGr(GetFocusedKeybdLayout())
+			: sTargetLayoutHasAltGr) == CONDITION_TRUE; // i.e. not CONDITION_FALSE (which is nonzero) or FAIL (zero).
 		bool hookable_altgr = aVK == VK_RMENU && target_layout_has_altgr && !put_event_into_array && g_KeybdHook;
 
 		// Calculated only once for performance (and avoided entirely if not needed):
