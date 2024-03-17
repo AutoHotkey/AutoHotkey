@@ -131,7 +131,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_WARNING_FOOTER _T("For more details, read the documentation for #Warn.")
 #define ERR_UNRECOGNIZED_ACTION _T("This line does not contain a recognized action.")
 #define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
-#define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (IfWin).")
+#define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (HotIf).")
 #define ERR_NONEXISTENT_HOTSTRING _T("Nonexistent hotstring.")
 #define ERR_INVALID_HOTKEY _T("Invalid hotkey.")
 #define ERR_INVALID_KEYNAME _T("Invalid key name.")
