@@ -6,7 +6,7 @@
 and semantics are as close as possible to those of the Perl 5 language.
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2012 University of Cambridge
+           Copyright (c) 1997-2014 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -38,8 +38,8 @@ POSSIBILITY OF SUCH DAMAGE.
 */
 
 
-/* This module contains an internal function that is used to match an extended
-class. It is used by both pcre_exec() and pcre_def_exec(). */
+/* This module contains internal functions for comparing and finding the length
+of strings for different data item sizes. */
 
 
 #ifdef HAVE_CONFIG_H
@@ -54,7 +54,7 @@ class. It is used by both pcre_exec() and pcre_def_exec(). */
 *           Compare string utilities             *
 *************************************************/
 
-/* The following two functions compares two strings. Basically an strcmp
+/* The following two functions compares two strings. Basically a strcmp
 for non 8 bit characters.
 
 Arguments:
@@ -81,6 +81,27 @@ while (*str1 != '\0' || *str2 != '\0')
 return 0;
 }
 
+#ifdef COMPILE_PCRE32
+
+int
+PRIV(strcmp_uc_uc_utf)(const pcre_uchar *str1, const pcre_uchar *str2)
+{
+pcre_uchar c1;
+pcre_uchar c2;
+
+while (*str1 != '\0' || *str2 != '\0')
+  {
+  c1 = UCHAR21INC(str1);
+  c2 = UCHAR21INC(str2);
+  if (c1 != c2)
+    return ((c1 > c2) << 1) - 1;
+  }
+/* Both length and characters must be equal. */
+return 0;
+}
+
+#endif /* COMPILE_PCRE32 */
+
 int
 PRIV(strcmp_uc_c8)(const pcre_uchar *str1, const char *str2)
 {
@@ -98,6 +119,28 @@ while (*str1 != '\0' || *ustr2 != '\0')
 /* Both length and characters must be equal. */
 return 0;
 }
+
+#ifdef COMPILE_PCRE32
+
+int
+PRIV(strcmp_uc_c8_utf)(const pcre_uchar *str1, const char *str2)
+{
+const pcre_uint8 *ustr2 = (pcre_uint8 *)str2;
+pcre_uchar c1;
+pcre_uchar c2;
+
+while (*str1 != '\0' || *ustr2 != '\0')
+  {
+  c1 = UCHAR21INC(str1);
+  c2 = (pcre_uchar)*ustr2++;
+  if (c1 != c2)
+    return ((c1 > c2) << 1) - 1;
+  }
+/* Both length and characters must be equal. */
+return 0;
+}
+
+#endif /* COMPILE_PCRE32 */
 
 /* The following two functions compares two, fixed length
 strings. Basically an strncmp for non 8 bit characters.
@@ -163,6 +206,6 @@ while (*str++ != 0)
 return len;
 }
 
-#endif /* COMPILE_PCRE8 */
+#endif /* !COMPILE_PCRE8 */
 
 /* End of pcre_string_utils.c */

@@ -7,7 +7,7 @@ and semantics are as close as possible to those of the Perl 5 language (but see
 below for why this module is different).
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2012 University of Cambridge
+           Copyright (c) 1997-2017 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -38,10 +38,9 @@ POSSIBILITY OF SUCH DAMAGE.
 -----------------------------------------------------------------------------
 */
 
-
 /* This module contains the external function pcre_dfa_exec(), which is an
 alternative matching function that uses a sort of DFA algorithm (not a true
-FSM). This is NOT Perl- compatible, but it has advantages in certain
+FSM). This is NOT Perl-compatible, but it has advantages in certain
 applications. */
 
 
@@ -121,7 +120,7 @@ static const pcre_uint8 coptable[] = {
   0, 0,                          /* \P, \p                                 */
   0, 0, 0, 0, 0,                 /* \R, \H, \h, \V, \v                     */
   0,                             /* \X                                     */
-  0, 0, 0, 0, 0, 0,              /* \Z, \z, ^, ^M, $, $M                   */
+  0, 0, 0, 0, 0, 0,              /* \Z, \z, $, $M, ^, ^M                   */
   1,                             /* Char                                   */
   1,                             /* Chari                                  */
   1,                             /* not                                    */
@@ -152,11 +151,14 @@ static const pcre_uint8 coptable[] = {
   /* Character class & ref repeats                                         */
   0, 0, 0, 0, 0, 0,              /* *, *?, +, +?, ?, ??                    */
   0, 0,                          /* CRRANGE, CRMINRANGE                    */
+  0, 0, 0, 0,                    /* Possessive *+, ++, ?+, CRPOSRANGE      */
   0,                             /* CLASS                                  */
   0,                             /* NCLASS                                 */
   0,                             /* XCLASS - variable length               */
   0,                             /* REF                                    */
   0,                             /* REFI                                   */
+  0,                             /* DNREF                                  */
+  0,                             /* DNREFI                                 */
   0,                             /* RECURSE                                */
   0,                             /* CALLOUT                                */
   0,                             /* Alt                                    */
@@ -172,8 +174,8 @@ static const pcre_uint8 coptable[] = {
   0, 0,                          /* ONCE, ONCE_NC                          */
   0, 0, 0, 0, 0,                 /* BRA, BRAPOS, CBRA, CBRAPOS, COND       */
   0, 0, 0, 0, 0,                 /* SBRA, SBRAPOS, SCBRA, SCBRAPOS, SCOND  */
-  0, 0,                          /* CREF, NCREF                            */
-  0, 0,                          /* RREF, NRREF                            */
+  0, 0,                          /* CREF, DNCREF                           */
+  0, 0,                          /* RREF, DNRREF                           */
   0,                             /* DEF                                    */
   0, 0, 0,                       /* BRAZERO, BRAMINZERO, BRAPOSZERO        */
   0, 0, 0,                       /* MARK, PRUNE, PRUNE_ARG                 */
@@ -195,7 +197,7 @@ static const pcre_uint8 poptable[] = {
   1, 1,                          /* \P, \p                                 */
   1, 1, 1, 1, 1,                 /* \R, \H, \h, \V, \v                     */
   1,                             /* \X                                     */
-  0, 0, 0, 0, 0, 0,              /* \Z, \z, ^, ^M, $, $M                   */
+  0, 0, 0, 0, 0, 0,              /* \Z, \z, $, $M, ^, ^M                   */
   1,                             /* Char                                   */
   1,                             /* Chari                                  */
   1,                             /* not                                    */
@@ -221,11 +223,14 @@ static const pcre_uint8 poptable[] = {
   /* Character class & ref repeats                                         */
   1, 1, 1, 1, 1, 1,              /* *, *?, +, +?, ?, ??                    */
   1, 1,                          /* CRRANGE, CRMINRANGE                    */
+  1, 1, 1, 1,                    /* Possessive *+, ++, ?+, CRPOSRANGE      */
   1,                             /* CLASS                                  */
   1,                             /* NCLASS                                 */
   1,                             /* XCLASS - variable length               */
   0,                             /* REF                                    */
   0,                             /* REFI                                   */
+  0,                             /* DNREF                                  */
+  0,                             /* DNREFI                                 */
   0,                             /* RECURSE                                */
   0,                             /* CALLOUT                                */
   0,                             /* Alt                                    */
@@ -241,8 +246,8 @@ static const pcre_uint8 poptable[] = {
   0, 0,                          /* ONCE, ONCE_NC                          */
   0, 0, 0, 0, 0,                 /* BRA, BRAPOS, CBRA, CBRAPOS, COND       */
   0, 0, 0, 0, 0,                 /* SBRA, SBRAPOS, SCBRA, SCBRAPOS, SCOND  */
-  0, 0,                          /* CREF, NCREF                            */
-  0, 0,                          /* RREF, NRREF                            */
+  0, 0,                          /* CREF, DNCREF                           */
+  0, 0,                          /* RREF, DNRREF                           */
   0,                             /* DEF                                    */
   0, 0, 0,                       /* BRAZERO, BRAMINZERO, BRAPOSZERO        */
   0, 0, 0,                       /* MARK, PRUNE, PRUNE_ARG                 */
@@ -282,7 +287,7 @@ typedef struct stateblock {
   int data;                       /* Some use extra data */
 } stateblock;
 
-#define INTS_PER_STATEBLOCK  (sizeof(stateblock)/sizeof(int))
+#define INTS_PER_STATEBLOCK  (int)(sizeof(stateblock)/sizeof(int))
 
 
 #ifdef PCRE_DEBUG
@@ -303,13 +308,13 @@ Returns:       nothing
 static void
 pchars(const pcre_uchar *p, int length, FILE *f)
 {
-int c;
+pcre_uint32 c;
 while (length-- > 0)
   {
   if (isprint(c = *(p++)))
     fprintf(f, "%c", c);
   else
-    fprintf(f, "\\x%02x", c);
+    fprintf(f, "\\x{%02x}", c);
   }
 }
 #endif
@@ -382,7 +387,8 @@ for the current character, one for the following character). */
     next_new_state->count  = (y); \
     next_new_state->data   = (z); \
     next_new_state++; \
-    DPRINTF(("%.*sADD_NEW_DATA(%d,%d,%d)\n", rlevel*2-2, SP, (x), (y), (z))); \
+    DPRINTF(("%.*sADD_NEW_DATA(%d,%d,%d) line %d\n", rlevel*2-2, SP, \
+      (x), (y), (z), __LINE__)); \
     } \
   else return PCRE_ERROR_DFA_WSSIZE
 
@@ -423,6 +429,8 @@ BOOL utf = (md->poptions & PCRE_UTF8) != 0;
 #else
 BOOL utf = FALSE;
 #endif
+
+BOOL reset_could_continue = FALSE;
 
 rlevel++;
 offsetcount &= (-2);
@@ -569,9 +577,11 @@ for (;;)
   {
   int i, j;
   int clen, dlen;
-  unsigned int c, d;
+  pcre_uint32 c, d;
   int forced_fail = 0;
-  BOOL could_continue = FALSE;
+  BOOL partial_newline = FALSE;
+  BOOL could_continue = reset_could_continue;
+  reset_could_continue = FALSE;
 
   /* Make the new state list into the active state list and empty the
   new state list. */
@@ -607,11 +617,12 @@ for (;;)
 
   if (ptr < end_subject)
     {
-    clen = 1;        /* Number of bytes in the character */
+    clen = 1;        /* Number of data items in the character */
 #ifdef SUPPORT_UTF
-    if (utf) { GETCHARLEN(c, ptr, clen); } else
-#endif  /* SUPPORT_UTF */
+    GETCHARLENTEST(c, ptr, clen);
+#else
     c = *ptr;
+#endif  /* SUPPORT_UTF */
     }
   else
     {
@@ -630,7 +641,8 @@ for (;;)
     BOOL caseless = FALSE;
     const pcre_uchar *code;
     int state_offset = current_state->offset;
-    int count, codevalue, rrc;
+    int codevalue, rrc;
+    int count;
 
 #ifdef PCRE_DEBUG
     printf ("%.*sProcessing state %d c=", rlevel*2-2, SP, state_offset);
@@ -641,7 +653,8 @@ for (;;)
 
     /* A negative offset is a special case meaning "hold off going to this
     (negated) state until the number of characters in the data field have
-    been skipped". */
+    been skipped". If the could_continue flag was passed over from a previous
+    state, arrange for it to passed on. */
 
     if (state_offset < 0)
       {
@@ -650,6 +663,7 @@ for (;;)
         DPRINTF(("%.*sSkipping this character\n", rlevel*2-2, SP));
         ADD_NEW_DATA(state_offset, current_state->count,
           current_state->data - 1);
+        if (could_continue) reset_could_continue = TRUE;
         continue;
         }
       else
@@ -689,10 +703,10 @@ for (;;)
     permitted.
 
     We also use this mechanism for opcodes such as OP_TYPEPLUS that take an
-    argument that is not a data character - but is always one byte long. We
-    have to take special action to deal with  \P, \p, \H, \h, \V, \v and \X in
-    this case. To keep the other cases fast, convert these ones to new opcodes.
-    */
+    argument that is not a data character - but is always one byte long because
+    the values are small. We have to take special action to deal with  \P, \p,
+    \H, \h, \V, \v and \X in this case. To keep the other cases fast, convert
+    these ones to new opcodes. */
 
     if (coptable[codevalue] > 0)
       {
@@ -783,7 +797,7 @@ for (;;)
             offsets[0] = (int)(current_subject - start_subject);
             offsets[1] = (int)(ptr - start_subject);
             DPRINTF(("%.*sSet matched string = \"%.*s\"\n", rlevel*2-2, SP,
-              offsets[1] - offsets[0], current_subject));
+              offsets[1] - offsets[0], (char *)current_subject));
             }
           if ((md->moptions & PCRE_DFA_SHORTEST) != 0)
             {
@@ -888,7 +902,20 @@ for (;;)
       /*-----------------------------------------------------------------*/
       case OP_ANY:
       if (clen > 0 && !IS_NEWLINE(ptr))
-        { ADD_NEW(state_offset + 1, 0); }
+        {
+        if (ptr + 1 >= md->end_subject &&
+            (md->moptions & (PCRE_PARTIAL_HARD)) != 0 &&
+            NLBLOCK->nltype == NLTYPE_FIXED &&
+            NLBLOCK->nllen == 2 &&
+            c == NLBLOCK->nl[0])
+          {
+          could_continue = partial_newline = TRUE;
+          }
+        else
+          {
+          ADD_NEW(state_offset + 1, 0);
+          }
+        }
       break;
 
       /*-----------------------------------------------------------------*/
@@ -916,6 +943,19 @@ for (;;)
                (ptr == end_subject - md->nllen)
             ))
           { ADD_ACTIVE(state_offset + 1, 0); }
+        else if (ptr + 1 >= md->end_subject &&
+                 (md->moptions & (PCRE_PARTIAL_HARD|PCRE_PARTIAL_SOFT)) != 0 &&
+                 NLBLOCK->nltype == NLTYPE_FIXED &&
+                 NLBLOCK->nllen == 2 &&
+                 c == NLBLOCK->nl[0])
+          {
+          if ((md->moptions & PCRE_PARTIAL_HARD) != 0)
+            {
+            reset_could_continue = TRUE;
+            ADD_NEW_DATA(-(state_offset + 1), 0, 1);
+            }
+          else could_continue = partial_newline = TRUE;
+          }
         }
       break;
 
@@ -928,6 +968,19 @@ for (;;)
         else if (clen == 0 ||
             ((md->poptions & PCRE_DOLLAR_ENDONLY) == 0 && IS_NEWLINE(ptr)))
           { ADD_ACTIVE(state_offset + 1, 0); }
+        else if (ptr + 1 >= md->end_subject &&
+                 (md->moptions & (PCRE_PARTIAL_HARD|PCRE_PARTIAL_SOFT)) != 0 &&
+                 NLBLOCK->nltype == NLTYPE_FIXED &&
+                 NLBLOCK->nllen == 2 &&
+                 c == NLBLOCK->nl[0])
+          {
+          if ((md->moptions & PCRE_PARTIAL_HARD) != 0)
+            {
+            reset_could_continue = TRUE;
+            ADD_NEW_DATA(-(state_offset + 1), 0, 1);
+            }
+          else could_continue = partial_newline = TRUE;
+          }
         }
       else if (IS_NEWLINE(ptr))
         { ADD_ACTIVE(state_offset + 1, 0); }
@@ -962,7 +1015,7 @@ for (;;)
           {
           const pcre_uchar *temp = ptr - 1;
           if (temp < md->start_used_ptr) md->start_used_ptr = temp;
-#ifdef SUPPORT_UTF
+#if defined SUPPORT_UTF && !defined COMPILE_PCRE32
           if (utf) { BACKCHAR(temp); }
 #endif
           GETCHARTEST(d, temp);
@@ -1015,6 +1068,7 @@ for (;;)
       if (clen > 0)
         {
         BOOL OK;
+        const pcre_uint32 *cp;
         const ucd_record * prop = GET_UCD(c);
         switch(code[1])
           {
@@ -1046,21 +1100,44 @@ for (;;)
                PRIV(ucp_gentype)[prop->chartype] == ucp_N;
           break;
 
-          case PT_SPACE:    /* Perl space */
-          OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z ||
-               c == CHAR_HT || c == CHAR_NL || c == CHAR_FF || c == CHAR_CR;
-          break;
+          /* Perl space used to exclude VT, but from Perl 5.18 it is included,
+          which means that Perl space and POSIX space are now identical. PCRE
+          was changed at release 8.34. */
 
+          case PT_SPACE:    /* Perl space */
           case PT_PXSPACE:  /* POSIX space */
-          OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z ||
-               c == CHAR_HT || c == CHAR_NL || c == CHAR_VT ||
-               c == CHAR_FF || c == CHAR_CR;
+          switch(c)
+            {
+            HSPACE_CASES:
+            VSPACE_CASES:
+            OK = TRUE;
+            break;
+
+            default:
+            OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z;
+            break;
+            }
           break;
 
           case PT_WORD:
           OK = PRIV(ucp_gentype)[prop->chartype] == ucp_L ||
                PRIV(ucp_gentype)[prop->chartype] == ucp_N ||
                c == CHAR_UNDERSCORE;
+          break;
+
+          case PT_CLIST:
+          cp = PRIV(ucd_caseless_sets) + code[2];
+          for (;;)
+            {
+            if (c < *cp) { OK = FALSE; break; }
+            if (c == *cp++) { OK = TRUE; break; }
+            }
+          break;
+
+          case PT_UCNC:
+          OK = c == CHAR_DOLLAR_SIGN || c == CHAR_COMMERCIAL_AT ||
+               c == CHAR_GRAVE_ACCENT || (c >= 0xa0 && c <= 0xd7ff) ||
+               c >= 0xe000;
           break;
 
           /* Should never occur, but keep compilers from grumbling. */
@@ -1090,7 +1167,15 @@ for (;;)
       if (count > 0) { ADD_ACTIVE(state_offset + 2, 0); }
       if (clen > 0)
         {
-        if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
+        if (d == OP_ANY && ptr + 1 >= md->end_subject &&
+            (md->moptions & (PCRE_PARTIAL_HARD)) != 0 &&
+            NLBLOCK->nltype == NLTYPE_FIXED &&
+            NLBLOCK->nllen == 2 &&
+            c == NLBLOCK->nl[0])
+          {
+          could_continue = partial_newline = TRUE;
+          }
+        else if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
             (c < 256 &&
               (d != OP_ANY || !IS_NEWLINE(ptr)) &&
               ((ctypes[c] & toptable1[d]) ^ toptable2[d]) != 0))
@@ -1113,7 +1198,15 @@ for (;;)
       ADD_ACTIVE(state_offset + 2, 0);
       if (clen > 0)
         {
-        if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
+        if (d == OP_ANY && ptr + 1 >= md->end_subject &&
+            (md->moptions & (PCRE_PARTIAL_HARD)) != 0 &&
+            NLBLOCK->nltype == NLTYPE_FIXED &&
+            NLBLOCK->nllen == 2 &&
+            c == NLBLOCK->nl[0])
+          {
+          could_continue = partial_newline = TRUE;
+          }
+        else if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
             (c < 256 &&
               (d != OP_ANY || !IS_NEWLINE(ptr)) &&
               ((ctypes[c] & toptable1[d]) ^ toptable2[d]) != 0))
@@ -1135,7 +1228,15 @@ for (;;)
       ADD_ACTIVE(state_offset + 2, 0);
       if (clen > 0)
         {
-        if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
+        if (d == OP_ANY && ptr + 1 >= md->end_subject &&
+            (md->moptions & (PCRE_PARTIAL_HARD)) != 0 &&
+            NLBLOCK->nltype == NLTYPE_FIXED &&
+            NLBLOCK->nllen == 2 &&
+            c == NLBLOCK->nl[0])
+          {
+          could_continue = partial_newline = TRUE;
+          }
+        else if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
             (c < 256 &&
               (d != OP_ANY || !IS_NEWLINE(ptr)) &&
               ((ctypes[c] & toptable1[d]) ^ toptable2[d]) != 0))
@@ -1155,12 +1256,20 @@ for (;;)
       count = current_state->count;  /* Number already matched */
       if (clen > 0)
         {
-        if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
+        if (d == OP_ANY && ptr + 1 >= md->end_subject &&
+            (md->moptions & (PCRE_PARTIAL_HARD)) != 0 &&
+            NLBLOCK->nltype == NLTYPE_FIXED &&
+            NLBLOCK->nllen == 2 &&
+            c == NLBLOCK->nl[0])
+          {
+          could_continue = partial_newline = TRUE;
+          }
+        else if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
             (c < 256 &&
               (d != OP_ANY || !IS_NEWLINE(ptr)) &&
               ((ctypes[c] & toptable1[d]) ^ toptable2[d]) != 0))
           {
-          if (++count >= GET2(code, 1))
+          if (++count >= (int)GET2(code, 1))
             { ADD_NEW(state_offset + 1 + IMM2_SIZE + 1, 0); }
           else
             { ADD_NEW(state_offset, count); }
@@ -1176,7 +1285,15 @@ for (;;)
       count = current_state->count;  /* Number already matched */
       if (clen > 0)
         {
-        if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
+        if (d == OP_ANY && ptr + 1 >= md->end_subject &&
+            (md->moptions & (PCRE_PARTIAL_HARD)) != 0 &&
+            NLBLOCK->nltype == NLTYPE_FIXED &&
+            NLBLOCK->nllen == 2 &&
+            c == NLBLOCK->nl[0])
+          {
+          could_continue = partial_newline = TRUE;
+          }
+        else if ((c >= 256 && d != OP_DIGIT && d != OP_WHITESPACE && d != OP_WORDCHAR) ||
             (c < 256 &&
               (d != OP_ANY || !IS_NEWLINE(ptr)) &&
               ((ctypes[c] & toptable1[d]) ^ toptable2[d]) != 0))
@@ -1186,7 +1303,7 @@ for (;;)
             active_count--;           /* Remove non-match possibility */
             next_active_state--;
             }
-          if (++count >= GET2(code, 1))
+          if (++count >= (int)GET2(code, 1))
             { ADD_NEW(state_offset + 2 + IMM2_SIZE, 0); }
           else
             { ADD_NEW(state_offset, count); }
@@ -1209,6 +1326,7 @@ for (;;)
       if (clen > 0)
         {
         BOOL OK;
+        const pcre_uint32 *cp;
         const ucd_record * prop = GET_UCD(c);
         switch(code[2])
           {
@@ -1240,21 +1358,44 @@ for (;;)
                PRIV(ucp_gentype)[prop->chartype] == ucp_N;
           break;
 
-          case PT_SPACE:    /* Perl space */
-          OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z ||
-               c == CHAR_HT || c == CHAR_NL || c == CHAR_FF || c == CHAR_CR;
-          break;
+          /* Perl space used to exclude VT, but from Perl 5.18 it is included,
+          which means that Perl space and POSIX space are now identical. PCRE
+          was changed at release 8.34. */
 
+          case PT_SPACE:    /* Perl space */
           case PT_PXSPACE:  /* POSIX space */
-          OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z ||
-               c == CHAR_HT || c == CHAR_NL || c == CHAR_VT ||
-               c == CHAR_FF || c == CHAR_CR;
+          switch(c)
+            {
+            HSPACE_CASES:
+            VSPACE_CASES:
+            OK = TRUE;
+            break;
+
+            default:
+            OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z;
+            break;
+            }
           break;
 
           case PT_WORD:
           OK = PRIV(ucp_gentype)[prop->chartype] == ucp_L ||
                PRIV(ucp_gentype)[prop->chartype] == ucp_N ||
                c == CHAR_UNDERSCORE;
+          break;
+
+          case PT_CLIST:
+          cp = PRIV(ucd_caseless_sets) + code[3];
+          for (;;)
+            {
+            if (c < *cp) { OK = FALSE; break; }
+            if (c == *cp++) { OK = TRUE; break; }
+            }
+          break;
+
+          case PT_UCNC:
+          OK = c == CHAR_DOLLAR_SIGN || c == CHAR_COMMERCIAL_AT ||
+               c == CHAR_GRAVE_ACCENT || (c >= 0xa0 && c <= 0xd7ff) ||
+               c >= 0xe000;
           break;
 
           /* Should never occur, but keep compilers from grumbling. */
@@ -1283,8 +1424,9 @@ for (;;)
       case OP_EXTUNI_EXTRA + OP_TYPEPOSPLUS:
       count = current_state->count;  /* Already matched */
       if (count > 0) { ADD_ACTIVE(state_offset + 2, 0); }
-      if (clen > 0 && UCD_CATEGORY(c) != ucp_M)
+      if (clen > 0)
         {
+        int lgb, rgb;
         const pcre_uchar *nptr = ptr + clen;
         int ncount = 0;
         if (count > 0 && codevalue == OP_EXTUNI_EXTRA + OP_TYPEPOSPLUS)
@@ -1292,14 +1434,16 @@ for (;;)
           active_count--;           /* Remove non-match possibility */
           next_active_state--;
           }
+        lgb = UCD_GRAPHBREAK(c);
         while (nptr < end_subject)
           {
-          int nd;
-          int ndlen = 1;
-          GETCHARLEN(nd, nptr, ndlen);
-          if (UCD_CATEGORY(nd) != ucp_M) break;
+          dlen = 1;
+          if (!utf) d = *nptr; else { GETCHARLEN(d, nptr, dlen); }
+          rgb = UCD_GRAPHBREAK(d);
+          if ((PRIV(ucp_gbtable)[lgb] & (1 << rgb)) == 0) break;
           ncount++;
-          nptr += ndlen;
+          lgb = rgb;
+          nptr += dlen;
           }
         count++;
         ADD_NEW_DATA(-state_offset, count, ncount);
@@ -1318,20 +1462,22 @@ for (;;)
         int ncount = 0;
         switch (c)
           {
-          case 0x000b:
-          case 0x000c:
-          case 0x0085:
+          case CHAR_VT:
+          case CHAR_FF:
+          case CHAR_NEL:
+#ifndef EBCDIC
           case 0x2028:
           case 0x2029:
+#endif  /* Not EBCDIC */
           if ((md->moptions & PCRE_BSR_ANYCRLF) != 0) break;
           goto ANYNL01;
 
-          case 0x000d:
-          if (ptr + 1 < end_subject && ptr[1] == 0x0a) ncount = 1;
+          case CHAR_CR:
+          if (ptr + 1 < end_subject && UCHAR21TEST(ptr + 1) == CHAR_LF) ncount = 1;
           /* Fall through */
 
           ANYNL01:
-          case 0x000a:
+          case CHAR_LF:
           if (count > 0 && codevalue == OP_ANYNL_EXTRA + OP_TYPEPOSPLUS)
             {
             active_count--;           /* Remove non-match possibility */
@@ -1358,13 +1504,7 @@ for (;;)
         BOOL OK;
         switch (c)
           {
-          case 0x000a:
-          case 0x000b:
-          case 0x000c:
-          case 0x000d:
-          case 0x0085:
-          case 0x2028:
-          case 0x2029:
+          VSPACE_CASES:
           OK = TRUE;
           break;
 
@@ -1397,25 +1537,7 @@ for (;;)
         BOOL OK;
         switch (c)
           {
-          case 0x09:      /* HT */
-          case 0x20:      /* SPACE */
-          case 0xa0:      /* NBSP */
-          case 0x1680:    /* OGHAM SPACE MARK */
-          case 0x180e:    /* MONGOLIAN VOWEL SEPARATOR */
-          case 0x2000:    /* EN QUAD */
-          case 0x2001:    /* EM QUAD */
-          case 0x2002:    /* EN SPACE */
-          case 0x2003:    /* EM SPACE */
-          case 0x2004:    /* THREE-PER-EM SPACE */
-          case 0x2005:    /* FOUR-PER-EM SPACE */
-          case 0x2006:    /* SIX-PER-EM SPACE */
-          case 0x2007:    /* FIGURE SPACE */
-          case 0x2008:    /* PUNCTUATION SPACE */
-          case 0x2009:    /* THIN SPACE */
-          case 0x200A:    /* HAIR SPACE */
-          case 0x202f:    /* NARROW NO-BREAK SPACE */
-          case 0x205f:    /* MEDIUM MATHEMATICAL SPACE */
-          case 0x3000:    /* IDEOGRAPHIC SPACE */
+          HSPACE_CASES:
           OK = TRUE;
           break;
 
@@ -1456,6 +1578,7 @@ for (;;)
       if (clen > 0)
         {
         BOOL OK;
+        const pcre_uint32 *cp;
         const ucd_record * prop = GET_UCD(c);
         switch(code[2])
           {
@@ -1487,21 +1610,44 @@ for (;;)
                PRIV(ucp_gentype)[prop->chartype] == ucp_N;
           break;
 
-          case PT_SPACE:    /* Perl space */
-          OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z ||
-               c == CHAR_HT || c == CHAR_NL || c == CHAR_FF || c == CHAR_CR;
-          break;
+          /* Perl space used to exclude VT, but from Perl 5.18 it is included,
+          which means that Perl space and POSIX space are now identical. PCRE
+          was changed at release 8.34. */
 
+          case PT_SPACE:    /* Perl space */
           case PT_PXSPACE:  /* POSIX space */
-          OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z ||
-               c == CHAR_HT || c == CHAR_NL || c == CHAR_VT ||
-               c == CHAR_FF || c == CHAR_CR;
+          switch(c)
+            {
+            HSPACE_CASES:
+            VSPACE_CASES:
+            OK = TRUE;
+            break;
+
+            default:
+            OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z;
+            break;
+            }
           break;
 
           case PT_WORD:
           OK = PRIV(ucp_gentype)[prop->chartype] == ucp_L ||
                PRIV(ucp_gentype)[prop->chartype] == ucp_N ||
                c == CHAR_UNDERSCORE;
+          break;
+
+          case PT_CLIST:
+          cp = PRIV(ucd_caseless_sets) + code[3];
+          for (;;)
+            {
+            if (c < *cp) { OK = FALSE; break; }
+            if (c == *cp++) { OK = TRUE; break; }
+            }
+          break;
+
+          case PT_UCNC:
+          OK = c == CHAR_DOLLAR_SIGN || c == CHAR_COMMERCIAL_AT ||
+               c == CHAR_GRAVE_ACCENT || (c >= 0xa0 && c <= 0xd7ff) ||
+               c >= 0xe000;
           break;
 
           /* Should never occur, but keep compilers from grumbling. */
@@ -1539,8 +1685,9 @@ for (;;)
       QS2:
 
       ADD_ACTIVE(state_offset + 2, 0);
-      if (clen > 0 && UCD_CATEGORY(c) != ucp_M)
+      if (clen > 0)
         {
+        int lgb, rgb;
         const pcre_uchar *nptr = ptr + clen;
         int ncount = 0;
         if (codevalue == OP_EXTUNI_EXTRA + OP_TYPEPOSSTAR ||
@@ -1549,14 +1696,16 @@ for (;;)
           active_count--;           /* Remove non-match possibility */
           next_active_state--;
           }
+        lgb = UCD_GRAPHBREAK(c);
         while (nptr < end_subject)
           {
-          int nd;
-          int ndlen = 1;
-          GETCHARLEN(nd, nptr, ndlen);
-          if (UCD_CATEGORY(nd) != ucp_M) break;
+          dlen = 1;
+          if (!utf) d = *nptr; else { GETCHARLEN(d, nptr, dlen); }
+          rgb = UCD_GRAPHBREAK(d);
+          if ((PRIV(ucp_gbtable)[lgb] & (1 << rgb)) == 0) break;
           ncount++;
-          nptr += ndlen;
+          lgb = rgb;
+          nptr += dlen;
           }
         ADD_NEW_DATA(-(state_offset + count), 0, ncount);
         }
@@ -1582,27 +1731,29 @@ for (;;)
         int ncount = 0;
         switch (c)
           {
-          case 0x000b:
-          case 0x000c:
-          case 0x0085:
+          case CHAR_VT:
+          case CHAR_FF:
+          case CHAR_NEL:
+#ifndef EBCDIC
           case 0x2028:
           case 0x2029:
+#endif  /* Not EBCDIC */
           if ((md->moptions & PCRE_BSR_ANYCRLF) != 0) break;
           goto ANYNL02;
 
-          case 0x000d:
-          if (ptr + 1 < end_subject && ptr[1] == 0x0a) ncount = 1;
+          case CHAR_CR:
+          if (ptr + 1 < end_subject && UCHAR21TEST(ptr + 1) == CHAR_LF) ncount = 1;
           /* Fall through */
 
           ANYNL02:
-          case 0x000a:
+          case CHAR_LF:
           if (codevalue == OP_ANYNL_EXTRA + OP_TYPEPOSSTAR ||
               codevalue == OP_ANYNL_EXTRA + OP_TYPEPOSQUERY)
             {
             active_count--;           /* Remove non-match possibility */
             next_active_state--;
             }
-          ADD_NEW_DATA(-(state_offset + count), 0, ncount);
+          ADD_NEW_DATA(-(state_offset + (int)count), 0, ncount);
           break;
 
           default:
@@ -1630,13 +1781,7 @@ for (;;)
         BOOL OK;
         switch (c)
           {
-          case 0x000a:
-          case 0x000b:
-          case 0x000c:
-          case 0x000d:
-          case 0x0085:
-          case 0x2028:
-          case 0x2029:
+          VSPACE_CASES:
           OK = TRUE;
           break;
 
@@ -1652,7 +1797,7 @@ for (;;)
             active_count--;           /* Remove non-match possibility */
             next_active_state--;
             }
-          ADD_NEW_DATA(-(state_offset + count), 0, 0);
+          ADD_NEW_DATA(-(state_offset + (int)count), 0, 0);
           }
         }
       break;
@@ -1676,25 +1821,7 @@ for (;;)
         BOOL OK;
         switch (c)
           {
-          case 0x09:      /* HT */
-          case 0x20:      /* SPACE */
-          case 0xa0:      /* NBSP */
-          case 0x1680:    /* OGHAM SPACE MARK */
-          case 0x180e:    /* MONGOLIAN VOWEL SEPARATOR */
-          case 0x2000:    /* EN QUAD */
-          case 0x2001:    /* EM QUAD */
-          case 0x2002:    /* EN SPACE */
-          case 0x2003:    /* EM SPACE */
-          case 0x2004:    /* THREE-PER-EM SPACE */
-          case 0x2005:    /* FOUR-PER-EM SPACE */
-          case 0x2006:    /* SIX-PER-EM SPACE */
-          case 0x2007:    /* FIGURE SPACE */
-          case 0x2008:    /* PUNCTUATION SPACE */
-          case 0x2009:    /* THIN SPACE */
-          case 0x200A:    /* HAIR SPACE */
-          case 0x202f:    /* NARROW NO-BREAK SPACE */
-          case 0x205f:    /* MEDIUM MATHEMATICAL SPACE */
-          case 0x3000:    /* IDEOGRAPHIC SPACE */
+          HSPACE_CASES:
           OK = TRUE;
           break;
 
@@ -1711,7 +1838,7 @@ for (;;)
             active_count--;           /* Remove non-match possibility */
             next_active_state--;
             }
-          ADD_NEW_DATA(-(state_offset + count), 0, 0);
+          ADD_NEW_DATA(-(state_offset + (int)count), 0, 0);
           }
         }
       break;
@@ -1728,6 +1855,7 @@ for (;;)
       if (clen > 0)
         {
         BOOL OK;
+        const pcre_uint32 *cp;
         const ucd_record * prop = GET_UCD(c);
         switch(code[1 + IMM2_SIZE + 1])
           {
@@ -1759,21 +1887,44 @@ for (;;)
                PRIV(ucp_gentype)[prop->chartype] == ucp_N;
           break;
 
-          case PT_SPACE:    /* Perl space */
-          OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z ||
-               c == CHAR_HT || c == CHAR_NL || c == CHAR_FF || c == CHAR_CR;
-          break;
+          /* Perl space used to exclude VT, but from Perl 5.18 it is included,
+          which means that Perl space and POSIX space are now identical. PCRE
+          was changed at release 8.34. */
 
+          case PT_SPACE:    /* Perl space */
           case PT_PXSPACE:  /* POSIX space */
-          OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z ||
-               c == CHAR_HT || c == CHAR_NL || c == CHAR_VT ||
-               c == CHAR_FF || c == CHAR_CR;
+          switch(c)
+            {
+            HSPACE_CASES:
+            VSPACE_CASES:
+            OK = TRUE;
+            break;
+
+            default:
+            OK = PRIV(ucp_gentype)[prop->chartype] == ucp_Z;
+            break;
+            }
           break;
 
           case PT_WORD:
           OK = PRIV(ucp_gentype)[prop->chartype] == ucp_L ||
                PRIV(ucp_gentype)[prop->chartype] == ucp_N ||
                c == CHAR_UNDERSCORE;
+          break;
+
+          case PT_CLIST:
+          cp = PRIV(ucd_caseless_sets) + code[1 + IMM2_SIZE + 2];
+          for (;;)
+            {
+            if (c < *cp) { OK = FALSE; break; }
+            if (c == *cp++) { OK = TRUE; break; }
+            }
+          break;
+
+          case PT_UCNC:
+          OK = c == CHAR_DOLLAR_SIGN || c == CHAR_COMMERCIAL_AT ||
+               c == CHAR_GRAVE_ACCENT || (c >= 0xa0 && c <= 0xd7ff) ||
+               c >= 0xe000;
           break;
 
           /* Should never occur, but keep compilers from grumbling. */
@@ -1790,7 +1941,7 @@ for (;;)
             active_count--;           /* Remove non-match possibility */
             next_active_state--;
             }
-          if (++count >= GET2(code, 1))
+          if (++count >= (int)GET2(code, 1))
             { ADD_NEW(state_offset + 1 + IMM2_SIZE + 3, 0); }
           else
             { ADD_NEW(state_offset, count); }
@@ -1806,8 +1957,9 @@ for (;;)
       if (codevalue != OP_EXTUNI_EXTRA + OP_TYPEEXACT)
         { ADD_ACTIVE(state_offset + 2 + IMM2_SIZE, 0); }
       count = current_state->count;  /* Number already matched */
-      if (clen > 0 && UCD_CATEGORY(c) != ucp_M)
+      if (clen > 0)
         {
+        int lgb, rgb;
         const pcre_uchar *nptr = ptr + clen;
         int ncount = 0;
         if (codevalue == OP_EXTUNI_EXTRA + OP_TYPEPOSUPTO)
@@ -1815,16 +1967,20 @@ for (;;)
           active_count--;           /* Remove non-match possibility */
           next_active_state--;
           }
+        lgb = UCD_GRAPHBREAK(c);
         while (nptr < end_subject)
           {
-          int nd;
-          int ndlen = 1;
-          GETCHARLEN(nd, nptr, ndlen);
-          if (UCD_CATEGORY(nd) != ucp_M) break;
+          dlen = 1;
+          if (!utf) d = *nptr; else { GETCHARLEN(d, nptr, dlen); }
+          rgb = UCD_GRAPHBREAK(d);
+          if ((PRIV(ucp_gbtable)[lgb] & (1 << rgb)) == 0) break;
           ncount++;
-          nptr += ndlen;
+          lgb = rgb;
+          nptr += dlen;
           }
-        if (++count >= GET2(code, 1))
+        if (nptr >= end_subject && (md->moptions & PCRE_PARTIAL_HARD) != 0)
+            reset_could_continue = TRUE;
+        if (++count >= (int)GET2(code, 1))
           { ADD_NEW_DATA(-(state_offset + 2 + IMM2_SIZE), 0, ncount); }
         else
           { ADD_NEW_DATA(-state_offset, count, ncount); }
@@ -1845,26 +2001,28 @@ for (;;)
         int ncount = 0;
         switch (c)
           {
-          case 0x000b:
-          case 0x000c:
-          case 0x0085:
+          case CHAR_VT:
+          case CHAR_FF:
+          case CHAR_NEL:
+#ifndef EBCDIC
           case 0x2028:
           case 0x2029:
+#endif  /* Not EBCDIC */
           if ((md->moptions & PCRE_BSR_ANYCRLF) != 0) break;
           goto ANYNL03;
 
-          case 0x000d:
-          if (ptr + 1 < end_subject && ptr[1] == 0x0a) ncount = 1;
+          case CHAR_CR:
+          if (ptr + 1 < end_subject && UCHAR21TEST(ptr + 1) == CHAR_LF) ncount = 1;
           /* Fall through */
 
           ANYNL03:
-          case 0x000a:
+          case CHAR_LF:
           if (codevalue == OP_ANYNL_EXTRA + OP_TYPEPOSUPTO)
             {
             active_count--;           /* Remove non-match possibility */
             next_active_state--;
             }
-          if (++count >= GET2(code, 1))
+          if (++count >= (int)GET2(code, 1))
             { ADD_NEW_DATA(-(state_offset + 2 + IMM2_SIZE), 0, ncount); }
           else
             { ADD_NEW_DATA(-state_offset, count, ncount); }
@@ -1889,13 +2047,7 @@ for (;;)
         BOOL OK;
         switch (c)
           {
-          case 0x000a:
-          case 0x000b:
-          case 0x000c:
-          case 0x000d:
-          case 0x0085:
-          case 0x2028:
-          case 0x2029:
+          VSPACE_CASES:
           OK = TRUE;
           break;
 
@@ -1910,7 +2062,7 @@ for (;;)
             active_count--;           /* Remove non-match possibility */
             next_active_state--;
             }
-          if (++count >= GET2(code, 1))
+          if (++count >= (int)GET2(code, 1))
             { ADD_NEW_DATA(-(state_offset + 2 + IMM2_SIZE), 0, 0); }
           else
             { ADD_NEW_DATA(-state_offset, count, 0); }
@@ -1931,25 +2083,7 @@ for (;;)
         BOOL OK;
         switch (c)
           {
-          case 0x09:      /* HT */
-          case 0x20:      /* SPACE */
-          case 0xa0:      /* NBSP */
-          case 0x1680:    /* OGHAM SPACE MARK */
-          case 0x180e:    /* MONGOLIAN VOWEL SEPARATOR */
-          case 0x2000:    /* EN QUAD */
-          case 0x2001:    /* EM QUAD */
-          case 0x2002:    /* EN SPACE */
-          case 0x2003:    /* EM SPACE */
-          case 0x2004:    /* THREE-PER-EM SPACE */
-          case 0x2005:    /* FOUR-PER-EM SPACE */
-          case 0x2006:    /* SIX-PER-EM SPACE */
-          case 0x2007:    /* FIGURE SPACE */
-          case 0x2008:    /* PUNCTUATION SPACE */
-          case 0x2009:    /* THIN SPACE */
-          case 0x200A:    /* HAIR SPACE */
-          case 0x202f:    /* NARROW NO-BREAK SPACE */
-          case 0x205f:    /* MEDIUM MATHEMATICAL SPACE */
-          case 0x3000:    /* IDEOGRAPHIC SPACE */
+          HSPACE_CASES:
           OK = TRUE;
           break;
 
@@ -1965,7 +2099,7 @@ for (;;)
             active_count--;           /* Remove non-match possibility */
             next_active_state--;
             }
-          if (++count >= GET2(code, 1))
+          if (++count >= (int)GET2(code, 1))
             { ADD_NEW_DATA(-(state_offset + 2 + IMM2_SIZE), 0, 0); }
           else
             { ADD_NEW_DATA(-state_offset, count, 0); }
@@ -2025,18 +2159,24 @@ for (;;)
       to wait for them to pass before continuing. */
 
       case OP_EXTUNI:
-      if (clen > 0 && UCD_CATEGORY(c) != ucp_M)
+      if (clen > 0)
         {
+        int lgb, rgb;
         const pcre_uchar *nptr = ptr + clen;
         int ncount = 0;
+        lgb = UCD_GRAPHBREAK(c);
         while (nptr < end_subject)
           {
-          int nclen = 1;
-          GETCHARLEN(c, nptr, nclen);
-          if (UCD_CATEGORY(c) != ucp_M) break;
+          dlen = 1;
+          if (!utf) d = *nptr; else { GETCHARLEN(d, nptr, dlen); }
+          rgb = UCD_GRAPHBREAK(d);
+          if ((PRIV(ucp_gbtable)[lgb] & (1 << rgb)) == 0) break;
           ncount++;
-          nptr += nclen;
+          lgb = rgb;
+          nptr += dlen;
           }
+        if (nptr >= end_subject && (md->moptions & PCRE_PARTIAL_HARD) != 0)
+            reset_could_continue = TRUE;
         ADD_NEW_DATA(-(state_offset + 1), 0, ncount);
         }
       break;
@@ -2050,19 +2190,27 @@ for (;;)
       case OP_ANYNL:
       if (clen > 0) switch(c)
         {
-        case 0x000b:
-        case 0x000c:
-        case 0x0085:
+        case CHAR_VT:
+        case CHAR_FF:
+        case CHAR_NEL:
+#ifndef EBCDIC
         case 0x2028:
         case 0x2029:
+#endif  /* Not EBCDIC */
         if ((md->moptions & PCRE_BSR_ANYCRLF) != 0) break;
 
-        case 0x000a:
+        case CHAR_LF:
         ADD_NEW(state_offset + 1, 0);
         break;
 
-        case 0x000d:
-        if (ptr + 1 < end_subject && ptr[1] == 0x0a)
+        case CHAR_CR:
+        if (ptr + 1 >= end_subject)
+          {
+          ADD_NEW(state_offset + 1, 0);
+          if ((md->moptions & PCRE_PARTIAL_HARD) != 0)
+            reset_could_continue = TRUE;
+          }
+        else if (UCHAR21TEST(ptr + 1) == CHAR_LF)
           {
           ADD_NEW_DATA(-(state_offset + 1), 0, 1);
           }
@@ -2078,13 +2226,7 @@ for (;;)
       case OP_NOT_VSPACE:
       if (clen > 0) switch(c)
         {
-        case 0x000a:
-        case 0x000b:
-        case 0x000c:
-        case 0x000d:
-        case 0x0085:
-        case 0x2028:
-        case 0x2029:
+        VSPACE_CASES:
         break;
 
         default:
@@ -2097,17 +2239,12 @@ for (;;)
       case OP_VSPACE:
       if (clen > 0) switch(c)
         {
-        case 0x000a:
-        case 0x000b:
-        case 0x000c:
-        case 0x000d:
-        case 0x0085:
-        case 0x2028:
-        case 0x2029:
+        VSPACE_CASES:
         ADD_NEW(state_offset + 1, 0);
         break;
 
-        default: break;
+        default:
+        break;
         }
       break;
 
@@ -2115,25 +2252,7 @@ for (;;)
       case OP_NOT_HSPACE:
       if (clen > 0) switch(c)
         {
-        case 0x09:      /* HT */
-        case 0x20:      /* SPACE */
-        case 0xa0:      /* NBSP */
-        case 0x1680:    /* OGHAM SPACE MARK */
-        case 0x180e:    /* MONGOLIAN VOWEL SEPARATOR */
-        case 0x2000:    /* EN QUAD */
-        case 0x2001:    /* EM QUAD */
-        case 0x2002:    /* EN SPACE */
-        case 0x2003:    /* EM SPACE */
-        case 0x2004:    /* THREE-PER-EM SPACE */
-        case 0x2005:    /* FOUR-PER-EM SPACE */
-        case 0x2006:    /* SIX-PER-EM SPACE */
-        case 0x2007:    /* FIGURE SPACE */
-        case 0x2008:    /* PUNCTUATION SPACE */
-        case 0x2009:    /* THIN SPACE */
-        case 0x200A:    /* HAIR SPACE */
-        case 0x202f:    /* NARROW NO-BREAK SPACE */
-        case 0x205f:    /* MEDIUM MATHEMATICAL SPACE */
-        case 0x3000:    /* IDEOGRAPHIC SPACE */
+        HSPACE_CASES:
         break;
 
         default:
@@ -2146,47 +2265,44 @@ for (;;)
       case OP_HSPACE:
       if (clen > 0) switch(c)
         {
-        case 0x09:      /* HT */
-        case 0x20:      /* SPACE */
-        case 0xa0:      /* NBSP */
-        case 0x1680:    /* OGHAM SPACE MARK */
-        case 0x180e:    /* MONGOLIAN VOWEL SEPARATOR */
-        case 0x2000:    /* EN QUAD */
-        case 0x2001:    /* EM QUAD */
-        case 0x2002:    /* EN SPACE */
-        case 0x2003:    /* EM SPACE */
-        case 0x2004:    /* THREE-PER-EM SPACE */
-        case 0x2005:    /* FOUR-PER-EM SPACE */
-        case 0x2006:    /* SIX-PER-EM SPACE */
-        case 0x2007:    /* FIGURE SPACE */
-        case 0x2008:    /* PUNCTUATION SPACE */
-        case 0x2009:    /* THIN SPACE */
-        case 0x200A:    /* HAIR SPACE */
-        case 0x202f:    /* NARROW NO-BREAK SPACE */
-        case 0x205f:    /* MEDIUM MATHEMATICAL SPACE */
-        case 0x3000:    /* IDEOGRAPHIC SPACE */
+        HSPACE_CASES:
         ADD_NEW(state_offset + 1, 0);
+        break;
+
+        default:
         break;
         }
       break;
 
       /*-----------------------------------------------------------------*/
-      /* Match a negated single character casefully. This is only used for
-      one-byte characters, that is, we know that d < 256. The character we are
-      checking (c) can be multibyte. */
+      /* Match a negated single character casefully. */
 
       case OP_NOT:
       if (clen > 0 && c != d) { ADD_NEW(state_offset + dlen + 1, 0); }
       break;
 
       /*-----------------------------------------------------------------*/
-      /* Match a negated single character caselessly. This is only used for
-      one-byte characters, that is, we know that d < 256. The character we are
-      checking (c) can be multibyte. */
+      /* Match a negated single character caselessly. */
 
       case OP_NOTI:
-      if (clen > 0 && c != d && c != fcc[d])
-        { ADD_NEW(state_offset + dlen + 1, 0); }
+      if (clen > 0)
+        {
+        pcre_uint32 otherd;
+#ifdef SUPPORT_UTF
+        if (utf && d >= 128)
+          {
+#ifdef SUPPORT_UCP
+          otherd = UCD_OTHERCASE(d);
+#else
+          otherd = d;
+#endif  /* SUPPORT_UCP */
+          }
+        else
+#endif  /* SUPPORT_UTF */
+        otherd = TABLE_GET(d, fcc, d);
+        if (c != d && c != otherd)
+          { ADD_NEW(state_offset + dlen + 1, 0); }
+        }
       break;
 
       /*-----------------------------------------------------------------*/
@@ -2210,7 +2326,7 @@ for (;;)
       if (count > 0) { ADD_ACTIVE(state_offset + dlen + 1, 0); }
       if (clen > 0)
         {
-        unsigned int otherd = NOTACHAR;
+        pcre_uint32 otherd = NOTACHAR;
         if (caseless)
           {
 #ifdef SUPPORT_UTF
@@ -2257,7 +2373,7 @@ for (;;)
       ADD_ACTIVE(state_offset + dlen + 1, 0);
       if (clen > 0)
         {
-        unsigned int otherd = NOTACHAR;
+        pcre_uint32 otherd = NOTACHAR;
         if (caseless)
           {
 #ifdef SUPPORT_UTF
@@ -2302,7 +2418,7 @@ for (;;)
       ADD_ACTIVE(state_offset + dlen + 1, 0);
       if (clen > 0)
         {
-        unsigned int otherd = NOTACHAR;
+        pcre_uint32 otherd = NOTACHAR;
         if (caseless)
           {
 #ifdef SUPPORT_UTF
@@ -2339,7 +2455,7 @@ for (;;)
       count = current_state->count;  /* Number already matched */
       if (clen > 0)
         {
-        unsigned int otherd = NOTACHAR;
+        pcre_uint32 otherd = NOTACHAR;
         if (caseless)
           {
 #ifdef SUPPORT_UTF
@@ -2355,7 +2471,7 @@ for (;;)
           }
         if ((c == d || c == otherd) == (codevalue < OP_NOTSTAR))
           {
-          if (++count >= GET2(code, 1))
+          if (++count >= (int)GET2(code, 1))
             { ADD_NEW(state_offset + dlen + 1 + IMM2_SIZE, 0); }
           else
             { ADD_NEW(state_offset, count); }
@@ -2383,7 +2499,7 @@ for (;;)
       count = current_state->count;  /* Number already matched */
       if (clen > 0)
         {
-        unsigned int otherd = NOTACHAR;
+        pcre_uint32 otherd = NOTACHAR;
         if (caseless)
           {
 #ifdef SUPPORT_UTF
@@ -2404,7 +2520,7 @@ for (;;)
             active_count--;             /* Remove non-match possibility */
             next_active_state--;
             }
-          if (++count >= GET2(code, 1))
+          if (++count >= (int)GET2(code, 1))
             { ADD_NEW(state_offset + dlen + 1 + IMM2_SIZE, 0); }
           else
             { ADD_NEW(state_offset, count); }
@@ -2457,31 +2573,65 @@ for (;;)
           {
           case OP_CRSTAR:
           case OP_CRMINSTAR:
+          case OP_CRPOSSTAR:
           ADD_ACTIVE(next_state_offset + 1, 0);
-          if (isinclass) { ADD_NEW(state_offset, 0); }
+          if (isinclass)
+            {
+            if (*ecode == OP_CRPOSSTAR)
+              {
+              active_count--;           /* Remove non-match possibility */
+              next_active_state--;
+              }
+            ADD_NEW(state_offset, 0);
+            }
           break;
 
           case OP_CRPLUS:
           case OP_CRMINPLUS:
+          case OP_CRPOSPLUS:
           count = current_state->count;  /* Already matched */
           if (count > 0) { ADD_ACTIVE(next_state_offset + 1, 0); }
-          if (isinclass) { count++; ADD_NEW(state_offset, count); }
+          if (isinclass)
+            {
+            if (count > 0 && *ecode == OP_CRPOSPLUS)
+              {
+              active_count--;           /* Remove non-match possibility */
+              next_active_state--;
+              }
+            count++;
+            ADD_NEW(state_offset, count);
+            }
           break;
 
           case OP_CRQUERY:
           case OP_CRMINQUERY:
+          case OP_CRPOSQUERY:
           ADD_ACTIVE(next_state_offset + 1, 0);
-          if (isinclass) { ADD_NEW(next_state_offset + 1, 0); }
+          if (isinclass)
+            {
+            if (*ecode == OP_CRPOSQUERY)
+              {
+              active_count--;           /* Remove non-match possibility */
+              next_active_state--;
+              }
+            ADD_NEW(next_state_offset + 1, 0);
+            }
           break;
 
           case OP_CRRANGE:
           case OP_CRMINRANGE:
+          case OP_CRPOSRANGE:
           count = current_state->count;  /* Already matched */
-          if (count >= GET2(ecode, 1))
+          if (count >= (int)GET2(ecode, 1))
             { ADD_ACTIVE(next_state_offset + 1 + 2 * IMM2_SIZE, 0); }
           if (isinclass)
             {
-            int max = GET2(ecode, 1 + IMM2_SIZE);
+            int max = (int)GET2(ecode, 1 + IMM2_SIZE);
+            if (*ecode == OP_CRPOSRANGE && count >= (int)GET2(ecode, 1))
+              {
+              active_count--;           /* Remove non-match possibility */
+              next_active_state--;
+              }
             if (++count >= max && max != 0)   /* Max 0 => no limit */
               { ADD_NEW(next_state_offset + 1 + 2 * IMM2_SIZE, 0); }
             else
@@ -2557,10 +2707,12 @@ for (;;)
             cb.version          = 1;   /* Version 1 of the callout block */
             cb.callout_number   = code[LINK_SIZE+2];
             cb.offset_vector    = offsets;
-#ifdef COMPILE_PCRE8
+#if defined COMPILE_PCRE8
             cb.subject          = (PCRE_SPTR)start_subject;
-#else
+#elif defined COMPILE_PCRE16
             cb.subject          = (PCRE_SPTR16)start_subject;
+#elif defined COMPILE_PCRE32
+            cb.subject          = (PCRE_SPTR32)start_subject;
 #endif
             cb.subject_length   = (int)(end_subject - start_subject);
             cb.start_match      = (int)(current_subject - start_subject);
@@ -2579,21 +2731,24 @@ for (;;)
 
         condcode = code[LINK_SIZE+1];
 
-        /* Back reference conditions are not supported */
+        /* Back reference conditions and duplicate named recursion conditions
+        are not supported */
 
-        if (condcode == OP_CREF || condcode == OP_NCREF)
+        if (condcode == OP_CREF || condcode == OP_DNCREF ||
+            condcode == OP_DNRREF)
           return PCRE_ERROR_DFA_UCOND;
 
-        /* The DEFINE condition is always false */
+        /* The DEFINE condition is always false, and the assertion (?!) is
+        converted to OP_FAIL. */
 
-        if (condcode == OP_DEF)
+        if (condcode == OP_DEF || condcode == OP_FAIL)
           { ADD_ACTIVE(state_offset + codelink + LINK_SIZE + 1, 0); }
 
         /* The only supported version of OP_RREF is for the value RREF_ANY,
         which means "test if in any recursion". We can't test for specifically
         recursed groups. */
 
-        else if (condcode == OP_RREF || condcode == OP_NRREF)
+        else if (condcode == OP_RREF)
           {
           int value = GET2(code, LINK_SIZE + 2);
           if (value != RREF_ANY) return PCRE_ERROR_DFA_UCOND;
@@ -2691,10 +2846,13 @@ for (;;)
           for (rc = rc*2 - 2; rc >= 0; rc -= 2)
             {
             int charcount = local_offsets[rc+1] - local_offsets[rc];
-#ifdef SUPPORT_UTF
-            const pcre_uchar *p = start_subject + local_offsets[rc];
-            const pcre_uchar *pp = start_subject + local_offsets[rc+1];
-            while (p < pp) if (NOT_FIRSTCHAR(*p++)) charcount--;
+#if defined SUPPORT_UTF && !defined COMPILE_PCRE32
+            if (utf)
+              {
+              const pcre_uchar *p = start_subject + local_offsets[rc];
+              const pcre_uchar *pp = start_subject + local_offsets[rc+1];
+              while (p < pp) if (NOT_FIRSTCHAR(*p++)) charcount--;
+              }
 #endif
             if (charcount > 0)
               {
@@ -2792,8 +2950,8 @@ for (;;)
             const pcre_uchar *p = ptr;
             const pcre_uchar *pp = local_ptr;
             charcount = (int)(pp - p);
-#ifdef SUPPORT_UTF
-            while (p < pp) if (NOT_FIRSTCHAR(*p++)) charcount--;
+#if defined SUPPORT_UTF && !defined COMPILE_PCRE32
+            if (utf) while (p < pp) if (NOT_FIRSTCHAR(*p++)) charcount--;
 #endif
             ADD_NEW_DATA(-next_state_offset, 0, (charcount - 1));
             }
@@ -2874,10 +3032,13 @@ for (;;)
             }
           else
             {
-#ifdef SUPPORT_UTF
-            const pcre_uchar *p = start_subject + local_offsets[0];
-            const pcre_uchar *pp = start_subject + local_offsets[1];
-            while (p < pp) if (NOT_FIRSTCHAR(*p++)) charcount--;
+#if defined SUPPORT_UTF && !defined COMPILE_PCRE32
+            if (utf)
+              {
+              const pcre_uchar *p = start_subject + local_offsets[0];
+              const pcre_uchar *pp = start_subject + local_offsets[1];
+              while (p < pp) if (NOT_FIRSTCHAR(*p++)) charcount--;
+              }
 #endif
             ADD_NEW_DATA(-next_state_offset, 0, (charcount - 1));
             if (repeat_state_offset >= 0)
@@ -2900,10 +3061,12 @@ for (;;)
         cb.version          = 1;   /* Version 1 of the callout block */
         cb.callout_number   = code[1];
         cb.offset_vector    = offsets;
-#ifdef COMPILE_PCRE8
+#if defined COMPILE_PCRE8
         cb.subject          = (PCRE_SPTR)start_subject;
-#else
+#elif defined COMPILE_PCRE16
         cb.subject          = (PCRE_SPTR16)start_subject;
+#elif defined COMPILE_PCRE32
+        cb.subject          = (PCRE_SPTR32)start_subject;
 #endif
         cb.subject_length   = (int)(end_subject - start_subject);
         cb.start_match      = (int)(current_subject - start_subject);
@@ -2946,7 +3109,7 @@ for (;;)
   if (new_count <= 0)
     {
     if (rlevel == 1 &&                               /* Top level, and */
-        could_continue &&                            /* Some could go on */
+        could_continue &&                            /* Some could go on, and */
         forced_fail != workspace[1] &&               /* Not all forced fail & */
         (                                            /* either... */
         (md->moptions & PCRE_PARTIAL_HARD) != 0      /* Hard partial */
@@ -2954,17 +3117,14 @@ for (;;)
         ((md->moptions & PCRE_PARTIAL_SOFT) != 0 &&  /* Soft partial and */
          match_count < 0)                            /* no matches */
         ) &&                                         /* And... */
-        ptr >= end_subject &&                  /* Reached end of subject */
-        ptr > md->start_used_ptr)              /* Inspected non-empty string */
-      {
-      if (offsetcount >= 2)
-        {
-        offsets[0] = (int)(md->start_used_ptr - start_subject);
-        offsets[1] = (int)(end_subject - start_subject);
-        }
+        (
+        partial_newline ||                           /* Either partial NL */
+          (                                          /* or ... */
+          ptr >= end_subject &&                /* End of subject and */
+          ptr > md->start_used_ptr)            /* Inspected non-empty string */
+          )
+        )
       match_count = PCRE_ERROR_PARTIAL;
-      }
-
     DPRINTF(("%.*sEnd of internal_dfa_exec %d: returning %d\n"
       "%.*s---------------------\n\n", rlevel*2-2, SP, rlevel, match_count,
       rlevel*2-2, SP));
@@ -3014,15 +3174,20 @@ Returns:          > 0 => number of match offset pairs placed in offsets
                  < -1 => some kind of unexpected problem
 */
 
-#ifdef COMPILE_PCRE8
+#if defined COMPILE_PCRE8
 PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre_dfa_exec(const pcre *argument_re, const pcre_extra *extra_data,
   const char *subject, int length, int start_offset, int options, int *offsets,
   int offsetcount, int *workspace, int wscount)
-#else
+#elif defined COMPILE_PCRE16
 PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
 pcre16_dfa_exec(const pcre16 *argument_re, const pcre16_extra *extra_data,
   PCRE_SPTR16 subject, int length, int start_offset, int options, int *offsets,
+  int offsetcount, int *workspace, int wscount)
+#elif defined COMPILE_PCRE32
+PCRE_EXP_DEFN int PCRE_CALL_CONVENTION
+pcre32_dfa_exec(const pcre32 *argument_re, const pcre32_extra *extra_data,
+  PCRE_SPTR32 subject, int length, int start_offset, int options, int *offsets,
   int offsetcount, int *workspace, int wscount)
 #endif
 {
@@ -3050,29 +3215,8 @@ if (re == NULL || subject == NULL || workspace == NULL ||
    (offsets == NULL && offsetcount > 0)) return PCRE_ERROR_NULL;
 if (offsetcount < 0) return PCRE_ERROR_BADCOUNT;
 if (wscount < 20) return PCRE_ERROR_DFA_WSSIZE;
+if (length < 0) return PCRE_ERROR_BADLENGTH;
 if (start_offset < 0 || start_offset > length) return PCRE_ERROR_BADOFFSET;
-
-/* We need to find the pointer to any study data before we test for byte
-flipping, so we scan the extra_data block first. This may set two fields in the
-match block, so we must initialize them beforehand. However, the other fields
-in the match block must not be set until after the byte flipping. */
-
-md->tables = re->tables;
-md->callout_data = NULL;
-
-if (extra_data != NULL)
-  {
-  unsigned int flags = extra_data->flags;
-  if ((flags & PCRE_EXTRA_STUDY_DATA) != 0)
-    study = (const pcre_study_data *)extra_data->study_data;
-  if ((flags & PCRE_EXTRA_MATCH_LIMIT) != 0) return PCRE_ERROR_DFA_UMLIMIT;
-  if ((flags & PCRE_EXTRA_MATCH_LIMIT_RECURSION) != 0)
-    return PCRE_ERROR_DFA_UMLIMIT;
-  if ((flags & PCRE_EXTRA_CALLOUT_DATA) != 0)
-    md->callout_data = extra_data->callout_data;
-  if ((flags & PCRE_EXTRA_TABLES) != 0)
-    md->tables = extra_data->tables;
-  }
 
 /* Check that the first field in the block is the magic number. If it is not,
 return with PCRE_ERROR_BADMAGIC. However, if the magic number is equal to
@@ -3084,6 +3228,35 @@ if (re->magic_number != MAGIC_NUMBER)
     PCRE_ERROR_BADENDIANNESS:PCRE_ERROR_BADMAGIC;
 if ((re->flags & PCRE_MODE) == 0) return PCRE_ERROR_BADMODE;
 
+/* If restarting after a partial match, do some sanity checks on the contents
+of the workspace. */
+
+if ((options & PCRE_DFA_RESTART) != 0)
+  {
+  if ((workspace[0] & (-2)) != 0 || workspace[1] < 1 ||
+    workspace[1] > (wscount - 2)/INTS_PER_STATEBLOCK)
+      return PCRE_ERROR_DFA_BADRESTART;
+  }
+
+/* Set up study, callout, and table data */
+
+md->tables = re->tables;
+md->callout_data = NULL;
+
+if (extra_data != NULL)
+  {
+  unsigned long int flags = extra_data->flags;
+  if ((flags & PCRE_EXTRA_STUDY_DATA) != 0)
+    study = (const pcre_study_data *)extra_data->study_data;
+  if ((flags & PCRE_EXTRA_MATCH_LIMIT) != 0) return PCRE_ERROR_DFA_UMLIMIT;
+  if ((flags & PCRE_EXTRA_MATCH_LIMIT_RECURSION) != 0)
+    return PCRE_ERROR_DFA_UMLIMIT;
+  if ((flags & PCRE_EXTRA_CALLOUT_DATA) != 0)
+    md->callout_data = extra_data->callout_data;
+  if ((flags & PCRE_EXTRA_TABLES) != 0)
+    md->tables = extra_data->tables;
+  }
+
 /* Set some local values */
 
 current_subject = (const pcre_uchar *)subject + start_offset;
@@ -3091,7 +3264,7 @@ end_subject = (const pcre_uchar *)subject + length;
 req_char_ptr = current_subject - 1;
 
 #ifdef SUPPORT_UTF
-/* PCRE_UTF16 has the same value as PCRE_UTF8. */
+/* PCRE_UTF(16|32) have the same value as PCRE_UTF8. */
 utf = (re->options & PCRE_UTF8) != 0;
 #else
 utf = FALSE;
@@ -3177,12 +3350,21 @@ if (utf && (options & PCRE_NO_UTF8_CHECK) == 0)
       offsets[0] = erroroffset;
       offsets[1] = errorcode;
       }
-    return (errorcode <= PCRE_UTF8_ERR5 && (options & PCRE_PARTIAL_HARD) != 0)?
+#if defined COMPILE_PCRE8
+    return (errorcode <= PCRE_UTF8_ERR5 && (options & PCRE_PARTIAL_HARD) != 0) ?
       PCRE_ERROR_SHORTUTF8 : PCRE_ERROR_BADUTF8;
+#elif defined COMPILE_PCRE16
+    return (errorcode <= PCRE_UTF16_ERR1 && (options & PCRE_PARTIAL_HARD) != 0) ?
+      PCRE_ERROR_SHORTUTF16 : PCRE_ERROR_BADUTF16;
+#elif defined COMPILE_PCRE32
+    return PCRE_ERROR_BADUTF32;
+#endif
     }
+#if defined COMPILE_PCRE8 || defined COMPILE_PCRE16
   if (start_offset > 0 && start_offset < length &&
         NOT_FIRSTCHAR(((PCRE_PUCHAR)subject)[start_offset]))
     return PCRE_ERROR_BADUTF8_OFFSET;
+#endif
   }
 #endif
 
@@ -3287,17 +3469,20 @@ for (;;)
 
     if (((options | re->options) & PCRE_NO_START_OPTIMIZE) == 0)
       {
-      /* Advance to a known first char. */
+      /* Advance to a known first pcre_uchar (i.e. data item) */
 
       if (has_first_char)
         {
         if (first_char != first_char2)
+          {
+          pcre_uchar csc;
           while (current_subject < end_subject &&
-              *current_subject != first_char && *current_subject != first_char2)
+                 (csc = UCHAR21TEST(current_subject)) != first_char && csc != first_char2)
             current_subject++;
+          }
         else
           while (current_subject < end_subject &&
-                 *current_subject != first_char)
+                 UCHAR21TEST(current_subject) != first_char)
             current_subject++;
         }
 
@@ -3327,36 +3512,26 @@ for (;;)
           ANYCRLF, and we are now at a LF, advance the match position by one
           more character. */
 
-          if (current_subject[-1] == CHAR_CR &&
+          if (UCHAR21TEST(current_subject - 1) == CHAR_CR &&
                (md->nltype == NLTYPE_ANY || md->nltype == NLTYPE_ANYCRLF) &&
                current_subject < end_subject &&
-               *current_subject == CHAR_NL)
+               UCHAR21TEST(current_subject) == CHAR_NL)
             current_subject++;
           }
         }
 
-      /* Or to a non-unique first char after study */
+      /* Advance to a non-unique first pcre_uchar after study */
 
       else if (start_bits != NULL)
         {
         while (current_subject < end_subject)
           {
-          register unsigned int c = *current_subject;
+          register pcre_uint32 c = UCHAR21TEST(current_subject);
 #ifndef COMPILE_PCRE8
           if (c > 255) c = 255;
 #endif
-          if ((start_bits[c/8] & (1 << (c&7))) == 0)
-            {
-            current_subject++;
-#if defined SUPPORT_UTF && defined COMPILE_PCRE8
-            /* In non 8-bit mode, the iteration will stop for
-            characters > 255 at the beginning or not stop at all. */
-            if (utf)
-              ACROSSCHAR(current_subject < end_subject, *current_subject,
-                current_subject++);
-#endif
-            }
-          else break;
+          if ((start_bits[c/8] & (1 << (c&7))) != 0) break;
+          current_subject++;
           }
         }
       }
@@ -3375,19 +3550,20 @@ for (;;)
       /* If the pattern was studied, a minimum subject length may be set. This
       is a lower bound; no actual string of that length may actually match the
       pattern. Although the value is, strictly, in characters, we treat it as
-      bytes to avoid spending too much time in this optimization. */
+      in pcre_uchar units to avoid spending too much time in this optimization.
+      */
 
       if (study != NULL && (study->flags & PCRE_STUDY_MINLEN) != 0 &&
           (pcre_uint32)(end_subject - current_subject) < study->minlength)
         return PCRE_ERROR_NOMATCH;
 
-      /* If req_char is set, we know that that character must appear in the
-      subject for the match to succeed. If the first character is set, req_char
-      must be later in the subject; otherwise the test starts at the match
-      point. This optimization can save a huge amount of work in patterns with
-      nested unlimited repeats that aren't going to match. Writing separate
-      code for cased/caseless versions makes it go faster, as does using an
-      autoincrement and backing off on a match.
+      /* If req_char is set, we know that that pcre_uchar must appear in the
+      subject for the match to succeed. If the first pcre_uchar is set,
+      req_char must be later in the subject; otherwise the test starts at the
+      match point. This optimization can save a huge amount of work in patterns
+      with nested unlimited repeats that aren't going to match. Writing
+      separate code for cased/caseless versions makes it go faster, as does
+      using an autoincrement and backing off on a match.
 
       HOWEVER: when the subject string is very, very long, searching to its end
       can take a long time, and give bad performance on quite ordinary
@@ -3407,7 +3583,7 @@ for (;;)
             {
             while (p < end_subject)
               {
-              register int pp = *p++;
+              register pcre_uint32 pp = UCHAR21INCTEST(p);
               if (pp == req_char || pp == req_char2) { p--; break; }
               }
             }
@@ -3415,18 +3591,18 @@ for (;;)
             {
             while (p < end_subject)
               {
-              if (*p++ == req_char) { p--; break; }
+              if (UCHAR21INCTEST(p) == req_char) { p--; break; }
               }
             }
 
-          /* If we can't find the required character, break the matching loop,
+          /* If we can't find the required pcre_uchar, break the matching loop,
           which will cause a return or PCRE_ERROR_NOMATCH. */
 
           if (p >= end_subject) break;
 
-          /* If we have found the required character, save the point where we
+          /* If we have found the required pcre_uchar, save the point where we
           found it, so that we don't search again next time round the loop if
-          the start hasn't passed this character yet. */
+          the start hasn't passed this point yet. */
 
           req_char_ptr = p;
           }
@@ -3453,7 +3629,17 @@ for (;;)
   /* Anything other than "no match" means we are done, always; otherwise, carry
   on only if not anchored. */
 
-  if (rc != PCRE_ERROR_NOMATCH || anchored) return rc;
+  if (rc != PCRE_ERROR_NOMATCH || anchored)
+    {
+    if (rc == PCRE_ERROR_PARTIAL && offsetcount >= 2)
+      {
+      offsets[0] = (int)(md->start_used_ptr - (PCRE_PUCHAR)subject);
+      offsets[1] = (int)(end_subject - (PCRE_PUCHAR)subject);
+      if (offsetcount > 2)
+        offsets[2] = (int)(current_subject - (PCRE_PUCHAR)subject);
+      }
+    return rc;
+    }
 
   /* Advance to the next subject character unless we are at the end of a line
   and firstline is set. */
@@ -3473,9 +3659,9 @@ for (;;)
   not contain any explicit matches for \r or \n, and the newline option is CRLF
   or ANY or ANYCRLF, advance the match position by one more character. */
 
-  if (current_subject[-1] == CHAR_CR &&
+  if (UCHAR21TEST(current_subject - 1) == CHAR_CR &&
       current_subject < end_subject &&
-      *current_subject == CHAR_NL &&
+      UCHAR21TEST(current_subject) == CHAR_NL &&
       (re->flags & PCRE_HASCRORLF) == 0 &&
         (md->nltype == NLTYPE_ANY ||
          md->nltype == NLTYPE_ANYCRLF ||

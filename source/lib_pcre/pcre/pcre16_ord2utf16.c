@@ -64,15 +64,10 @@ Arguments:
 Returns:     number of characters placed in the buffer
 */
 
-int
+unsigned int
 PRIV(ord2utf)(pcre_uint32 cvalue, pcre_uchar *buffer)
 {
 #ifdef SUPPORT_UTF
-
-/* Checking invalid cvalue character, encoded as invalid UTF-16 character.
-Should never happen in practice. */
-if ((cvalue & 0xf800) == 0xd800 || cvalue >= 0x110000)
-  cvalue = 0xfffe;
 
 if (cvalue <= 0xffff)
   {

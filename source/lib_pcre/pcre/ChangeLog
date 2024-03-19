@@ -1,6 +1,1587 @@
 ChangeLog for PCRE
 ------------------
 
+Note that the PCRE 8.xx series (PCRE1) is now at end of life. All development
+is happening in the PCRE2 10.xx series.
+
+
+Version 8.45 15-June-2021
+-------------------------
+
+This is the final release of PCRE1. A few minor tidies are included.
+
+1. CMakeLists.txt has two user-supplied patches applied, one to allow for the
+setting of MODULE_PATH, and the other to support the generation of pcre-config
+file and libpcre*.pc files.
+
+2. There was a memory leak if a compile error occurred when there were more
+than 20 named groups (Bugzilla #2613).
+
+3. Fixed some typos in code and documentation.
+
+4. Fixed a small (*MARK) bug in the interpreter (Bugzilla #2771).
+
+
+Version 8.44 12 February-2020
+-----------------------------
+
+1. Setting --enable-jit=auto for an out-of-tree build failed because the
+source directory wasn't in the search path for AC_TRY_COMPILE always. Patch
+from Ross Burton.
+
+2. Applied a patch from Michael Shigorin to fix 8.43 build on e2k arch
+with lcc compiler (EDG frontend based); the problem it fixes is:
+
+  lcc: "pcrecpp.cc", line 74: error: declaration aliased to undefined entity
+       "_ZN7pcrecpp2RE6no_argE" [-Werror]
+
+3. Change 2 for 8.43 omitted (*LF) from the list of start-of-pattern items. Now
+added.
+
+4. Fix ARMv5 JIT improper handling of labels right after a constant pool.
+
+5. Small patch to pcreposix.c to set the erroroffset field to -1 immediately
+after a successful compile, instead of at the start of matching to avoid a
+sanitizer complaint (regexec is supposed to be thread safe).
+
+6. Check the size of the number after (?C as it is read, in order to avoid
+integer overflow.
+
+7. Tidy up left shifts to avoid sanitize warnings; also fix one NULL deference
+in pcretest.
+
+
+Version 8.43 23-February-2019
+-----------------------------
+
+1. Some time ago the config macro SUPPORT_UTF8 was changed to SUPPORT_UTF
+because it also applies to UTF-16 and UTF-32. However, this change was not made
+in the pcre2cpp files; consequently the C++ wrapper has from then been compiled
+with a bug in it, which would have been picked up by the unit test except that
+it also had its UTF8 code cut out. The bug was in a global replace when moving
+forward after matching an empty string.
+
+2. The C++ wrapper got broken a long time ago (version 7.3, August 2007) when
+(*CR) was invented (assuming it was the first such start-of-pattern option).
+The wrapper could never handle such patterns because it wraps patterns in
+(?:...)\z in order to support end anchoring. I have hacked in some code to fix
+this, that is, move the wrapping till after any existing start-of-pattern
+special settings.
+
+3. "pcre2grep" (sic) was accidentally mentioned in an error message (fix was
+ported from PCRE2).
+
+4. Typo LCC_ALL for LC_ALL fixed in pcregrep.
+
+5. In a pattern such as /[^\x{100}-\x{ffff}]*[\x80-\xff]/ which has a repeated
+negative class with no characters less than 0x100 followed by a positive class
+with only characters less than 0x100, the first class was incorrectly being
+auto-possessified, causing incorrect match failures.
+
+6. If the only branch in a conditional subpattern was anchored, the whole
+subpattern was treated as anchored, when it should not have been, since the
+assumed empty second branch cannot be anchored. Demonstrated by test patterns
+such as /(?(1)^())b/ or /(?(?=^))b/.
+
+7. Fix subject buffer overread in JIT when UTF is disabled and \X or \R has
+a greater than 1 fixed quantifier. This issue was found by Yunho Kim.
+
+8. If a pattern started with a subroutine call that had a quantifier with a
+minimum of zero, an incorrect "match must start with this character" could be
+recorded. Example: /(?&xxx)*ABC(?<xxx>XYZ)/ would (incorrectly) expect 'A' to
+be the first character of a match.
+
+9. Improve MAP_JIT flag usage on MacOS. Patch by Rich Siegel.
+
+
+Version 8.42 20-March-2018
+--------------------------
+
+1.  Fixed a MIPS issue in the JIT compiler reported by Joshua Kinard.
+
+2.  Fixed outdated real_pcre definitions in pcre.h.in (patch by Evgeny Kotkov).
+
+3.  pcregrep was truncating components of file names to 128 characters when
+processing files with the -r option, and also (some very odd code) truncating
+path names to 512 characters. There is now a check on the absolute length of
+full path file names, which may be up to 2047 characters long.
+
+4.  Using pcre_dfa_exec(), in UTF mode when UCP support was not defined, there
+was the possibility of a false positive match when caselessly matching a "not
+this character" item such as [^\x{1234}] (with a code point greater than 127)
+because the "other case" variable was not being initialized.
+
+5. Although pcre_jit_exec checks whether the pattern is compiled
+in a given mode, it was also expected that at least one mode is available.
+This is fixed and pcre_jit_exec returns with PCRE_ERROR_JIT_BADOPTION
+when the pattern is not optimized by JIT at all.
+
+6. The line number and related variables such as match counts in pcregrep
+were all int variables, causing overflow when files with more than 2147483647
+lines were processed (assuming 32-bit ints). They have all been changed to
+unsigned long ints.
+
+7. If a backreference with a minimum repeat count of zero was first in a
+pattern, apart from assertions, an incorrect first matching character could be
+recorded. For example, for the pattern /(?=(a))\1?b/, "b" was incorrectly set
+as the first character of a match.
+
+8. Fix out-of-bounds read for partial matching of /./ against an empty string
+when the newline type is CRLF.
+
+9. When matching using the the REG_STARTEND feature of the POSIX API with a
+non-zero starting offset, unset capturing groups with lower numbers than a
+group that did capture something were not being correctly returned as "unset"
+(that is, with offset values of -1).
+
+10. Matching the pattern /(*UTF)\C[^\v]+\x80/ against an 8-bit string
+containing multi-code-unit characters caused bad behaviour and possibly a
+crash. This issue was fixed for other kinds of repeat in release 8.37 by change
+38, but repeating character classes were overlooked.
+
+11. A small fix to pcregrep to avoid compiler warnings for -Wformat-overflow=2.
+
+12. Added --enable-jit=auto support to configure.ac.
+
+13. Fix misleading error message in configure.ac.
+
+
+Version 8.41 05-July-2017
+-------------------------
+
+1.  Fixed typo in CMakeLists.txt (wrong number of arguments for
+PCRE_STATIC_RUNTIME (affects MSVC only).
+
+2.  Issue 1 for 8.40 below was not correctly fixed. If pcregrep in multiline
+mode with --only-matching matched several lines, it restarted scanning at the
+next line instead of moving on to the end of the matched string, which can be
+several lines after the start.
+
+3.  Fix a missing else in the JIT compiler reported by 'idaifish'.
+
+4.  A (?# style comment is now ignored between a basic quantifier and a
+following '+' or '?' (example: /X+(?#comment)?Y/.
+
+5.  Avoid use of a potentially overflowing buffer in pcregrep (patch by Petr
+Pisar).
+
+6.  Fuzzers have reported issues in pcretest. These are NOT serious (it is,
+after all, just a test program). However, to stop the reports, some easy ones
+are fixed:
+
+    (a) Check for values < 256 when calling isprint() in pcretest.
+    (b) Give an error for too big a number after \O.
+
+7.  In the 32-bit library in non-UTF mode, an attempt to find a Unicode
+property for a character with a code point greater than 0x10ffff (the Unicode
+maximum) caused a crash.
+
+8. The alternative matching function, pcre_dfa_exec() misbehaved if it
+encountered a character class with a possessive repeat, for example [a-f]{3}+.
+
+9. When pcretest called pcre_copy_substring() in 32-bit mode, it set the buffer
+length incorrectly, which could result in buffer overflow.
+
+10. Remove redundant line of code (accidentally left in ages ago).
+
+11. Applied C++ patch from Irfan Adilovic to guard 'using std::' directives
+with namespace pcrecpp (Bugzilla #2084).
+
+12. Remove a duplication typo in pcre_tables.c.
+
+13. Fix returned offsets from regexec() when REG_STARTEND is used with a
+starting offset greater than zero.
+
+
+Version 8.40 11-January-2017
+----------------------------
+
+1.  Using -o with -M in pcregrep could cause unnecessary repeated output when
+    the match extended over a line boundary.
+
+2.  Applied Chris Wilson's second patch (Bugzilla #1681) to CMakeLists.txt for
+    MSVC static compilation, putting the first patch under a new option.
+
+3.  Fix register overwite in JIT when SSE2 acceleration is enabled.
+
+4.  Ignore "show all captures" (/=) for DFA matching.
+
+5.  Fix JIT unaligned accesses on x86. Patch by Marc Mutz.
+
+6.  In any wide-character mode (8-bit UTF or any 16-bit or 32-bit mode),
+    without PCRE_UCP set, a negative character type such as \D in a positive
+    class should cause all characters greater than 255 to match, whatever else
+    is in the class. There was a bug that caused this not to happen if a
+    Unicode property item was added to such a class, for example [\D\P{Nd}] or
+    [\W\pL].
+
+7.  When pcretest was outputing information from a callout, the caret indicator
+    for the current position in the subject line was incorrect if it was after
+    an escape sequence for a character whose code point was greater than
+    \x{ff}.
+
+8.  A pattern such as (?<RA>abc)(?(R)xyz) was incorrectly compiled such that
+    the conditional was interpreted as a reference to capturing group 1 instead
+    of a test for recursion. Any group whose name began with R was
+    misinterpreted in this way. (The reference interpretation should only
+    happen if the group's name is precisely "R".)
+
+9.  A number of bugs have been mended relating to match start-up optimizations
+    when the first thing in a pattern is a positive lookahead. These all
+    applied only when PCRE_NO_START_OPTIMIZE was *not* set:
+
+    (a) A pattern such as (?=.*X)X$ was incorrectly optimized as if it needed
+        both an initial 'X' and a following 'X'.
+    (b) Some patterns starting with an assertion that started with .* were
+        incorrectly optimized as having to match at the start of the subject or
+        after a newline. There are cases where this is not true, for example,
+        (?=.*[A-Z])(?=.{8,16})(?!.*[\s]) matches after the start in lines that
+        start with spaces. Starting .* in an assertion is no longer taken as an
+        indication of matching at the start (or after a newline).
+
+
+Version 8.39 14-June-2016
+-------------------------
+
+1.  If PCRE_AUTO_CALLOUT was set on a pattern that had a (?# comment between
+    an item and its qualifier (for example, A(?#comment)?B) pcre_compile()
+    misbehaved. This bug was found by the LLVM fuzzer.
+
+2.  Similar to the above, if an isolated \E was present between an item and its
+    qualifier when PCRE_AUTO_CALLOUT was set, pcre_compile() misbehaved. This
+    bug was found by the LLVM fuzzer.
+
+3.  Further to 8.38/46, negated classes such as [^[:^ascii:]\d] were also not
+    working correctly in UCP mode.
+
+4.  The POSIX wrapper function regexec() crashed if the option REG_STARTEND
+    was set when the pmatch argument was NULL. It now returns REG_INVARG.
+
+5.  Allow for up to 32-bit numbers in the ordin() function in pcregrep.
+
+6.  An empty \Q\E sequence between an item and its qualifier caused
+    pcre_compile() to misbehave when auto callouts were enabled. This bug was
+    found by the LLVM fuzzer.
+
+7.  If a pattern that was compiled with PCRE_EXTENDED started with white
+    space or a #-type comment that was followed by (?-x), which turns off
+    PCRE_EXTENDED, and there was no subsequent (?x) to turn it on again,
+    pcre_compile() assumed that (?-x) applied to the whole pattern and
+    consequently mis-compiled it. This bug was found by the LLVM fuzzer.
+
+8.  A call of pcre_copy_named_substring() for a named substring whose number
+    was greater than the space in the ovector could cause a crash.
+
+9.  Yet another buffer overflow bug involved duplicate named groups with a
+    group that reset capture numbers (compare 8.38/7 below). Once again, I have
+    just allowed for more memory, even if not needed. (A proper fix is
+    implemented in PCRE2, but it involves a lot of refactoring.)
+
+10. pcre_get_substring_list() crashed if the use of \K in a match caused the
+    start of the match to be earlier than the end.
+
+11. Migrating appropriate PCRE2 JIT improvements to PCRE.
+
+12. A pattern such as /(?<=((?C)0))/, which has a callout inside a lookbehind
+    assertion, caused pcretest to generate incorrect output, and also to read
+    uninitialized memory (detected by ASAN or valgrind).
+
+13. A pattern that included (*ACCEPT) in the middle of a sufficiently deeply
+    nested set of parentheses of sufficient size caused an overflow of the
+    compiling workspace (which was diagnosed, but of course is not desirable).
+
+14. And yet another buffer overflow bug involving duplicate named groups, this
+    time nested, with a nested back reference. Yet again, I have just allowed
+    for more memory, because anything more needs all the refactoring that has
+    been done for PCRE2. An example pattern that provoked this bug is:
+    /((?J)(?'R'(?'R'(?'R'(?'R'(?'R'(?|(\k'R'))))))))/ and the bug was
+    registered as CVE-2016-1283.
+
+15. pcretest went into a loop if global matching was requested with an ovector
+    size less than 2. It now gives an error message. This bug was found by
+    afl-fuzz.
+
+16. An invalid pattern fragment such as (?(?C)0 was not diagnosing an error
+    ("assertion expected") when (?(?C) was not followed by an opening
+    parenthesis.
+
+17. Fixed typo ("&&" for "&") in pcre_study(). Fortunately, this could not
+    actually affect anything, by sheer luck.
+
+18. Applied Chris Wilson's patch (Bugzilla #1681) to CMakeLists.txt for MSVC
+    static compilation.
+
+19. Modified the RunTest script to incorporate a valgrind suppressions file so
+    that certain errors, provoked by the SSE2 instruction set when JIT is used,
+    are ignored.
+
+20. A racing condition is fixed in JIT reported by Mozilla.
+
+21. Minor code refactor to avoid "array subscript is below array bounds"
+    compiler warning.
+
+22. Minor code refactor to avoid "left shift of negative number" warning.
+
+23. Fix typo causing compile error when 16- or 32-bit JIT is compiled without
+    UCP support.
+
+24. Refactor to avoid compiler warnings in pcrecpp.cc.
+
+25. Refactor to fix a typo in pcre_jit_test.c
+
+26. Patch to support compiling pcrecpp.cc with Intel compiler.
+
+
+Version 8.38 23-November-2015
+-----------------------------
+
+1.  If a group that contained a recursive back reference also contained a
+    forward reference subroutine call followed by a non-forward-reference
+    subroutine call, for example /.((?2)(?R)\1)()/, pcre_compile() failed to
+    compile correct code, leading to undefined behaviour or an internally
+    detected error. This bug was discovered by the LLVM fuzzer.
+
+2.  Quantification of certain items (e.g. atomic back references) could cause
+    incorrect code to be compiled when recursive forward references were
+    involved. For example, in this pattern: /(?1)()((((((\1++))\x85)+)|))/.
+    This bug was discovered by the LLVM fuzzer.
+
+3.  A repeated conditional group whose condition was a reference by name caused
+    a buffer overflow if there was more than one group with the given name.
+    This bug was discovered by the LLVM fuzzer.
+
+4.  A recursive back reference by name within a group that had the same name as
+    another group caused a buffer overflow. For example:
+    /(?J)(?'d'(?'d'\g{d}))/. This bug was discovered by the LLVM fuzzer.
+
+5.  A forward reference by name to a group whose number is the same as the
+    current group, for example in this pattern: /(?|(\k'Pm')|(?'Pm'))/, caused
+    a buffer overflow at compile time. This bug was discovered by the LLVM
+    fuzzer.
+
+6.  A lookbehind assertion within a set of mutually recursive subpatterns could
+    provoke a buffer overflow. This bug was discovered by the LLVM fuzzer.
+
+7.  Another buffer overflow bug involved duplicate named groups with a
+    reference between their definition, with a group that reset capture
+    numbers, for example: /(?J:(?|(?'R')(\k'R')|((?'R'))))/. This has been
+    fixed by always allowing for more memory, even if not needed. (A proper fix
+    is implemented in PCRE2, but it involves more refactoring.)
+
+8.  There was no check for integer overflow in subroutine calls such as (?123).
+
+9.  The table entry for \l in EBCDIC environments was incorrect, leading to its
+    being treated as a literal 'l' instead of causing an error.
+
+10. There was a buffer overflow if pcre_exec() was called with an ovector of
+    size 1. This bug was found by american fuzzy lop.
+
+11. If a non-capturing group containing a conditional group that could match
+    an empty string was repeated, it was not identified as matching an empty
+    string itself. For example: /^(?:(?(1)x|)+)+$()/.
+
+12. In an EBCDIC environment, pcretest was mishandling the escape sequences
+    \a and \e in test subject lines.
+
+13. In an EBCDIC environment, \a in a pattern was converted to the ASCII
+    instead of the EBCDIC value.
+
+14. The handling of \c in an EBCDIC environment has been revised so that it is
+    now compatible with the specification in Perl's perlebcdic page.
+
+15. The EBCDIC character 0x41 is a non-breaking space, equivalent to 0xa0 in
+    ASCII/Unicode. This has now been added to the list of characters that are
+    recognized as white space in EBCDIC.
+
+16. When PCRE was compiled without UCP support, the use of \p and \P gave an
+    error (correctly) when used outside a class, but did not give an error
+    within a class.
+
+17. \h within a class was incorrectly compiled in EBCDIC environments.
+
+18. A pattern with an unmatched closing parenthesis that contained a backward
+    assertion which itself contained a forward reference caused buffer
+    overflow. And example pattern is: /(?=di(?<=(?1))|(?=(.))))/.
+
+19. JIT should return with error when the compiled pattern requires more stack
+    space than the maximum.
+
+20. A possessively repeated conditional group that could match an empty string,
+    for example, /(?(R))*+/, was incorrectly compiled.
+
+21. Fix infinite recursion in the JIT compiler when certain patterns such as
+    /(?:|a|){100}x/ are analysed.
+
+22. Some patterns with character classes involving [: and \\ were incorrectly
+    compiled and could cause reading from uninitialized memory or an incorrect
+    error diagnosis.
+
+23. Pathological patterns containing many nested occurrences of [: caused
+    pcre_compile() to run for a very long time.
+
+24. A conditional group with only one branch has an implicit empty alternative
+    branch and must therefore be treated as potentially matching an empty
+    string.
+
+25. If (?R was followed by - or + incorrect behaviour happened instead of a
+    diagnostic.
+
+26. Arrange to give up on finding the minimum matching length for overly
+    complex patterns.
+
+27. Similar to (4) above: in a pattern with duplicated named groups and an
+    occurrence of (?| it is possible for an apparently non-recursive back
+    reference to become recursive if a later named group with the relevant
+    number is encountered. This could lead to a buffer overflow. Wen Guanxing
+    from Venustech ADLAB discovered this bug.
+
+28. If pcregrep was given the -q option with -c or -l, or when handling a
+    binary file, it incorrectly wrote output to stdout.
+
+29. The JIT compiler did not restore the control verb head in case of *THEN
+    control verbs. This issue was found by Karl Skomski with a custom LLVM
+    fuzzer.
+
+30. Error messages for syntax errors following \g and \k were giving inaccurate
+    offsets in the pattern.
+
+31. Added a check for integer overflow in conditions (?(<digits>) and
+    (?(R<digits>). This omission was discovered by Karl Skomski with the LLVM
+    fuzzer.
+
+32. Handling recursive references such as (?2) when the reference is to a group
+    later in the pattern uses code that is very hacked about and error-prone.
+    It has been re-written for PCRE2. Here in PCRE1, a check has been added to
+    give an internal error if it is obvious that compiling has gone wrong.
+
+33. The JIT compiler should not check repeats after a {0,1} repeat byte code.
+    This issue was found by Karl Skomski with a custom LLVM fuzzer.
+
+34. The JIT compiler should restore the control chain for empty possessive
+    repeats. This issue was found by Karl Skomski with a custom LLVM fuzzer.
+
+35. Match limit check added to JIT recursion. This issue was found by Karl
+    Skomski with a custom LLVM fuzzer.
+
+36. Yet another case similar to 27 above has been circumvented by an
+    unconditional allocation of extra memory. This issue is fixed "properly" in
+    PCRE2 by refactoring the way references are handled. Wen Guanxing
+    from Venustech ADLAB discovered this bug.
+
+37. Fix two assertion fails in JIT. These issues were found by Karl Skomski
+    with a custom LLVM fuzzer.
+
+38. Fixed a corner case of range optimization in JIT.
+
+39. An incorrect error "overran compiling workspace" was given if there were
+    exactly enough group forward references such that the last one extended
+    into the workspace safety margin. The next one would have expanded the
+    workspace. The test for overflow was not including the safety margin.
+
+40. A match limit issue is fixed in JIT which was found by Karl Skomski
+    with a custom LLVM fuzzer.
+
+41. Remove the use of /dev/null in testdata/testinput2, because it doesn't
+    work under Windows. (Why has it taken so long for anyone to notice?)
+
+42. In a character class such as [\W\p{Any}] where both a negative-type escape
+    ("not a word character") and a property escape were present, the property
+    escape was being ignored.
+
+43. Fix crash caused by very long (*MARK) or (*THEN) names.
+
+44. A sequence such as [[:punct:]b] that is, a POSIX character class followed
+    by a single ASCII character in a class item, was incorrectly compiled in
+    UCP mode. The POSIX class got lost, but only if the single character
+    followed it.
+
+45. [:punct:] in UCP mode was matching some characters in the range 128-255
+    that should not have been matched.
+
+46. If [:^ascii:] or [:^xdigit:] or [:^cntrl:] are present in a non-negated
+    class, all characters with code points greater than 255 are in the class.
+    When a Unicode property was also in the class (if PCRE_UCP is set, escapes
+    such as \w are turned into Unicode properties), wide characters were not
+    correctly handled, and could fail to match.
+
+
+Version 8.37 28-April-2015
+--------------------------
+
+1.  When an (*ACCEPT) is triggered inside capturing parentheses, it arranges
+    for those parentheses to be closed with whatever has been captured so far.
+    However, it was failing to mark any other groups between the hightest
+    capture so far and the currrent group as "unset". Thus, the ovector for
+    those groups contained whatever was previously there. An example is the
+    pattern /(x)|((*ACCEPT))/ when matched against "abcd".
+
+2.  If an assertion condition was quantified with a minimum of zero (an odd
+    thing to do, but it happened), SIGSEGV or other misbehaviour could occur.
+
+3.  If a pattern in pcretest input had the P (POSIX) modifier followed by an
+    unrecognized modifier, a crash could occur.
+
+4.  An attempt to do global matching in pcretest with a zero-length ovector
+    caused a crash.
+
+5.  Fixed a memory leak during matching that could occur for a subpattern
+    subroutine call (recursive or otherwise) if the number of captured groups
+    that had to be saved was greater than ten.
+
+6.  Catch a bad opcode during auto-possessification after compiling a bad UTF
+    string with NO_UTF_CHECK. This is a tidyup, not a bug fix, as passing bad
+    UTF with NO_UTF_CHECK is documented as having an undefined outcome.
+
+7.  A UTF pattern containing a "not" match of a non-ASCII character and a
+    subroutine reference could loop at compile time. Example: /[^\xff]((?1))/.
+
+8. When a pattern is compiled, it remembers the highest back reference so that
+   when matching, if the ovector is too small, extra memory can be obtained to
+   use instead. A conditional subpattern whose condition is a check on a
+   capture having happened, such as, for example in the pattern
+   /^(?:(a)|b)(?(1)A|B)/, is another kind of back reference, but it was not
+   setting the highest backreference number. This mattered only if pcre_exec()
+   was called with an ovector that was too small to hold the capture, and there
+   was no other kind of back reference (a situation which is probably quite
+   rare). The effect of the bug was that the condition was always treated as
+   FALSE when the capture could not be consulted, leading to a incorrect
+   behaviour by pcre_exec(). This bug has been fixed.
+
+9. A reference to a duplicated named group (either a back reference or a test
+   for being set in a conditional) that occurred in a part of the pattern where
+   PCRE_DUPNAMES was not set caused the amount of memory needed for the pattern
+   to be incorrectly calculated, leading to overwriting.
+
+10. A mutually recursive set of back references such as (\2)(\1) caused a
+    segfault at study time (while trying to find the minimum matching length).
+    The infinite loop is now broken (with the minimum length unset, that is,
+    zero).
+
+11. If an assertion that was used as a condition was quantified with a minimum
+    of zero, matching went wrong. In particular, if the whole group had
+    unlimited repetition and could match an empty string, a segfault was
+    likely. The pattern (?(?=0)?)+ is an example that caused this. Perl allows
+    assertions to be quantified, but not if they are being used as conditions,
+    so the above pattern is faulted by Perl. PCRE has now been changed so that
+    it also rejects such patterns.
+
+12. A possessive capturing group such as (a)*+ with a minimum repeat of zero
+    failed to allow the zero-repeat case if pcre2_exec() was called with an
+    ovector too small to capture the group.
+
+13. Fixed two bugs in pcretest that were discovered by fuzzing and reported by
+    Red Hat Product Security:
+
+    (a) A crash if /K and /F were both set with the option to save the compiled
+    pattern.
+
+    (b) Another crash if the option to print captured substrings in a callout
+    was combined with setting a null ovector, for example \O\C+ as a subject
+    string.
+
+14. A pattern such as "((?2){0,1999}())?", which has a group containing a
+    forward reference repeated a large (but limited) number of times within a
+    repeated outer group that has a zero minimum quantifier, caused incorrect
+    code to be compiled, leading to the error "internal error:
+    previously-checked referenced subpattern not found" when an incorrect
+    memory address was read. This bug was reported as "heap overflow",
+    discovered by Kai Lu of Fortinet's FortiGuard Labs and given the CVE number
+    CVE-2015-2325.
+
+23. A pattern such as "((?+1)(\1))/" containing a forward reference subroutine
+    call within a group that also contained a recursive back reference caused
+    incorrect code to be compiled. This bug was reported as "heap overflow",
+    discovered by Kai Lu of Fortinet's FortiGuard Labs, and given the CVE
+    number CVE-2015-2326.
+
+24. Computing the size of the JIT read-only data in advance has been a source
+    of various issues, and new ones are still appear unfortunately. To fix
+    existing and future issues, size computation is eliminated from the code,
+    and replaced by on-demand memory allocation.
+
+25. A pattern such as /(?i)[A-`]/, where characters in the other case are
+    adjacent to the end of the range, and the range contained characters with
+    more than one other case, caused incorrect behaviour when compiled in UTF
+    mode. In that example, the range a-j was left out of the class.
+
+26. Fix JIT compilation of conditional blocks, which assertion
+    is converted to (*FAIL). E.g: /(?(?!))/.
+
+27. The pattern /(?(?!)^)/ caused references to random memory. This bug was
+    discovered by the LLVM fuzzer.
+
+28. The assertion (?!) is optimized to (*FAIL). This was not handled correctly
+    when this assertion was used as a condition, for example (?(?!)a|b). In
+    pcre2_match() it worked by luck; in pcre2_dfa_match() it gave an incorrect
+    error about an unsupported item.
+
+29. For some types of pattern, for example /Z*(|d*){216}/, the auto-
+    possessification code could take exponential time to complete. A recursion
+    depth limit of 1000 has been imposed to limit the resources used by this
+    optimization.
+
+30. A pattern such as /(*UTF)[\S\V\H]/, which contains a negated special class
+    such as \S in non-UCP mode, explicit wide characters (> 255) can be ignored
+    because \S ensures they are all in the class. The code for doing this was
+    interacting badly with the code for computing the amount of space needed to
+    compile the pattern, leading to a buffer overflow. This bug was discovered
+    by the LLVM fuzzer.
+
+31. A pattern such as /((?2)+)((?1))/ which has mutual recursion nested inside
+    other kinds of group caused stack overflow at compile time. This bug was
+    discovered by the LLVM fuzzer.
+
+32. A pattern such as /(?1)(?#?'){8}(a)/ which had a parenthesized comment
+    between a subroutine call and its quantifier was incorrectly compiled,
+    leading to buffer overflow or other errors. This bug was discovered by the
+    LLVM fuzzer.
+
+33. The illegal pattern /(?(?<E>.*!.*)?)/ was not being diagnosed as missing an
+    assertion after (?(. The code was failing to check the character after
+    (?(?< for the ! or = that would indicate a lookbehind assertion. This bug
+    was discovered by the LLVM fuzzer.
+
+34. A pattern such as /X((?2)()*+){2}+/ which has a possessive quantifier with
+    a fixed maximum following a group that contains a subroutine reference was
+    incorrectly compiled and could trigger buffer overflow. This bug was
+    discovered by the LLVM fuzzer.
+
+35. A mutual recursion within a lookbehind assertion such as (?<=((?2))((?1)))
+    caused a stack overflow instead of the diagnosis of a non-fixed length
+    lookbehind assertion. This bug was discovered by the LLVM fuzzer.
+
+36. The use of \K in a positive lookbehind assertion in a non-anchored pattern
+    (e.g. /(?<=\Ka)/) could make pcregrep loop.
+
+37. There was a similar problem to 36 in pcretest for global matches.
+
+38. If a greedy quantified \X was preceded by \C in UTF mode (e.g. \C\X*),
+    and a subsequent item in the pattern caused a non-match, backtracking over
+    the repeated \X did not stop, but carried on past the start of the subject,
+    causing reference to random memory and/or a segfault. There were also some
+    other cases where backtracking after \C could crash. This set of bugs was
+    discovered by the LLVM fuzzer.
+
+39. The function for finding the minimum length of a matching string could take
+    a very long time if mutual recursion was present many times in a pattern,
+    for example, /((?2){73}(?2))((?1))/. A better mutual recursion detection
+    method has been implemented. This infelicity was discovered by the LLVM
+    fuzzer.
+
+40. Static linking against the PCRE library using the pkg-config module was
+    failing on missing pthread symbols.
+
+
+Version 8.36 26-September-2014
+------------------------------
+
+1.  Got rid of some compiler warnings in the C++ modules that were shown up by
+    -Wmissing-field-initializers and -Wunused-parameter.
+
+2.  The tests for quantifiers being too big (greater than 65535) were being
+    applied after reading the number, and stupidly assuming that integer
+    overflow would give a negative number. The tests are now applied as the
+    numbers are read.
+
+3.  Tidy code in pcre_exec.c where two branches that used to be different are
+    now the same.
+
+4.  The JIT compiler did not generate match limit checks for certain
+    bracketed expressions with quantifiers. This may lead to exponential
+    backtracking, instead of returning with PCRE_ERROR_MATCHLIMIT. This
+    issue should be resolved now.
+
+5.  Fixed an issue, which occures when nested alternatives are optimized
+    with table jumps.
+
+6.  Inserted two casts and changed some ints to size_t in the light of some
+    reported 64-bit compiler warnings (Bugzilla 1477).
+
+7.  Fixed a bug concerned with zero-minimum possessive groups that could match
+    an empty string, which sometimes were behaving incorrectly in the
+    interpreter (though correctly in the JIT matcher). This pcretest input is
+    an example:
+
+      '\A(?:[^"]++|"(?:[^"]*+|"")*+")++'
+      NON QUOTED "QUOT""ED" AFTER "NOT MATCHED
+
+    the interpreter was reporting a match of 'NON QUOTED ' only, whereas the
+    JIT matcher and Perl both matched 'NON QUOTED "QUOT""ED" AFTER '. The test
+    for an empty string was breaking the inner loop and carrying on at a lower
+    level, when possessive repeated groups should always return to a higher
+    level as they have no backtrack points in them. The empty string test now
+    occurs at the outer level.
+
+8.  Fixed a bug that was incorrectly auto-possessifying \w+ in the pattern
+    ^\w+(?>\s*)(?<=\w) which caused it not to match "test test".
+
+9.  Give a compile-time error for \o{} (as Perl does) and for \x{} (which Perl
+    doesn't).
+
+10. Change 8.34/15 introduced a bug that caused the amount of memory needed
+    to hold a pattern to be incorrectly computed (too small) when there were
+    named back references to duplicated names. This could cause "internal
+    error: code overflow" or "double free or corruption" or other memory
+    handling errors.
+
+11. When named subpatterns had the same prefixes, back references could be
+    confused. For example, in this pattern:
+
+      /(?P<Name>a)?(?P<Name2>b)?(?(<Name>)c|d)*l/
+
+    the reference to 'Name' was incorrectly treated as a reference to a
+    duplicate name.
+
+12. A pattern such as /^s?c/mi8 where the optional character has more than
+    one "other case" was incorrectly compiled such that it would only try to
+    match starting at "c".
+
+13. When a pattern starting with \s was studied, VT was not included in the
+    list of possible starting characters; this should have been part of the
+    8.34/18 patch.
+
+14. If a character class started [\Qx]... where x is any character, the class
+    was incorrectly terminated at the ].
+
+15. If a pattern that started with a caseless match for a character with more
+    than one "other case" was studied, PCRE did not set up the starting code
+    unit bit map for the list of possible characters. Now it does. This is an
+    optimization improvement, not a bug fix.
+
+16. The Unicode data tables have been updated to Unicode 7.0.0.
+
+17. Fixed a number of memory leaks in pcregrep.
+
+18. Avoid a compiler warning (from some compilers) for a function call with
+    a cast that removes "const" from an lvalue by using an intermediate
+    variable (to which the compiler does not object).
+
+19. Incorrect code was compiled if a group that contained an internal recursive
+    back reference was optional (had quantifier with a minimum of zero). This
+    example compiled incorrect code: /(((a\2)|(a*)\g<-1>))*/ and other examples
+    caused segmentation faults because of stack overflows at compile time.
+
+20. A pattern such as /((?(R)a|(?1)))+/, which contains a recursion within a
+    group that is quantified with an indefinite repeat, caused a compile-time
+    loop which used up all the system stack and provoked a segmentation fault.
+    This was not the same bug as 19 above.
+
+21. Add PCRECPP_EXP_DECL declaration to operator<< in pcre_stringpiece.h.
+    Patch by Mike Frysinger.
+
+
+Version 8.35 04-April-2014
+--------------------------
+
+1.  A new flag is set, when property checks are present in an XCLASS.
+    When this flag is not set, PCRE can perform certain optimizations
+    such as studying these XCLASS-es.
+
+2.  The auto-possessification of character sets were improved: a normal
+    and an extended character set can be compared now. Furthermore
+    the JIT compiler optimizes more character set checks.
+
+3.  Got rid of some compiler warnings for potentially uninitialized variables
+    that show up only when compiled with -O2.
+
+4.  A pattern such as (?=ab\K) that uses \K in an assertion can set the start
+    of a match later then the end of the match. The pcretest program was not
+    handling the case sensibly - it was outputting from the start to the next
+    binary zero. It now reports this situation in a message, and outputs the
+    text from the end to the start.
+
+5.  Fast forward search is improved in JIT. Instead of the first three
+    characters, any three characters with fixed position can be searched.
+    Search order: first, last, middle.
+
+6.  Improve character range checks in JIT. Characters are read by an inprecise
+    function now, which returns with an unknown value if the character code is
+    above a certain threshold (e.g: 256). The only limitation is that the value
+    must be bigger than the threshold as well. This function is useful when
+    the characters above the threshold are handled in the same way.
+
+7.  The macros whose names start with RAWUCHAR are placeholders for a future
+    mode in which only the bottom 21 bits of 32-bit data items are used. To
+    make this more memorable for those maintaining the code, the names have
+    been changed to start with UCHAR21, and an extensive comment has been added
+    to their definition.
+
+8.  Add missing (new) files sljitNativeTILEGX.c and sljitNativeTILEGX-encoder.c
+    to the export list in Makefile.am (they were accidentally omitted from the
+    8.34 tarball).
+
+9.  The informational output from pcretest used the phrase "starting byte set"
+    which is inappropriate for the 16-bit and 32-bit libraries. As the output
+    for "first char" and "need char" really means "non-UTF-char", I've changed
+    "byte" to "char", and slightly reworded the output. The documentation about
+    these values has also been (I hope) clarified.
+
+10. Another JIT related optimization: use table jumps for selecting the correct
+    backtracking path, when more than four alternatives are present inside a
+    bracket.
+
+11. Empty match is not possible, when the minimum length is greater than zero,
+    and there is no \K in the pattern. JIT should avoid empty match checks in
+    such cases.
+
+12. In a caseless character class with UCP support, when a character with more
+    than one alternative case was not the first character of a range, not all
+    the alternative cases were added to the class. For example, s and \x{17f}
+    are both alternative cases for S: the class [RST] was handled correctly,
+    but [R-T] was not.
+
+13. The configure.ac file always checked for pthread support when JIT was
+    enabled. This is not used in Windows, so I have put this test inside a
+    check for the presence of windows.h (which was already tested for).
+
+14. Improve pattern prefix search by a simplified Boyer-Moore algorithm in JIT.
+    The algorithm provides a way to skip certain starting offsets, and usually
+    faster than linear prefix searches.
+
+15. Change 13 for 8.20 updated RunTest to check for the 'fr' locale as well
+    as for 'fr_FR' and 'french'. For some reason, however, it then used the
+    Windows-specific input and output files, which have 'french' screwed in.
+    So this could never have worked. One of the problems with locales is that
+    they aren't always the same. I have now updated RunTest so that it checks
+    the output of the locale test (test 3) against three different output
+    files, and it allows the test to pass if any one of them matches. With luck
+    this should make the test pass on some versions of Solaris where it was
+    failing. Because of the uncertainty, the script did not used to stop if
+    test 3 failed; it now does. If further versions of a French locale ever
+    come to light, they can now easily be added.
+
+16. If --with-pcregrep-bufsize was given a non-integer value such as "50K",
+    there was a message during ./configure, but it did not stop. This now
+    provokes an error. The invalid example in README has been corrected.
+    If a value less than the minimum is given, the minimum value has always
+    been used, but now a warning is given.
+
+17. If --enable-bsr-anycrlf was set, the special 16/32-bit test failed. This
+    was a bug in the test system, which is now fixed. Also, the list of various
+    configurations that are tested for each release did not have one with both
+    16/32 bits and --enable-bar-anycrlf. It now does.
+
+18. pcretest was missing "-C bsr" for displaying the \R default setting.
+
+19. Little endian PowerPC systems are supported now by the JIT compiler.
+
+20. The fast forward newline mechanism could enter to an infinite loop on
+    certain invalid UTF-8 input. Although we don't support these cases
+    this issue can be fixed by a performance optimization.
+
+21. Change 33 of 8.34 is not sufficient to ensure stack safety because it does
+    not take account if existing stack usage. There is now a new global
+    variable called pcre_stack_guard that can be set to point to an external
+    function to check stack availability. It is called at the start of
+    processing every parenthesized group.
+
+22. A typo in the code meant that in ungreedy mode the max/min qualifier
+    behaved like a min-possessive qualifier, and, for example, /a{1,3}b/U did
+    not match "ab".
+
+23. When UTF was disabled, the JIT program reported some incorrect compile
+    errors. These messages are silenced now.
+
+24. Experimental support for ARM-64 and MIPS-64 has been added to the JIT
+    compiler.
+
+25. Change all the temporary files used in RunGrepTest to be different to those
+    used by RunTest so that the tests can be run simultaneously, for example by
+    "make -j check".
+
+
+Version 8.34 15-December-2013
+-----------------------------
+
+1.  Add pcre[16|32]_jit_free_unused_memory to forcibly free unused JIT
+    executable memory. Patch inspired by Carsten Klein.
+
+2.  ./configure --enable-coverage defined SUPPORT_GCOV in config.h, although
+    this macro is never tested and has no effect, because the work to support
+    coverage involves only compiling and linking options and special targets in
+    the Makefile. The comment in config.h implied that defining the macro would
+    enable coverage support, which is totally false. There was also support for
+    setting this macro in the CMake files (my fault, I just copied it from
+    configure). SUPPORT_GCOV has now been removed.
+
+3.  Make a small performance improvement in strlen16() and strlen32() in
+    pcretest.
+
+4.  Change 36 for 8.33 left some unreachable statements in pcre_exec.c,
+    detected by the Solaris compiler (gcc doesn't seem to be able to diagnose
+    these cases). There was also one in pcretest.c.
+
+5.  Cleaned up a "may be uninitialized" compiler warning in pcre_exec.c.
+
+6.  In UTF mode, the code for checking whether a group could match an empty
+    string (which is used for indefinitely repeated groups to allow for
+    breaking an infinite loop) was broken when the group contained a repeated
+    negated single-character class with a character that occupied more than one
+    data item and had a minimum repetition of zero (for example, [^\x{100}]* in
+    UTF-8 mode). The effect was undefined: the group might or might not be
+    deemed as matching an empty string, or the program might have crashed.
+
+7.  The code for checking whether a group could match an empty string was not
+    recognizing that \h, \H, \v, \V, and \R must match a character.
+
+8.  Implemented PCRE_INFO_MATCH_EMPTY, which yields 1 if the pattern can match
+    an empty string. If it can, pcretest shows this in its information output.
+
+9.  Fixed two related bugs that applied to Unicode extended grapheme clusters
+    that were repeated with a maximizing qualifier (e.g. \X* or \X{2,5}) when
+    matched by pcre_exec() without using JIT:
+
+    (a) If the rest of the pattern did not match after a maximal run of
+        grapheme clusters, the code for backing up to try with fewer of them
+        did not always back up over a full grapheme when characters that do not
+        have the modifier quality were involved, e.g. Hangul syllables.
+
+    (b) If the match point in a subject started with modifier character, and
+        there was no match, the code could incorrectly back up beyond the match
+        point, and potentially beyond the first character in the subject,
+        leading to a segfault or an incorrect match result.
+
+10. A conditional group with an assertion condition could lead to PCRE
+    recording an incorrect first data item for a match if no other first data
+    item was recorded. For example, the pattern (?(?=ab)ab) recorded "a" as a
+    first data item, and therefore matched "ca" after "c" instead of at the
+    start.
+
+11. Change 40 for 8.33 (allowing pcregrep to find empty strings) showed up a
+    bug that caused the command "echo a | ./pcregrep -M '|a'" to loop.
+
+12. The source of pcregrep now includes z/OS-specific code so that it can be
+    compiled for z/OS as part of the special z/OS distribution.
+
+13. Added the -T and -TM options to pcretest.
+
+14. The code in pcre_compile.c for creating the table of named capturing groups
+    has been refactored. Instead of creating the table dynamically during the
+    actual compiling pass, the information is remembered during the pre-compile
+    pass (on the stack unless there are more than 20 named groups, in which
+    case malloc() is used) and the whole table is created before the actual
+    compile happens. This has simplified the code (it is now nearly 150 lines
+    shorter) and prepared the way for better handling of references to groups
+    with duplicate names.
+
+15. A back reference to a named subpattern when there is more than one of the
+    same name now checks them in the order in which they appear in the pattern.
+    The first one that is set is used for the reference. Previously only the
+    first one was inspected. This change makes PCRE more compatible with Perl.
+
+16. Unicode character properties were updated from Unicode 6.3.0.
+
+17. The compile-time code for auto-possessification has been refactored, based
+    on a patch by Zoltan Herczeg. It now happens after instead of during
+    compilation. The code is cleaner, and more cases are handled. The option
+    PCRE_NO_AUTO_POSSESS is added for testing purposes, and the -O and /O
+    options in pcretest are provided to set it. It can also be set by
+    (*NO_AUTO_POSSESS) at the start of a pattern.
+
+18. The character VT has been added to the default ("C" locale) set of
+    characters that match \s and are generally treated as white space,
+    following this same change in Perl 5.18. There is now no difference between
+    "Perl space" and "POSIX space". Whether VT is treated as white space in
+    other locales depends on the locale.
+
+19. The code for checking named groups as conditions, either for being set or
+    for being recursed, has been refactored (this is related to 14 and 15
+    above). Processing unduplicated named groups should now be as fast at
+    numerical groups, and processing duplicated groups should be faster than
+    before.
+
+20. Two patches to the CMake build system, by Alexander Barkov:
+
+      (1) Replace the "source" command by "." in CMakeLists.txt because
+          "source" is a bash-ism.
+
+      (2) Add missing HAVE_STDINT_H and HAVE_INTTYPES_H to config-cmake.h.in;
+          without these the CMake build does not work on Solaris.
+
+21. Perl has changed its handling of \8 and \9. If there is no previously
+    encountered capturing group of those numbers, they are treated as the
+    literal characters 8 and 9 instead of a binary zero followed by the
+    literals. PCRE now does the same.
+
+22. Following Perl, added \o{} to specify codepoints in octal, making it
+    possible to specify values greater than 0777 and also making them
+    unambiguous.
+
+23. Perl now gives an error for missing closing braces after \x{... instead of
+    treating the string as literal. PCRE now does the same.
+
+24. RunTest used to grumble if an inappropriate test was selected explicitly,
+    but just skip it when running all tests. This make it awkward to run ranges
+    of tests when one of them was inappropriate. Now it just skips any
+    inappropriate tests, as it always did when running all tests.
+
+25. If PCRE_AUTO_CALLOUT and PCRE_UCP were set for a pattern that contained
+    character types such as \d or \w, too many callouts were inserted, and the
+    data that they returned was rubbish.
+
+26. In UCP mode, \s was not matching two of the characters that Perl matches,
+    namely NEL (U+0085) and MONGOLIAN VOWEL SEPARATOR (U+180E), though they
+    were matched by \h. The code has now been refactored so that the lists of
+    the horizontal and vertical whitespace characters used for \h and \v (which
+    are defined only in one place) are now also used for \s.
+
+27. Add JIT support for the 64 bit TileGX architecture.
+    Patch by Jiong Wang (Tilera Corporation).
+
+28. Possessive quantifiers for classes (both explicit and automatically
+    generated) now use special opcodes instead of wrapping in ONCE brackets.
+
+29. Whereas an item such as A{4}+ ignored the possessivenes of the quantifier
+    (because it's meaningless), this was not happening when PCRE_CASELESS was
+    set. Not wrong, but inefficient.
+
+30. Updated perltest.pl to add /u (force Unicode mode) when /W (use Unicode
+    properties for \w, \d, etc) is present in a test regex. Otherwise if the
+    test contains no characters greater than 255, Perl doesn't realise it
+    should be using Unicode semantics.
+
+31. Upgraded the handling of the POSIX classes [:graph:], [:print:], and
+    [:punct:] when PCRE_UCP is set so as to include the same characters as Perl
+    does in Unicode mode.
+
+32. Added the "forbid" facility to pcretest so that putting tests into the
+    wrong test files can sometimes be quickly detected.
+
+33. There is now a limit (default 250) on the depth of nesting of parentheses.
+    This limit is imposed to control the amount of system stack used at compile
+    time. It can be changed at build time by --with-parens-nest-limit=xxx or
+    the equivalent in CMake.
+
+34. Character classes such as [A-\d] or [a-[:digit:]] now cause compile-time
+    errors. Perl warns for these when in warning mode, but PCRE has no facility
+    for giving warnings.
+
+35. Change 34 for 8.13 allowed quantifiers on assertions, because Perl does.
+    However, this was not working for (?!) because it is optimized to (*FAIL),
+    for which PCRE does not allow quantifiers. The optimization is now disabled
+    when a quantifier follows (?!). I can't see any use for this, but it makes
+    things uniform.
+
+36. Perl no longer allows group names to start with digits, so I have made this
+    change also in PCRE. It simplifies the code a bit.
+
+37. In extended mode, Perl ignores spaces before a + that indicates a
+    possessive quantifier. PCRE allowed a space before the quantifier, but not
+    before the possessive +. It now does.
+
+38. The use of \K (reset reported match start) within a repeated possessive
+    group such as (a\Kb)*+ was not working.
+
+40. Document that the same character tables must be used at compile time and
+    run time, and that the facility to pass tables to pcre_exec() and
+    pcre_dfa_exec() is for use only with saved/restored patterns.
+
+41. Applied Jeff Trawick's patch CMakeLists.txt, which "provides two new
+    features for Builds with MSVC:
+
+    1. Support pcre.rc and/or pcreposix.rc (as is already done for MinGW
+       builds). The .rc files can be used to set FileDescription and many other
+       attributes.
+
+    2. Add an option (-DINSTALL_MSVC_PDB) to enable installation of .pdb files.
+       This allows higher-level build scripts which want .pdb files to avoid
+       hard-coding the exact files needed."
+
+42. Added support for [[:<:]] and [[:>:]] as used in the BSD POSIX library to
+    mean "start of word" and "end of word", respectively, as a transition aid.
+
+43. A minimizing repeat of a class containing codepoints greater than 255 in
+    non-UTF 16-bit or 32-bit modes caused an internal error when PCRE was
+    compiled to use the heap for recursion.
+
+44. Got rid of some compiler warnings for unused variables when UTF but not UCP
+    is configured.
+
+
+Version 8.33 28-May-2013
+------------------------
+
+1.  Added 'U' to some constants that are compared to unsigned integers, to
+    avoid compiler signed/unsigned warnings. Added (int) casts to unsigned
+    variables that are added to signed variables, to ensure the result is
+    signed and can be negated.
+
+2.  Applied patch by Daniel Richard G for quashing MSVC warnings to the
+    CMake config files.
+
+3.  Revise the creation of config.h.generic so that all boolean macros are
+    #undefined, whereas non-boolean macros are #ifndef/#endif-ed. This makes
+    overriding via -D on the command line possible.
+
+4.  Changing the definition of the variable "op" in pcre_exec.c from pcre_uchar
+    to unsigned int is reported to make a quite noticeable speed difference in
+    a specific Windows environment. Testing on Linux did also appear to show
+    some benefit (and it is clearly not harmful). Also fixed the definition of
+    Xop which should be unsigned.
+
+5.  Related to (4), changing the definition of the intermediate variable cc
+    in repeated character loops from pcre_uchar to pcre_uint32 also gave speed
+    improvements.
+
+6.  Fix forward search in JIT when link size is 3 or greater. Also removed some
+    unnecessary spaces.
+
+7.  Adjust autogen.sh and configure.ac to lose warnings given by automake 1.12
+    and later.
+
+8.  Fix two buffer over read issues in 16 and 32 bit modes. Affects JIT only.
+
+9.  Optimizing fast_forward_start_bits in JIT.
+
+10. Adding support for callouts in JIT, and fixing some issues revealed
+    during this work. Namely:
+
+    (a) Unoptimized capturing brackets incorrectly reset on backtrack.
+
+    (b) Minimum length was not checked before the matching is started.
+
+11. The value of capture_last that is passed to callouts was incorrect in some
+    cases when there was a capture on one path that was subsequently abandoned
+    after a backtrack. Also, the capture_last value is now reset after a
+    recursion, since all captures are also reset in this case.
+
+12. The interpreter no longer returns the "too many substrings" error in the
+    case when an overflowing capture is in a branch that is subsequently
+    abandoned after a backtrack.
+
+13. In the pathological case when an offset vector of size 2 is used, pcretest
+    now prints out the matched string after a yield of 0 or 1.
+
+14. Inlining subpatterns in recursions, when certain conditions are fulfilled.
+    Only supported by the JIT compiler at the moment.
+
+15. JIT compiler now supports 32 bit Macs thanks to Lawrence Velazquez.
+
+16. Partial matches now set offsets[2] to the "bumpalong" value, that is, the
+    offset of the starting point of the matching process, provided the offsets
+    vector is large enough.
+
+17. The \A escape now records a lookbehind value of 1, though its execution
+    does not actually inspect the previous character. This is to ensure that,
+    in partial multi-segment matching, at least one character from the old
+    segment is retained when a new segment is processed. Otherwise, if there
+    are no lookbehinds in the pattern, \A might match incorrectly at the start
+    of a new segment.
+
+18. Added some #ifdef __VMS code into pcretest.c to help VMS implementations.
+
+19. Redefined some pcre_uchar variables in pcre_exec.c as pcre_uint32; this
+    gives some modest performance improvement in 8-bit mode.
+
+20. Added the PCRE-specific property \p{Xuc} for matching characters that can
+    be expressed in certain programming languages using Universal Character
+    Names.
+
+21. Unicode validation has been updated in the light of Unicode Corrigendum #9,
+    which points out that "non characters" are not "characters that may not
+    appear in Unicode strings" but rather "characters that are reserved for
+    internal use and have only local meaning".
+
+22. When a pattern was compiled with automatic callouts (PCRE_AUTO_CALLOUT) and
+    there was a conditional group that depended on an assertion, if the
+    assertion was false, the callout that immediately followed the alternation
+    in the condition was skipped when pcre_exec() was used for matching.
+
+23. Allow an explicit callout to be inserted before an assertion that is the
+    condition for a conditional group, for compatibility with automatic
+    callouts, which always insert a callout at this point.
+
+24. In 8.31, (*COMMIT) was confined to within a recursive subpattern. Perl also
+    confines (*SKIP) and (*PRUNE) in the same way, and this has now been done.
+
+25. (*PRUNE) is now supported by the JIT compiler.
+
+26. Fix infinite loop when /(?<=(*SKIP)ac)a/ is matched against aa.
+
+27. Fix the case where there are two or more SKIPs with arguments that may be
+    ignored.
+
+28. (*SKIP) is now supported by the JIT compiler.
+
+29. (*THEN) is now supported by the JIT compiler.
+
+30. Update RunTest with additional test selector options.
+
+31. The way PCRE handles backtracking verbs has been changed in two ways.
+
+    (1) Previously, in something like (*COMMIT)(*SKIP), COMMIT would override
+    SKIP. Now, PCRE acts on whichever backtracking verb is reached first by
+    backtracking. In some cases this makes it more Perl-compatible, but Perl's
+    rather obscure rules do not always do the same thing.
+
+    (2) Previously, backtracking verbs were confined within assertions. This is
+    no longer the case for positive assertions, except for (*ACCEPT). Again,
+    this sometimes improves Perl compatibility, and sometimes does not.
+
+32. A number of tests that were in test 2 because Perl did things differently
+    have been moved to test 1, because either Perl or PCRE has changed, and
+    these tests are now compatible.
+
+32. Backtracking control verbs are now handled in the same way in JIT and
+    interpreter.
+
+33. An opening parenthesis in a MARK/PRUNE/SKIP/THEN name in a pattern that
+    contained a forward subroutine reference caused a compile error.
+
+34. Auto-detect and optimize limited repetitions in JIT.
+
+35. Implement PCRE_NEVER_UTF to lock out the use of UTF, in particular,
+    blocking (*UTF) etc.
+
+36. In the interpreter, maximizing pattern repetitions for characters and
+    character types now use tail recursion, which reduces stack usage.
+
+37. The value of the max lookbehind was not correctly preserved if a compiled
+    and saved regex was reloaded on a host of different endianness.
+
+38. Implemented (*LIMIT_MATCH) and (*LIMIT_RECURSION). As part of the extension
+    of the compiled pattern block, expand the flags field from 16 to 32 bits
+    because it was almost full.
+
+39. Try madvise first before posix_madvise.
+
+40. Change 7 for PCRE 7.9 made it impossible for pcregrep to find empty lines
+    with a pattern such as ^$. It has taken 4 years for anybody to notice! The
+    original change locked out all matches of empty strings. This has been
+    changed so that one match of an empty string per line is recognized.
+    Subsequent searches on the same line (for colouring or for --only-matching,
+    for example) do not recognize empty strings.
+
+41. Applied a user patch to fix a number of spelling mistakes in comments.
+
+42. Data lines longer than 65536 caused pcretest to crash.
+
+43. Clarified the data type for length and startoffset arguments for pcre_exec
+    and pcre_dfa_exec in the function-specific man pages, where they were
+    explicitly stated to be in bytes, never having been updated. I also added
+    some clarification to the pcreapi man page.
+
+44. A call to pcre_dfa_exec() with an output vector size less than 2 caused
+    a segmentation fault.
+
+
+Version 8.32 30-November-2012
+-----------------------------
+
+1.  Improved JIT compiler optimizations for first character search and single
+    character iterators.
+
+2.  Supporting IBM XL C compilers for PPC architectures in the JIT compiler.
+    Patch by Daniel Richard G.
+
+3.  Single character iterator optimizations in the JIT compiler.
+
+4.  Improved JIT compiler optimizations for character ranges.
+
+5.  Rename the "leave" variable names to "quit" to improve WinCE compatibility.
+    Reported by Giuseppe D'Angelo.
+
+6.  The PCRE_STARTLINE bit, indicating that a match can occur only at the start
+    of a line, was being set incorrectly in cases where .* appeared inside
+    atomic brackets at the start of a pattern, or where there was a subsequent
+    *PRUNE or *SKIP.
+
+7.  Improved instruction cache flush for POWER/PowerPC.
+    Patch by Daniel Richard G.
+
+8.  Fixed a number of issues in pcregrep, making it more compatible with GNU
+    grep:
+
+    (a) There is now no limit to the number of patterns to be matched.
+
+    (b) An error is given if a pattern is too long.
+
+    (c) Multiple uses of --exclude, --exclude-dir, --include, and --include-dir
+        are now supported.
+
+    (d) --exclude-from and --include-from (multiple use) have been added.
+
+    (e) Exclusions and inclusions now apply to all files and directories, not
+        just to those obtained from scanning a directory recursively.
+
+    (f) Multiple uses of -f and --file-list are now supported.
+
+    (g) In a Windows environment, the default for -d has been changed from
+        "read" (the GNU grep default) to "skip", because otherwise the presence
+        of a directory in the file list provokes an error.
+
+    (h) The documentation has been revised and clarified in places.
+
+9.  Improve the matching speed of capturing brackets.
+
+10. Changed the meaning of \X so that it now matches a Unicode extended
+    grapheme cluster.
+
+11. Patch by Daniel Richard G to the autoconf files to add a macro for sorting
+    out POSIX threads when JIT support is configured.
+
+12. Added support for PCRE_STUDY_EXTRA_NEEDED.
+
+13. In the POSIX wrapper regcomp() function, setting re_nsub field in the preg
+    structure could go wrong in environments where size_t is not the same size
+    as int.
+
+14. Applied user-supplied patch to pcrecpp.cc to allow PCRE_NO_UTF8_CHECK to be
+    set.
+
+15. The EBCDIC support had decayed; later updates to the code had included
+    explicit references to (e.g.) \x0a instead of CHAR_LF. There has been a
+    general tidy up of EBCDIC-related issues, and the documentation was also
+    not quite right. There is now a test that can be run on ASCII systems to
+    check some of the EBCDIC-related things (but is it not a full test).
+
+16. The new PCRE_STUDY_EXTRA_NEEDED option is now used by pcregrep, resulting
+    in a small tidy to the code.
+
+17. Fix JIT tests when UTF is disabled and both 8 and 16 bit mode are enabled.
+
+18. If the --only-matching (-o) option in pcregrep is specified multiple
+    times, each one causes appropriate output. For example, -o1 -o2 outputs the
+    substrings matched by the 1st and 2nd capturing parentheses. A separating
+    string can be specified by --om-separator (default empty).
+
+19. Improving the first n character searches.
+
+20. Turn case lists for horizontal and vertical white space into macros so that
+    they are defined only once.
+
+21. This set of changes together give more compatible Unicode case-folding
+    behaviour for characters that have more than one other case when UCP
+    support is available.
+
+    (a) The Unicode property table now has offsets into a new table of sets of
+        three or more characters that are case-equivalent. The MultiStage2.py
+        script that generates these tables (the pcre_ucd.c file) now scans
+        CaseFolding.txt instead of UnicodeData.txt for character case
+        information.
+
+    (b) The code for adding characters or ranges of characters to a character
+        class has been abstracted into a generalized function that also handles
+        case-independence. In UTF-mode with UCP support, this uses the new data
+        to handle characters with more than one other case.
+
+    (c) A bug that is fixed as a result of (b) is that codepoints less than 256
+        whose other case is greater than 256 are now correctly matched
+        caselessly. Previously, the high codepoint matched the low one, but not
+        vice versa.
+
+    (d) The processing of \h, \H, \v, and \ in character classes now makes use
+        of the new class addition function, using character lists defined as
+        macros alongside the case definitions of 20 above.
+
+    (e) Caseless back references now work with characters that have more than
+        one other case.
+
+    (f) General caseless matching of characters with more than one other case
+        is supported.
+
+22. Unicode character properties were updated from Unicode 6.2.0
+
+23. Improved CMake support under Windows. Patch by Daniel Richard G.
+
+24. Add support for 32-bit character strings, and UTF-32
+
+25. Major JIT compiler update (code refactoring and bugfixing).
+    Experimental Sparc 32 support is added.
+
+26. Applied a modified version of Daniel Richard G's patch to create
+    pcre.h.generic and config.h.generic by "make" instead of in the
+    PrepareRelease script.
+
+27. Added a definition for CHAR_NULL (helpful for the z/OS port), and use it in
+    pcre_compile.c when checking for a zero character.
+
+28. Introducing a native interface for JIT. Through this interface, the compiled
+    machine code can be directly executed. The purpose of this interface is to
+    provide fast pattern matching, so several sanity checks are not performed.
+    However, feature tests are still performed. The new interface provides
+    1.4x speedup compared to the old one.
+
+29. If pcre_exec() or pcre_dfa_exec() was called with a negative value for
+    the subject string length, the error given was PCRE_ERROR_BADOFFSET, which
+    was confusing. There is now a new error PCRE_ERROR_BADLENGTH for this case.
+
+30. In 8-bit UTF-8 mode, pcretest failed to give an error for data codepoints
+    greater than 0x7fffffff (which cannot be represented in UTF-8, even under
+    the "old" RFC 2279). Instead, it ended up passing a negative length to
+    pcre_exec().
+
+31. Add support for GCC's visibility feature to hide internal functions.
+
+32. Running "pcretest -C pcre8" or "pcretest -C pcre16" gave a spurious error
+    "unknown -C option" after outputting 0 or 1.
+
+33. There is now support for generating a code coverage report for the test
+    suite in environments where gcc is the compiler and lcov is installed. This
+    is mainly for the benefit of the developers.
+
+34. If PCRE is built with --enable-valgrind, certain memory regions are marked
+    unaddressable using valgrind annotations, allowing valgrind to detect
+    invalid memory accesses. This is mainly for the benefit of the developers.
+
+25. (*UTF) can now be used to start a pattern in any of the three libraries.
+
+26. Give configure error if --enable-cpp but no C++ compiler found.
+
+
+Version 8.31 06-July-2012
+-------------------------
+
+1.  Fixing a wrong JIT test case and some compiler warnings.
+
+2.  Removed a bashism from the RunTest script.
+
+3.  Add a cast to pcre_exec.c to fix the warning "unary minus operator applied
+    to unsigned type, result still unsigned" that was given by an MS compiler
+    on encountering the code "-sizeof(xxx)".
+
+4.  Partial matching support is added to the JIT compiler.
+
+5.  Fixed several bugs concerned with partial matching of items that consist
+    of more than one character:
+
+    (a) /^(..)\1/ did not partially match "aba" because checking references was
+        done on an "all or nothing" basis. This also applied to repeated
+        references.
+
+    (b) \R did not give a hard partial match if \r was found at the end of the
+        subject.
+
+    (c) \X did not give a hard partial match after matching one or more
+        characters at the end of the subject.
+
+    (d) When newline was set to CRLF, a pattern such as /a$/ did not recognize
+        a partial match for the string "\r".
+
+    (e) When newline was set to CRLF, the metacharacter "." did not recognize
+        a partial match for a CR character at the end of the subject string.
+
+6.  If JIT is requested using /S++ or -s++ (instead of just /S+ or -s+) when
+    running pcretest, the text "(JIT)" added to the output whenever JIT is
+    actually used to run the match.
+
+7.  Individual JIT compile options can be set in pcretest by following -s+[+]
+    or /S+[+] with a digit between 1 and 7.
+
+8.  OP_NOT now supports any UTF character not just single-byte ones.
+
+9.  (*MARK) control verb is now supported by the JIT compiler.
+
+10. The command "./RunTest list" lists the available tests without actually
+    running any of them. (Because I keep forgetting what they all are.)
+
+11. Add PCRE_INFO_MAXLOOKBEHIND.
+
+12. Applied a (slightly modified) user-supplied patch that improves performance
+    when the heap is used for recursion (compiled with --disable-stack-for-
+    recursion). Instead of malloc and free for each heap frame each time a
+    logical recursion happens, frames are retained on a chain and re-used where
+    possible. This sometimes gives as much as 30% improvement.
+
+13. As documented, (*COMMIT) is now confined to within a recursive subpattern
+    call.
+
+14. As documented, (*COMMIT) is now confined to within a positive assertion.
+
+15. It is now possible to link pcretest with libedit as an alternative to
+    libreadline.
+
+16. (*COMMIT) control verb is now supported by the JIT compiler.
+
+17. The Unicode data tables have been updated to Unicode 6.1.0.
+
+18. Added --file-list option to pcregrep.
+
+19. Added binary file support to pcregrep, including the -a, --binary-files,
+    -I, and --text options.
+
+20. The madvise function is renamed for posix_madvise for QNX compatibility
+    reasons. Fixed by Giuseppe D'Angelo.
+
+21. Fixed a bug for backward assertions with REVERSE 0 in the JIT compiler.
+
+22. Changed the option for creating symbolic links for 16-bit man pages from
+    -s to -sf so that re-installing does not cause issues.
+
+23. Support PCRE_NO_START_OPTIMIZE in JIT as (*MARK) support requires it.
+
+24. Fixed a very old bug in pcretest that caused errors with restarted DFA
+    matches in certain environments (the workspace was not being correctly
+    retained). Also added to pcre_dfa_exec() a simple plausibility check on
+    some of the workspace data at the beginning of a restart.
+
+25. \s*\R was auto-possessifying the \s* when it should not, whereas \S*\R
+    was not doing so when it should - probably a typo introduced by SVN 528
+    (change 8.10/14).
+
+26. When PCRE_UCP was not set, \w+\x{c4} was incorrectly auto-possessifying the
+    \w+ when the character tables indicated that \x{c4} was a word character.
+    There were several related cases, all because the tests for doing a table
+    lookup were testing for characters less than 127 instead of 255.
+
+27. If a pattern contains capturing parentheses that are not used in a match,
+    their slots in the ovector are set to -1. For those that are higher than
+    any matched groups, this happens at the end of processing. In the case when
+    there were back references that the ovector was too small to contain
+    (causing temporary malloc'd memory to be used during matching), and the
+    highest capturing number was not used, memory off the end of the ovector
+    was incorrectly being set to -1. (It was using the size of the temporary
+    memory instead of the true size.)
+
+28. To catch bugs like 27 using valgrind, when pcretest is asked to specify an
+    ovector size, it uses memory at the end of the block that it has got.
+
+29. Check for an overlong MARK name and give an error at compile time. The
+    limit is 255 for the 8-bit library and 65535 for the 16-bit library.
+
+30. JIT compiler update.
+
+31. JIT is now supported on jailbroken iOS devices. Thanks for Ruiger
+    Rill for the patch.
+
+32. Put spaces around SLJIT_PRINT_D in the JIT compiler. Required by CXX11.
+
+33. Variable renamings in the PCRE-JIT compiler. No functionality change.
+
+34. Fixed typos in pcregrep: in two places there was SUPPORT_LIBZ2 instead of
+    SUPPORT_LIBBZ2. This caused a build problem when bzip2 but not gzip (zlib)
+    was enabled.
+
+35. Improve JIT code generation for greedy plus quantifier.
+
+36. When /((?:a?)*)*c/ or /((?>a?)*)*c/ was matched against "aac", it set group
+    1 to "aa" instead of to an empty string. The bug affected repeated groups
+    that could potentially match an empty string.
+
+37. Optimizing single character iterators in JIT.
+
+38. Wide characters specified with \uxxxx in JavaScript mode are now subject to
+    the same checks as \x{...} characters in non-JavaScript mode. Specifically,
+    codepoints that are too big for the mode are faulted, and in a UTF mode,
+    disallowed codepoints are also faulted.
+
+39. If PCRE was compiled with UTF support, in three places in the DFA
+    matcher there was code that should only have been obeyed in UTF mode, but
+    was being obeyed unconditionally. In 8-bit mode this could cause incorrect
+    processing when bytes with values greater than 127 were present. In 16-bit
+    mode the bug would be provoked by values in the range 0xfc00 to 0xdc00. In
+    both cases the values are those that cannot be the first data item in a UTF
+    character. The three items that might have provoked this were recursions,
+    possessively repeated groups, and atomic groups.
+
+40. Ensure that libpcre is explicitly listed in the link commands for pcretest
+    and pcregrep, because some OS require shared objects to be explicitly
+    passed to ld, causing the link step to fail if they are not.
+
+41. There were two incorrect #ifdefs in pcre_study.c, meaning that, in 16-bit
+    mode, patterns that started with \h* or \R* might be incorrectly matched.
+
+
 Version 8.30 04-February-2012
 -----------------------------
 
@@ -1191,7 +2772,8 @@ Version 7.9 11-Apr-09
 7.  A pattern that could match an empty string could cause pcregrep to loop; it
     doesn't make sense to accept an empty string match in pcregrep, so I have
     locked it out (using PCRE's PCRE_NOTEMPTY option). By experiment, this
-    seems to be how GNU grep behaves.
+    seems to be how GNU grep behaves. [But see later change 40 for release
+    8.33.]
 
 8.  The pattern (?(?=.*b)b|^) was incorrectly compiled as "match must be at
     start or after a newline", because the conditional assertion was not being
@@ -1434,7 +3016,7 @@ Version 7.7 07-May-08
     containing () gave an internal compiling error instead of "reference to
     non-existent subpattern". Fortunately, when the pattern did exist, the
     compiled code was correct. (When scanning forwards to check for the
-    existencd of the subpattern, it was treating the data ']' as terminating
+    existence of the subpattern, it was treating the data ']' as terminating
     the class, so got the count wrong. When actually compiling, the reference
     was subsequently set up correctly.)
 
