@@ -1716,10 +1716,10 @@ bool Object::Variant::InitCopy(Variant &val)
 		(object = val.object)->AddRef();
 		break;
 	case SYM_DYNAMIC:
-		prop = new Property();
-		prop->SetGetter(val.prop->Getter());
-		prop->SetSetter(val.prop->Setter());
-		prop->SetMethod(val.prop->Method());
+		prop = new Property(*val.prop);
+		if (auto obj = prop->Getter()) obj->AddRef();
+		if (auto obj = prop->Setter()) obj->AddRef();
+		if (auto obj = prop->Method()) obj->AddRef();
 		break;
 	//case SYM_INTEGER:
 	//case SYM_FLOAT:
