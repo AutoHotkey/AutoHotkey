@@ -113,9 +113,14 @@ bif_impl FResult SysGetIPAddresses(IObject *&aRetVal)
 	}
 
 	char host_name[256];
-	gethostname(host_name, _countof(host_name));
-	HOSTENT *lpHost = gethostbyname(host_name);
+	HOSTENT *lpHost = nullptr;
+	// gethostname would probably only fail in exceptional circumstances, such as a damaged OS install
+	// where networking is very broken.  Running in safe mode without networking was confirmed to cause
+	// gethostbyname to return NULL.
+	if (gethostname(host_name, _countof(host_name)) == 0)
+		lpHost = gethostbyname(host_name);
 
+	if (lpHost)
 	for (int i = 0; lpHost->h_addr_list[i]; ++i)
 	{
 		IN_ADDR inaddr;
