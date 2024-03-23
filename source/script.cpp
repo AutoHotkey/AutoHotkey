@@ -6187,11 +6187,12 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd)
 	// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
 	if (!DefineFunc(mClassPropertyDef, mClassPropertyStatic))
 		return FAIL;
-	if (mClassProperty->MinParams == -1)
+	if (g->CurrentFunc == mClassProperty->Setter())
+		mClassProperty->NoParamSet = g->CurrentFunc->mParamCount == 2 && !g->CurrentFunc->mIsVariadic;
+	else
 	{
-		int hidden_params = g->CurrentFunc == mClassProperty->Setter() ? 2 : 1;
-		mClassProperty->MinParams = g->CurrentFunc->mMinParams - hidden_params;
-		mClassProperty->MaxParams = g->CurrentFunc->mIsVariadic ? INT_MAX : g->CurrentFunc->mParamCount - hidden_params;
+		mClassProperty->NoParamGet = g->CurrentFunc->mParamCount == 1 && !g->CurrentFunc->mIsVariadic;
+		mClassProperty->NoEnumGet = g->CurrentFunc->mMinParams > 1;
 	}
 	if (*aEnd && !AddLine(ACT_BLOCK_BEGIN)) // *aEnd is '{' or '='.
 		return FAIL;

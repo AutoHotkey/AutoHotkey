@@ -1212,7 +1212,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			ExprTokenType value;
 			if (field.symbol == SYM_DYNAMIC || field.symbol == SYM_TYPED_FIELD)
 			{
-				if (field.prop->MinParams > 0)
+				if (field.prop->NoEnumGet)
 					continue;
 				aDebugger->WriteDynamicProperty(field.name);
 			}

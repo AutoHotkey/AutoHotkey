@@ -221,10 +221,12 @@ class Property
 	}
 
 public:
-	// MaxParams is cached for performance.  It is used in cases like x.y[z]:=v to
-	// determine whether to GET and then apply the parameters to the result, or just
-	// invoke SET with parameters.
-	int MinParams = -1, MaxParams = -1;
+	// Whether the property should be skipped by OwnProps two-param mode; i.e. because it requires parameters.
+	// Should be false if MinParams is non-zero or undetermined.
+	bool NoEnumGet = false;
+	// Whether to invoke the getter without parameters first, then invoke the returned value with parameters.
+	// Should be false if MaxParams is non-zero or undetermined, or IsVariadic is true.
+	bool NoParamSet = false, NoParamGet = false;
 
 	Property() {}
 	~Property()

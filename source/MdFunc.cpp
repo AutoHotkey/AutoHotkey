@@ -707,17 +707,14 @@ Object *Object::DefineMetadataMembers(Object *obj, LPCTSTR aClassName, ObjectMem
 			auto prop = obj->DefineProperty(const_cast<LPTSTR>(member.name));
 			if (member.invokeType == IT_GET)
 			{
-				prop->MinParams = func->mMinParams - 1;
-				if (!func->mIsVariadic)
-					prop->MaxParams = func->mParamCount - 1;
 				prop->SetGetter(func);
+				prop->NoParamGet = func->mParamCount == 1 && !func->mIsVariadic;
+				prop->NoEnumGet = func->mMinParams > 1;
 			}
 			else
 			{
-				// There should be a getter for every setter; rely on the getter to set Min/MaxParams:
-				//prop->MinParams = func->mMinParams - 2;
-				//prop->MaxParams = func->mParamCount - 2;
 				prop->SetSetter(func);
+				prop->NoParamSet = func->mParamCount == 2 && !func->mIsVariadic;
 			}
 		}
 		func->Release();

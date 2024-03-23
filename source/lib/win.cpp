@@ -716,7 +716,18 @@ bif_impl FResult ControlGetFocus(WINTITLE_PARAMETERS_DECL, UINT &aRetVal)
 	GUITHREADINFO guithreadInfo;
 	guithreadInfo.cbSize = sizeof(GUITHREADINFO);
 	if (!GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &guithreadInfo))
-		return FR_E_WIN32;
+	{
+		// Failure is most likely because the target thread has no input queue; i.e. target_window
+		// is a console window and the process which owns it has no input queue.  Controls cannot
+		// exist without an input queue, so a return value of 0 is appropriate in that case.
+		// A value of 0 is already ambiguous (window is not focused, or window itself is focused),
+		// and is most likely preferable to a thrown exception, so returning 0 in the unlikely event
+		// of some other failure seems acceptable.  There might be a possibility of a race condition
+		// between determining target_window and the window being destroyed, but checking for that
+		// doesn't seem useful since the window could be destroyed or deactivated after we return.
+		aRetVal = 0;
+		return OK;
+	}
 
 	// Use IsChild() to ensure the focused control actually belongs to this window.
 	// Otherwise, a HWND will be returned if any window in the same thread has focus,
