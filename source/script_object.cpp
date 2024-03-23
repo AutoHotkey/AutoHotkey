@@ -1825,14 +1825,20 @@ ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 		if (!mData && si->size)
 		{
 			if (FAILED(AllocDataPtr(si->size)))
+			{
+				Release();
 				return aResultToken.MemoryError();
+			}
 			ZeroMemory((void*)DataPtr(), DataSize());
 		}
 		if (si->nested_count)
 		{
 			mNested = new (std::nothrow) Object * [si->nested_count + 1];
 			if (!mNested)
+			{
+				Release();
 				return aResultToken.MemoryError();
+			}
 			ZeroMemory(mNested, sizeof(Object *) * (si->nested_count + 1));
 			auto result = NestedNew(aResultToken, si);
 			if (result != OK)
@@ -1845,7 +1851,10 @@ ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 		{
 			mNested = new (std::nothrow) Object * [1];
 			if (!mNested)
+			{
+				Release();
 				return aResultToken.MemoryError();
+			}
 		}
 		mNested[0] = aOuter;
 		aOuter->AddRef();
@@ -1882,27 +1891,40 @@ ResultType Object::NestedNew(ResultToken &aResultToken, StructInfo *si)
 	auto data_ptr = DataPtr();
 
 	// Second pass: construct objects.
-	for (size_t i = 1; i <= si->nested_count; ++i)
+	ResultType result;
+	size_t i;
+	for (i = 1; i <= si->nested_count; ++i)
 	{
 		ASSERT(mNested[i]);
 		// TODO: support native types other than Object
 		auto nested = Object::Create();
 		if (!nested)
-			return aResultToken.MemoryError();
+		{
+			result = aResultToken.MemoryError();
+			break;
+		}
 		nested->SetDataPtr(data_ptr + offsets[i-1]);
 		ExprTokenType prop_class { mNested[i] }, *pcarg {&prop_class};
-		auto result = nested->New(aResultToken, &pcarg, 1, this);
+		result = nested->New(aResultToken, &pcarg, 1, this);
+		if (result != OK)
+			break;
 		// During construction, 'nested' has a non-zero mRefCount and a counted reference to 'this'.
 		// Now it needs to have mRefCount == 0 to reflect that there aren't any external references.
 		nested->mRefCount--;
 		mRefCount--;
 		aResultToken.symbol = SYM_INTEGER; // New has set this to nested.  Reset to default without calling Release().
 		ASSERT(nested->mRefCount == 0 && mRefCount);
-		if (result == FAIL || result == EARLY_EXIT)
-			return result;
 		mNested[i] = nested;
 	}
-	return OK;
+	if (i <= si->nested_count)
+	{
+		ASSERT(result != OK);
+		// Clear any pointers stored in the first pass, since AddRef() wasn't called.
+		do mNested[i++] = nullptr; while (i <= si->nested_count);
+		// this object won't be returned, since construction failed.
+		Release();
+	}
+	return result;
 }
 
 ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
