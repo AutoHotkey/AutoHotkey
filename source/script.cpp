@@ -5141,7 +5141,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	if (aActionType == ACT_BLOCK_END)
 	{
-		if (!mLineParent || mLineParent->mActionType != ACT_BLOCK_BEGIN)
+		if (!line.mParentLine || line.mParentLine->mActionType != ACT_BLOCK_BEGIN)
 			return line.LineUnexpectedError();
 		mPendingRelatedLine = mLineParent; // The next line will be the block-begin's mRelatedLine, and possibly its parent's mRelatedLine.
 
