@@ -6215,8 +6215,8 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 	LPTSTR item, item_end;
 	TCHAR orig_char, buf[LINE_SIZE], type_buf[LINE_SIZE];
 	size_t buf_used = 0;
-	ExprTokenType empty_token;
-	empty_token.symbol = SYM_MISSING;
+	ExprTokenType unset_token;
+	unset_token.symbol = SYM_MISSING;
 
 	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 	{
@@ -6312,13 +6312,9 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 						return FAIL;
 					*type_name_end = type_end_char;
 				}
-				else
-				{
-					// Assign prototype[item] := "" to mark it as a value property
-					// and allow duplicate declarations to be detected:
-					if (!prototype->SetOwnProp(item, empty_token))
-						return ScriptError(ERR_OUTOFMEM);
-				}
+				// Store the unset marker in prototype.%item% to allow duplicate declarations to be detected:
+				if (!prototype->SetOwnProp(item, unset_token))
+					return ScriptError(ERR_OUTOFMEM);
 				*name_end = orig_char; // Undo termination.
 			}
 		}
