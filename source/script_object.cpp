@@ -1895,7 +1895,8 @@ ResultType Object::NestedNew(ResultToken &aResultToken, StructInfo *si)
 	size_t i;
 	for (i = 1; i <= si->nested_count; ++i)
 	{
-		ASSERT(mNested[i]);
+		if (!mNested[i]) // Possible in case of redefinition via DefineProp.
+			continue;
 		// TODO: support native types other than Object
 		auto nested = Object::Create();
 		if (!nested)
