@@ -2246,6 +2246,12 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
 	static bool sPendingDeadKeyUsedShift = false;
 	static bool sPendingDeadKeyUsedAltGr = false;
+
+	// tracking of chained dead keys
+	static vk_type sChainedDeadKeyVK = 0;
+	static sc_type sChainedDeadKeySC = 0;
+	static bool sChainedDeadKeyUsedShift = false;
+	static bool sChainedDeadKeyUsedAltGr = false;
 	
 	bool transcribe_key = true;
 	
@@ -2305,7 +2311,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	TCHAR ch[3] = { 0 };
 	BYTE key_state[256];
 	memcpy(key_state, g_PhysicalKeyState, 256);
-
+	
 	if (sPendingDeadKeyVK && sUwpAppFocused && aVK != VK_PACKET)
 	{
 		AdjustKeyState(key_state
@@ -2411,9 +2417,31 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// allows dead keys to continue to operate properly in the user's foreground window, while still
 	// being capturable by the Input command and recognizable by any defined hotstrings whose
 	// abbreviations use diacritical letters:
+
+	// Geobert: I added some code to manage chained dead keys. A chained dead key is a dead key following another one.
+	// Layout like German Extended or French Ergo-L, Bépo and Optimot use chained dead keys
 	bool dead_key_sequence_complete = sPendingDeadKeyVK && char_count > 0;
 	if (char_count < 0) // It's a dead key, and it doesn't complete a sequence since in that case char_count would be >= 1.
 	{
+		if (sPendingDeadKeyVK && sChainedDeadKeyVK) {
+			// This is third dead key in a row, we don't support more than one level of chained key
+			// this call restore the normal behaviour of the pressed key
+			ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+			sPendingDeadKeyVK = 0;
+			sChainedDeadKeyVK = 0;
+			return true;
+		}
+
+		if (sPendingDeadKeyVK) {
+			// We already had a pending dead key and we got another one, it's a chained dead key
+			// Save the previous one for replay in the second part of the workaround 
+			// (when dead_key_sequence_complete is true)
+			sChainedDeadKeyVK = sPendingDeadKeyVK;
+			sChainedDeadKeySC = sPendingDeadKeySC;
+			sChainedDeadKeyUsedShift = sPendingDeadKeyUsedShift;
+			sChainedDeadKeyUsedAltGr = sPendingDeadKeyUsedAltGr;
+		}
+
 		// Since above did not return, treat_as_visible must be true.
 		sPendingDeadKeyVK = aVK;
 		sPendingDeadKeySC = aSC;
@@ -2449,8 +2477,26 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		//
 		// The other half of this workaround can be found by searching for "if (dead_key_sequence_complete)".
 		//
-		ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
-		return true; // Visible.
+		int c = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+		if (c < 0) {
+			// the dead key can be chained, so we need additionnal call to ToUnicodeEx to clear the buffer
+			// Theorically, the same physical key can be configured to be chained any number of times
+			// but let's say we support only 1 level of chained dead key
+			ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+		}
+
+		if (sChainedDeadKeyVK) {
+			// I don't know why, but for some chained dead key the normal value of the key is printing. 
+			// Example: with Ergo-L layout, 'O' (qwerty position) is a dead key. After pressing it, you 
+			// can press ',' key to chain a greek dead key. Without returning false, we can see 'g' 
+			// (which is the char at ',' qwerty position) and then, if you press let's say 'a', you get 
+			// the alpha greek char. Returning false here avoid the extra 'g' and doesn't seem to break 
+			// anything in my testing.
+			return false;
+		}
+		else {
+			return true; // Visible.
+		}
 	}
 	
 	// Hotstrings monitor neither ignored input nor input that is invisible due to suppression by
@@ -2512,26 +2558,38 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		// (which can happen if there's another keyboard hook that removed it due to a suppressed
 		// hotstring end-char).
 		TCHAR new_ch[2];
-		int new_char_count = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, new_ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+		int new_char_count = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, new_ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);		
 		if (new_char_count < 0)
 			// aVK is also a dead key and wasn't in the buffer, so take it back out.  This also implies
 			// that sPendingDeadKeyVK needs to be reinserted, since the buffer state apparently differed
 			// between our two ToUnicode() calls, and sPendingDeadKeyVK is probably the reason.
 			ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, new_ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
-		if (new_char_count != char_count || ch[0] != (new_ch[0] == '\r' ? '\n' : new_ch[0])) // Translation differs, likely due to pending dead key having been removed.
+			
+		if (sChainedDeadKeyVK || new_char_count != char_count || ch[0] != (new_ch[0] == '\r' ? '\n' : new_ch[0])) // Translation differs, likely due to pending dead key having been removed.
 		{
 			// Since our earlier call to ToUnicodeOrAsciiEx has removed the pending dead key from the
 			// buffer, we need to put it back for the active window or the next hook in the chain.
 			// This is not needed when ch (the character or characters produced by combining the dead
 			// key with the last keystroke) is being suppressed, since in that case we don't want the
 			// dead key back in the buffer.
+			TCHAR temp_ch[2];
+			// replay the chained dead key if needed
+			if (sChainedDeadKeyVK) {
+				ZeroMemory(key_state, 256);
+				AdjustKeyState(key_state
+					, (sChainedDeadKeyUsedAltGr ? MOD_LCONTROL | MOD_RALT : 0)
+					| (sChainedDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
+				ToUnicodeOrAsciiEx(sChainedDeadKeyVK, sChainedDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
+			}
+
 			ZeroMemory(key_state, 256);
 			AdjustKeyState(key_state
 				, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL | MOD_RALT : 0)
 				| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
-			TCHAR temp_ch[2];
+			
 			ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
 			sPendingDeadKeyVK = 0;
+			sChainedDeadKeyVK = 0;
 		}
 	}
 
