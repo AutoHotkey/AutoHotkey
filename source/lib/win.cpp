@@ -1286,10 +1286,16 @@ bif_impl FResult StatusBarWait(optl<StrArg> aText, optl<double> aTimeout, optl<i
 	return OK;
 }
 
-
+void SendMessageCallbackProc(HWND hWnd, UINT uMsg, ULONG_PTR dwData, LRESULT result) {
+	IObject* aFunc = (IObject*)dwData;
+	ExprTokenType param[3];
+	param[0].SetValue(result); param[1].SetValue((UINT_PTR)hWnd); param[2].SetValue(uMsg);
+	CallMethod(aFunc, aFunc, nullptr, param, _countof(param));
+	aFunc->Release();
+}
 
 static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType *aLParam
-	, CONTROL_PARAMETERS_DECL_OPT, optl<int> aTimeout = nullptr, UINT_PTR *aSendRetVal = nullptr)
+	, CONTROL_PARAMETERS_DECL_OPT, ExprTokenType* aTimeout = nullptr, UINT_PTR *aSendRetVal = nullptr)
 {
 	bool successful = false;
 
@@ -1336,7 +1342,22 @@ static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType 
 
 	DWORD_PTR dwResult;
 	if (aSendRetVal)
-		successful = SendMessageTimeout(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, aTimeout.value_or(5000), &dwResult);
+	{
+		IObject* aFunc = nullptr;
+		if (aTimeout)
+			aFunc = TokenToObject(*aTimeout);
+		if (aFunc) {
+			auto fr = ValidateFunctor(aFunc, 3);
+			if (fr != OK)
+				return fr;
+			successful = SendMessageCallback(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], (SENDASYNCPROC)&SendMessageCallbackProc, (ULONG_PTR)aFunc);
+			dwResult = successful;
+			if (successful)
+				aFunc->AddRef(); // potential memory leak if the callback function is never called
+		}
+		else
+			successful = SendMessageTimeout(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, aTimeout && (aTimeout->symbol == SYM_INTEGER) ? (UINT)aTimeout->value_int64 : 5000, &dwResult);
+	}
 	else
 		successful = PostMessage(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1]);
 
@@ -1353,7 +1374,7 @@ static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType 
 }
 
 bif_impl FResult ScriptSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType *aLParam
-	, CONTROL_PARAMETERS_DECL_OPT, optl<int> aTimeout, UINT_PTR &aRetVal)
+	, CONTROL_PARAMETERS_DECL_OPT, ExprTokenType *aTimeout, UINT_PTR &aRetVal)
 {
 	return PostSendMessage(aMsg, aWParam, aLParam, CONTROL_PARAMETERS, aTimeout, &aRetVal);
 }
