@@ -1329,7 +1329,7 @@ static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType 
 		}
 	}
 
-	DWORD_PTR dwResult = 0;
+	DWORD_PTR dwResult;
 	if (aSendRetVal)
 	{
 		IObject* aFunc = nullptr;
@@ -1340,6 +1340,7 @@ static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType 
 			if (fr != OK)
 				return fr;
 			successful = SendMessageCallback(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], (SENDASYNCPROC)&SendMessageCallbackProc, (ULONG_PTR)aFunc);
+			dwResult = successful;
 			if (successful)
 				aFunc->AddRef(); // potential memory leak if the callback function is never called
 		}
