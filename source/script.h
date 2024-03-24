@@ -3277,6 +3277,8 @@ BIF_DECL(BIF_ObjPtr);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
 BIF_DECL(BIF_ObjXXX);
 
+BIF_DECL(BIF_StructFromPtr);
+
 BIF_DECL(BIF_Base);
 BIF_DECL(BIF_HasBase);
 BIF_DECL(BIF_HasProp);

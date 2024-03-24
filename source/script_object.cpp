@@ -115,6 +115,24 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 	return obj;
 }
 
+Object *Object::CreateStructPtr(UINT_PTR aPtr, Object *aBase, ResultToken &aResultToken)
+{
+	auto obj = Create();
+	if (!obj)
+	{
+		aResultToken.MemoryError();
+		return nullptr;
+	}
+	obj->mFlags |= NoCallDelete;
+	if (!obj->SetBase(aBase, aResultToken))
+	{
+		obj->Release();
+		return nullptr;
+	}
+	obj->SetDataPtr(aPtr);
+	return obj;
+}
+
 
 //
 // Map::Create - Create a new Map given an array of key/value pairs.
@@ -425,13 +443,10 @@ bool Object::Delete()
 		return deleted; // Caller will --mRefCount.
 	}
 
-	if (mBase)
+	// __Delete shouldn't be called for Prototype objects.  Although it would be more efficient to
+	// exclusively use the flag, it has been documented that __Delete isn't called if __Class exists.
+	if (!(mFlags & NoCallDelete) && !FindField(_T("__Class")))
 	{
-		if (FindField(_T("__Class")))
-			// This object appears to be a class definition, so it would probably be
-			// undesirable to call the super-class' __Delete() meta-function for this.
-			return ObjectBase::Delete();
-
 		// L33: Privatize the last recursion layer's deref buffer in case it is in use by our caller.
 		// It's done here rather than in Var::FreeAndRestoreFunctionVars (even though the below might
 		// not actually call any script functions) because this function is probably executed much
@@ -693,10 +708,29 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		}
 		else if (field->tprop->class_object) // Struct type.
 		{
+			if (!realthis->mNested)
+			{
+				auto si = realthis->mBase->GetStructInfo();
+				realthis->mNested = new (std::nothrow) Object * [si->nested_count + 1];
+				if (!realthis->mNested)
+					return aResultToken.MemoryError();
+				ZeroMemory(realthis->mNested, sizeof(Object *) * (si->nested_count + 1));
+			}
 			Object *nested = realthis->mNested[field->tprop->object_index];
-			ASSERT(nested);
-			if (nested->AddRef() == 1)
-				realthis->AddRef();
+			if (!nested) // Since it wasn't constructed, this must be a pointer, not a real struct.
+			{
+				auto proto = dynamic_cast<Object*>(field->tprop->class_object->GetOwnPropObj(_T("Prototype")));
+				if (!proto)
+					return INVOKE_NOT_HANDLED;
+				nested = CreateStructPtr((UINT_PTR)ptr, proto, aResultToken);
+				if (!nested)
+					return FAIL; // Error was already raised.
+			}
+			else
+			{
+				if (nested->AddRef() == 1)
+					realthis->AddRef();
+			}
 			if (!handle_params_recursively)
 			{
 				auto result = nested->Invoke(aResultToken, IT_GET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(nested), nullptr, 0);

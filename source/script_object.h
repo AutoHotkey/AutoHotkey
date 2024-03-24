@@ -347,7 +347,8 @@ protected:
 		DataIsAllocatedFlag = 0x08,
 		DataIsStructInfo = 0x10,
 		StructInfoLocked = 0x20,
-		LastObjectFlag = 0x20
+		NoCallDelete = 0x40,
+		LastObjectFlag = 0x40
 	};
 
 	Object *CloneTo(Object &aTo);
@@ -390,6 +391,7 @@ public:
 
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
+	static Object *CreateStructPtr(UINT_PTR aPtr, Object *aBase, ResultToken &aResultToken);
 
 	ResultType New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, Object *aOuter = nullptr);
 	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);

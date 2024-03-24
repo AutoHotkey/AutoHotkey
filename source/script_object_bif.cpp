@@ -249,6 +249,21 @@ BIF_DECL(BIF_GetMethod)
 }
 
 
+BIF_DECL(BIF_StructFromPtr)
+{
+	Object *base = dynamic_cast<Object *>(ParamIndexToObject(0));
+	Object *proto = base ? dynamic_cast<Object *>(base->GetOwnPropObj(_T("Prototype"))) : nullptr;
+	if (!proto || proto->LockStructSize() == 0)
+		_f_throw_param(0);
+	auto ptr = (UINT_PTR)ParamIndexToInt64(1);
+	if (ptr < 65536)
+		_f_throw_param(1);
+	auto obj = Object::CreateStructPtr(ptr, proto, aResultToken);
+	if (obj)
+		_f_return(obj);
+}
+
+
 //
 // Low level data pointer API
 //
