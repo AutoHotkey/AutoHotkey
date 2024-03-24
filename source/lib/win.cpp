@@ -1277,12 +1277,9 @@ bif_impl FResult StatusBarWait(optl<StrArg> aText, optl<double> aTimeout, optl<i
 
 void SendMessageCallbackProc(HWND hWnd, UINT uMsg, ULONG_PTR dwData, LRESULT result) {
 	IObject* aFunc = (IObject*)dwData;
-	__int64 number_to_return;
-	ExprTokenType* param;
-	int param_count = 3;
-	param = (ExprTokenType*)_alloca(param_count * sizeof(ExprTokenType));
-	param[0].SetValue((UINT_PTR)hWnd); param[1].SetValue(uMsg); param[2].SetValue(result);
-	CallMethod(aFunc, aFunc, nullptr, param, param_count);
+	ExprTokenType param[3];
+	param[0].SetValue(result); param[1].SetValue((UINT_PTR)hWnd); param[2].SetValue(uMsg);
+	CallMethod(aFunc, aFunc, nullptr, param, _countof(param));
 	aFunc->Release();
 }
 
@@ -1335,9 +1332,10 @@ static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType 
 	DWORD_PTR dwResult = 0;
 	if (aSendRetVal)
 	{
-		if (aTimeout && aTimeout->symbol == SYM_OBJECT)
-		{
-			IObject* aFunc = TokenToObject(*aTimeout);
+		IObject* aFunc = nullptr;
+		if (aTimeout)
+			aFunc = TokenToObject(*aTimeout);
+		if (aFunc) {
 			auto fr = ValidateFunctor(aFunc, 3);
 			if (fr != OK)
 				return fr;
@@ -1346,7 +1344,7 @@ static FResult PostSendMessage(UINT aMsg, ExprTokenType *aWParam, ExprTokenType 
 				aFunc->AddRef(); // potential memory leak if the callback function is never called
 		}
 		else
-			successful = SendMessageTimeout(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, aTimeout ? aTimeout->value_int64 : 5000, &dwResult);
+			successful = SendMessageTimeout(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, aTimeout && (aTimeout->symbol == SYM_INTEGER) ? (UINT)aTimeout->value_int64 : 5000, &dwResult);
 	}
 	else
 		successful = PostMessage(control_window, aMsg, (WPARAM)param[0], (LPARAM)param[1]);
