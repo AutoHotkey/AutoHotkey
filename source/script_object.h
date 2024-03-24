@@ -395,6 +395,7 @@ public:
 
 	ResultType New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, Object *aOuter = nullptr);
 	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType ConstructNoInit(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, ExprTokenType &aThisToken);
 
 	bool HasProp(name_t aName);
 	bool HasMethod(name_t aName);

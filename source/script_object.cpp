@@ -1984,8 +1984,13 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 		}
 	}
 
+	return ConstructNoInit(aResultToken, aParam, aParamCount, this_token);
+}
+
+ResultType Object::ConstructNoInit(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, ExprTokenType &aThisToken)
+{
 	// __New may be defined by the script for custom initialization code.
-	result = CallMeta(_T("__New"), aResultToken, this_token, aParam, aParamCount);
+	auto result = CallMeta(_T("__New"), aResultToken, aThisToken, aParam, aParamCount);
 	aResultToken.Free();
 	if (result == INVOKE_NOT_HANDLED && aParamCount)
 	{
@@ -3721,7 +3726,9 @@ BIF_DECL(Class_New)
 	auto proto = Object::CreatePrototype(name, base_proto);
 	auto class_obj = Object::CreateClass(proto, base_class);
 	proto->Release();
-	class_obj->Construct(aResultToken, aParam, aParamCount); // This either releases or returns class_obj.
+	// Don't call any inherited __Init, since that would reinitialize static variables and duplicate
+	// any typed properties defined by that one class.  This either releases or returns class_obj:
+	class_obj->ConstructNoInit(aResultToken, aParam, aParamCount, ExprTokenType(class_obj));
 }
 
 
