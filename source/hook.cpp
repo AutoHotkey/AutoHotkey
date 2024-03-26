@@ -2862,7 +2862,8 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 		{
 			if (input->BufferLength)
 				input->Buffer[--input->BufferLength] = '\0';
-			visible = input->VisibleText; // Override VisibleNonText.
+			if (!(key_flags & INPUT_KEY_VISIBILITY_MASK)) // If +S and +V haven't been applied to Backspace...
+				visible = input->VisibleText; // Override VisibleNonText.
 			// Fall through to the check below in case this {BS} completed a dead key sequence.
 		}
 
