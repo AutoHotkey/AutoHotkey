@@ -7,6 +7,30 @@
     <ConfigurationType Condition="$(Configuration.Contains('.dll'))">DynamicLibrary</ConfigurationType>
   </PropertyGroup>
   <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug(mbcs)|ARM64">
+      <Configuration>Debug(mbcs)</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug(mbcs)|ARM64EC">
+      <Configuration>Debug(mbcs)</Configuration>
+      <Platform>ARM64EC</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug.dll|ARM64">
+      <Configuration>Debug.dll</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug.dll|ARM64EC">
+      <Configuration>Debug.dll</Configuration>
+      <Platform>ARM64EC</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64EC">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64EC</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
       <Platform>Win32</Platform>
@@ -31,6 +55,30 @@
       <Configuration>Debug.dll</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Release(mbcs)|ARM64">
+      <Configuration>Release(mbcs)</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release(mbcs)|ARM64EC">
+      <Configuration>Release(mbcs)</Configuration>
+      <Platform>ARM64EC</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release.dll|ARM64">
+      <Configuration>Release.dll</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release.dll|ARM64EC">
+      <Configuration>Release.dll</Configuration>
+      <Platform>ARM64EC</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64EC">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64EC</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
       <Configuration>Release</Configuration>
       <Platform>Win32</Platform>
@@ -54,6 +102,30 @@
     <ProjectConfiguration Include="Release.dll|x64">
       <Configuration>Release.dll</Configuration>
       <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained(debug)|ARM64">
+      <Configuration>Self-contained(debug)</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained(debug)|ARM64EC">
+      <Configuration>Self-contained(debug)</Configuration>
+      <Platform>ARM64EC</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained(mbcs)|ARM64">
+      <Configuration>Self-contained(mbcs)</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained(mbcs)|ARM64EC">
+      <Configuration>Self-contained(mbcs)</Configuration>
+      <Platform>ARM64EC</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained|ARM64">
+      <Configuration>Self-contained</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Self-contained|ARM64EC">
+      <Configuration>Self-contained</Configuration>
+      <Platform>ARM64EC</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Self-contained|Win32">
       <Configuration>Self-contained</Configuration>
@@ -115,6 +187,24 @@
       <TargetMachine>MachineX64</TargetMachine>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='ARM64EC'">
+    <ClCompile>
+      <PreprocessorDefinitions>_WIN64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_WIN64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+    <Link />
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='ARM64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_WIN64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_WIN64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+    <Link />
+  </ItemDefinitionGroup>
   <!-- paths and basic settings -->
   <PropertyGroup>
     <IntDir>$(ProjectDir)temp\$(Platform)\$(Configuration)\</IntDir>
@@ -127,6 +217,8 @@
     <BinTypeWord Condition="'$(CharacterSet)'=='MultiByte'">ANSI</BinTypeWord>
     <BinSuffixBits Condition="'$(Platform)'=='Win32'">32</BinSuffixBits>
     <BinSuffixBits Condition="'$(Platform)'=='x64'">64</BinSuffixBits>
+    <BinSuffixBits Condition="'$(Platform)'=='ARM64EC'">64</BinSuffixBits>
+    <BinSuffixBits Condition="'$(Platform)'=='ARM64'">ARM64</BinSuffixBits>
     <TargetName>AutoHotkey$(BinSuffixChar)$(BinSuffixBits)</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
@@ -171,6 +263,8 @@
   <PropertyGroup Condition="false and $(ConfigRelease)">
     <PackerName>upx</PackerName>
     <PackerName Condition="'$(Platform)'=='x64'">mpress</PackerName>
+    <PackerName Condition="'$(Platform)'=='ARM64EC'">mpress</PackerName>
+    <PackerName Condition="'$(Platform)'=='ARM64'">mpress</PackerName>
     <PackerPath Condition="'$(PackerPath)'=='' AND exists('$(PackerName).exe')">$(PackerName).exe</PackerPath>
     <PackerPath Condition="'$(PackerPath)'=='' AND exists('..\$(PackerName).exe')">..\$(PackerName).exe</PackerPath>
     <PackerArgs Condition="'$(PackerArgs)'=='' AND '$(PackerName)'=='upx'"> --best --no-lzma --filter=73 --compress-icons=0</PackerArgs>
@@ -185,6 +279,8 @@
   <!-- Visual C++ 2010 should place any newly created properties in these groups -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64EC'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
@@ -197,16 +293,28 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64EC'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64EC'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|x64'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|ARM64EC'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release(mbcs)|ARM64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|x64'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|ARM64EC'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained|ARM64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(debug)|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(debug)|x64'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(debug)|ARM64EC'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(debug)|ARM64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|x64'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|ARM64EC'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(mbcs)|ARM64'" />
   <!-- FILES -->
   <ItemGroup>
     <ClCompile Include="source\ahklib.cpp">
@@ -326,10 +434,12 @@
   <PropertyGroup>
     <Masm>ml /safeseh</Masm>
     <Masm Condition="'$(Platform)'=='x64'">ml64</Masm>
+    <Masm Condition="'$(Platform)'=='ARM64EC'">ml64</Masm>
+    <Masm Condition="'$(Platform)'=='ARM64'">armasm64.exe</Masm>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <CustomBuild>
-      <Command>$(Masm) /Cx /Fo"$(SolutionDir)temp\$(Platform)\%(Filename).obj" /c "%(FullPath)"</Command>
+      <Command>$(Masm) /nologo "%(FullPath)" "$(SolutionDir)temp\$(Platform)\%(Filename).obj"</Command>
       <Message>
       </Message>
       <Outputs>$(SolutionDir)temp\$(Platform)\%(Filename).obj</Outputs>
@@ -337,6 +447,9 @@
     <ClCompile>
       <TreatWarningAsError Condition="!$(ConfigDebug)">true</TreatWarningAsError>
     </ClCompile>
+    <Link>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">wsock32.lib;winmm.lib;version.lib;comctl32.lib;psapi.lib;wininet.lib;shlwapi.lib;uxtheme.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <CustomBuild Include="source\libx64call\x64call.asm">
@@ -345,8 +458,16 @@
     <CustomBuild Include="source\libx64call\x64stub.asm">
       <ExcludedFromBuild Condition="'$(Platform)'!='x64'">true</ExcludedFromBuild>
     </CustomBuild>
+    <CustomBuild Include="source\libx64call\arm64call.asm">
+      <ExcludedFromBuild Condition="'$(Platform)'!='ARM64' AND '$(Platform)'!='ARM64EC'">true</ExcludedFromBuild>
+    </CustomBuild>
+    <CustomBuild Include="source\libx64call\arm64stub.asm">
+      <ExcludedFromBuild Condition="'$(Platform)'!='ARM64' AND '$(Platform)'!='ARM64EC'">true</ExcludedFromBuild>
+    </CustomBuild>
     <CustomBuild Include="source\x86call.asm">
       <ExcludedFromBuild Condition="'$(Platform)'=='x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Platform)'=='ARM64EC'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Platform)'=='ARM64'">true</ExcludedFromBuild>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
