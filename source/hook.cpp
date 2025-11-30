@@ -4548,6 +4548,28 @@ void GetHookStatus(LPTSTR aBuf, int aBufSize)
 					);
 			}
 			else if (g_KeyHistory[item].vk || g_KeyHistory[item].sc)
+			{
+				// Determine if it's a mouse button or not, and skip it if necessary:
+				if (   g_KeyHistory[item].vk == VK_LBUTTON 
+					|| g_KeyHistory[item].vk == VK_RBUTTON
+					|| g_KeyHistory[item].vk == VK_MBUTTON 
+					|| g_KeyHistory[item].vk == VK_XBUTTON1
+					|| g_KeyHistory[item].vk == VK_XBUTTON2
+					|| g_KeyHistory[item].vk == VK_WHEEL_DOWN 
+					|| g_KeyHistory[item].vk == VK_WHEEL_UP
+					|| g_KeyHistory[item].vk == VK_WHEEL_LEFT 
+					|| g_KeyHistory[item].vk == VK_WHEEL_RIGHT
+					)
+				{
+					if (!g_ShowMouseKeyHistory)
+						continue;
+				}
+				// This means it's a keyboard key:
+				else if (!g_ShowKeyboardKeyHistory)
+				{
+					continue;
+				}
+
 				sntprintfcat(aBuf, aBufSize, _T("\r\n%02X  %03X\t%c\t%c\t%0.2f\t%-15s\t%s")
 					, g_KeyHistory[item].vk, g_KeyHistory[item].sc
 					// It can't be both ignored and suppressed, so display only one:
@@ -4557,6 +4579,7 @@ void GetHookStatus(LPTSTR aBuf, int aBufSize)
 					, GetKeyName(g_KeyHistory[item].vk, g_KeyHistory[item].sc, KeyName, _countof(KeyName))
 					, _tcscmp(title_curr, title_prev) ? title_curr : _T("") // Display title only when it changes.
 					);
+			}
 		}
 	}
 }
