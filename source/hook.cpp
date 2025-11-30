@@ -4549,25 +4549,25 @@ void GetHookStatus(LPTSTR aBuf, int aBufSize)
 			}
 			else if (g_KeyHistory[item].vk || g_KeyHistory[item].sc)
 			{
-				// Determine if it's a mouse button or not, and skip it if necessary:
-				if (   g_KeyHistory[item].vk == VK_LBUTTON 
-					|| g_KeyHistory[item].vk == VK_RBUTTON
-					|| g_KeyHistory[item].vk == VK_MBUTTON 
-					|| g_KeyHistory[item].vk == VK_XBUTTON1
-					|| g_KeyHistory[item].vk == VK_XBUTTON2
-					|| g_KeyHistory[item].vk == VK_WHEEL_DOWN 
-					|| g_KeyHistory[item].vk == VK_WHEEL_UP
-					|| g_KeyHistory[item].vk == VK_WHEEL_LEFT 
-					|| g_KeyHistory[item].vk == VK_WHEEL_RIGHT
-					)
+				// Check whether it's a mouse or keyboard event by directly checking for the mouse VKs:
+				switch (g_KeyHistory[item].vk)
 				{
-					if (!g_ShowMouseKeyHistory)
-						continue;
-				}
-				// This means it's a keyboard key:
-				else if (!g_ShowKeyboardKeyHistory)
-				{
-					continue;
+					case VK_LBUTTON:
+					case VK_RBUTTON:
+					case VK_MBUTTON:
+					case VK_XBUTTON1:
+					case VK_XBUTTON2:
+					case VK_WHEEL_DOWN:
+					case VK_WHEEL_UP:
+					case VK_WHEEL_LEFT:
+					case VK_WHEEL_RIGHT:
+						if (!g_ShowMouseKeyHistory)
+							continue;
+						break;
+
+					default:
+						if (!g_ShowKeyboardKeyHistory)
+							continue;
 				}
 
 				sntprintfcat(aBuf, aBufSize, _T("\r\n%02X  %03X\t%c\t%c\t%0.2f\t%-15s\t%s")
