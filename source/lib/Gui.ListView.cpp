@@ -751,11 +751,10 @@ FResult GuiControlType::LV_SetImageList(UINT_PTR aImageListID, optl<int> aIconTy
 	int list_type;
 	if (aIconType.has_value())
 		list_type = aIconType.value();
-	else // Auto-detect large vs. small icons based on the actual icon size in the image list.
+	else // Auto-detect the list type based on the view mode.
 	{
-		int cx, cy;
-		ImageList_GetIconSize(himl, &cx, &cy);
-		list_type = (cx > GetSystemMetrics(SM_CXSMICON)) ? LVSIL_NORMAL : LVSIL_SMALL;
+		DWORD view_mode = ListView_GetView(hwnd);
+		list_type = ((view_mode == LV_VIEW_ICON) || (view_mode == LV_VIEW_TILE)) ? LVSIL_NORMAL : LVSIL_SMALL;
 	}
 	aRetVal = (UINT_PTR)ListView_SetImageList(hwnd, himl, list_type);
 	return OK;
