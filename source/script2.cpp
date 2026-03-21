@@ -491,6 +491,13 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		if (g_MenuIsTempModeless)
 			MenuSelectWorkaround(lParam, wParam);
 		break;
+	case AHK_INVOKE:
+		{
+			auto function = (LRESULT(*)(PVOID, PVOID))wParam;
+			PVOID *params = (PVOID *)lParam;
+			return function(params[0], params[1]);
+		}
+		break;
 
 #ifdef CONFIG_DEBUGGER
 	case AHK_CHECK_DEBUGGER:

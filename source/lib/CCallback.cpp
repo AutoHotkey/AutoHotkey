@@ -43,6 +43,7 @@ struct RCCallbackFunc // Used by BIF_CallbackCreate() and related.
 	UCHAR actual_param_count; // This is the actual (not formal) number of parameters passed from the caller to the callback. Kept adjacent to the USHORT above to conserve memory due to 4-byte struct alignment.
 #define CBF_CREATE_NEW_THREAD	1
 #define CBF_PASS_PARAMS_POINTER	2
+#define CBF_SYNCH_EXECUTION	4
 	UCHAR flags; // Kept adjacent to above to conserve memory due to 4-byte struct alignment in 32-bit builds.
 	IObject *func; // The function object to be called whenever the callback's caller calls callfuncptr.
 };
@@ -84,7 +85,20 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	// Of course, a callback can also be triggered through explicit script action such as a DllCall of
 	// EnumWindows, in which case the script would want to be interrupted unconditionally to make the call.
 	// However, in those cases it's hard to imagine that INTERRUPTIBLE_IN_EMERGENCY wouldn't be true anyway.
-	if (cb.flags & CBF_CREATE_NEW_THREAD)
+
+	// With check for thread ID it benchmarks ~35% faster if callback thread is AHK main thread (performance is equal to no '$' option)
+	if (cb.flags & CBF_SYNCH_EXECUTION && GetCurrentThreadId() != g_MainThreadID)
+	{	
+		PVOID stub_params[] = {params, address};
+		// Caller should register separate callback for each caller thread.
+		// Overwise if another thread perform call to same callback after we temporary reset this flag and before SendMessage returns,
+		// execution will not be synchronized with AHK main thread.
+		cb.flags &= ~CBF_SYNCH_EXECUTION;
+		UINT_PTR retVal = SendMessage(g_hWnd, AHK_INVOKE, (WPARAM)RegisterCallbackCStub, (LPARAM)stub_params);
+		cb.flags |= CBF_SYNCH_EXECUTION;
+		return retVal;
+	}
+	else if (cb.flags & CBF_CREATE_NEW_THREAD)
 	{
 		if (g_nThreads >= g_MaxThreadsTotal) // To avoid array overflow, g_MaxThreadsTotal must not be exceeded except where otherwise documented.
 			return 0;
@@ -272,6 +286,8 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 		cb.flags |= CBF_CREATE_NEW_THREAD;
 	if (pass_params_pointer)
 		cb.flags |= CBF_PASS_PARAMS_POINTER;
+	if (_tcschr(options, '$'))
+		cb.flags |= CBF_SYNCH_EXECUTION;
 
 	// If DEP is enabled (and sometimes when DEP is apparently "disabled"), we must change the
 	// protection of the page of memory in which the callback resides to allow it to execute:
