@@ -366,6 +366,11 @@ inline bool IsMouseVK(vk_type aVK)
 		|| aVK >= VK_NEW_MOUSE_FIRST && aVK <= VK_NEW_MOUSE_LAST;
 }
 
+inline bool IsNeutralModifierVK(vk_type aVK)
+{
+	return aVK <= VK_MENU && aVK >= VK_SHIFT;
+}
+
 void OurBlockInput(bool aEnable);
 
 #endif

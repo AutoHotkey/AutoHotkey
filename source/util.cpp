@@ -1665,7 +1665,7 @@ LPTSTR GetWin32ErrorText(LPTSTR aBuf, DWORD aBufSize, DWORD aError)
 		*aBuf = '\0';
 		return aBuf;
 	}
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS // Ignore inserts: https://blogs.msdn.microsoft.com/oldnewthing/20071128-00/?p=24353
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS // Ignore inserts: https://devblogs.microsoft.com/oldnewthing/20071128-00/?p=24353
 		, NULL, aError, 0, aBuf, (DWORD)aBufSize - 1, NULL);
 	return aBuf;
 }
@@ -3005,12 +3005,15 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex)
 			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
 				return mark; // See case '\0' for comments.
 			continue;
+		case g_delimiter:
+			if (aDelimiter) // Caller wants to find a specific symbol and it's not this one.
+				continue;
+			// Fall through:
 		case ')':
 		case ']':
 		case '}':
-		case g_delimiter:
-			if (aDelimiter) // Caller wants to find a specific symbol and it's not this one.
-				continue; // Unbalanced parentheses etc are caught at a later stage.
+			// There could be unbalanced parentheses (impossible for some callers due GetLineContExpr),
+			// or '?' to be interpreted as SYM_MAYBE rather than SYM_IFF_THEN (i.e. no ':' present).
 			return mark;
 		case ':':
 			if (aDelimiter // See above.
@@ -3035,7 +3038,7 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex)
 				LPTSTR d_end;
 				auto id = aBuf + mark + 2, id_end = find_identifier_end(id);
 				_tcstod(id, &d_end); // This accounts for scientific notation.
-				if (id_end > d_end || id_end == d_end && (*id_end == '(' || *id_end == '['))
+				if (id_end > d_end || id_end == d_end && (*id_end == '(' || *id_end == '[')) // The second condition detects ?.123() as a method call, not ternary.
 					continue;
 			}
 			do
@@ -3049,8 +3052,8 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex)
 			// Scan for the corresponding ':' (or some other closing symbol if that's missing)
 			// so that it won't terminate the sub-expression.
 			mark = FindExprDelim(aBuf, ':', mark);
-			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
-				return mark; // See case '\0' for comments.
+			if (aBuf[mark] != ':') // Found end of string, ')' or similar, meaning the end of this sub-expression.
+				return mark; // This '?' might be SYM_MAYBE or a syntax error.
 			continue; // The colon is also skipped via the loop's increment.
 		case g_DerefChar:
 			// Since the check at the top of the loop didn't "return", this is the beginning

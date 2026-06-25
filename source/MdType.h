@@ -17,8 +17,9 @@ enum class MdType : UINT8
 	UInt32		= 6,
 	Int64		= 7,
 	UInt64		= 8,
-	Float64		= 9,
-	Float32		= 10,
+	IntPtr		= 9,
+	Float64		= 10,
+	Float32		= 11,
 	String,
 	Object,
 	Variant, // Currently only for input (ExprTokenType) or retval (ResultToken).
@@ -26,6 +27,7 @@ enum class MdType : UINT8
 	ResultType,
 	FResult,
 	//NzIntWin32, // BOOL result where FALSE means failure and GetLastError() is applicable.
+	Struct, // Currently only for CallbackCreate.
 	Params,
 #ifdef ENABLE_MD_BITS
 	BitsBase	= 99, // For encoding a small literal value to insert into the parameter list.
@@ -46,10 +48,8 @@ enum class MdType : UINT8
 	FirstModifier = Optional,
 	BitsUpperBound = Optional,
 	UIntPtr = Exp32or64(UInt32, UInt64),
-	IntPtr = Exp32or64(Int32, Int64)
+	LastSupportedPropertyType = Float32
 };
-
-#define MDTYPE_NAMES nullptr, _T("i8"), _T("u8"), _T("i16"), _T("u16"), _T("i32"), _T("u32"), _T("i64"), _T("u64"), _T("f64"), _T("f32")
 
 #define MdType_IsInt(t) ((t) <= MdType::LastIntType && (t) >= MdType::FirstIntType)
 #define MdType_IsNum(t) ((t) <= MdType::LastNumberType && (t) >= MdType::FirstNumberType)
@@ -78,6 +78,7 @@ template<> struct md_argtype<MdType::Float32> { typedef float t; };
 template<> struct md_argtype<MdType::Float64> { typedef double t; };
 template<> struct md_argtype<MdType::Int64> { typedef __int64 t; };
 template<> struct md_argtype<MdType::UInt64> { typedef UINT64 t; };
+template<> struct md_argtype<MdType::IntPtr> { typedef INT_PTR t; };
 template<> struct md_argtype<MdType::String> { typedef StrArg t; };
 template<> struct md_argtype<MdType::Object> { typedef IObject *t; };
 template<> struct md_argtype<MdType::Void> { typedef void t; };
@@ -104,6 +105,7 @@ template<> struct md_retval<MdType::Int32> { typedef int t; };
 template<> struct md_retval<MdType::UInt32> { typedef UINT t; };
 template<> struct md_retval<MdType::Int64> { typedef __int64 t; };
 template<> struct md_retval<MdType::UInt64> { typedef UINT64 t; };
+template<> struct md_retval<MdType::IntPtr> { typedef INT_PTR t; };
 template<> struct md_retval<MdType::Bool32> { typedef BOOL t; };
 
 template<> struct md_retval<MdType::FResult> { typedef FResult t; };
@@ -201,10 +203,11 @@ template<typename T> constexpr void* cast_into_voidp(T in)
 #define md_property(class_name, member_name, arg_type) \
 	md_property_get(class_name, member_name, arg_type), \
 	md_property_set(class_name, member_name, arg_type)
+#define md_property_opt(class_name, member_name, arg_type) \
+	md_property_get(class_name, member_name, arg_type), \
+	md_member(class_name, member_name, SET, (In_Opt, arg_type, Value))
 
 
 void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken);
 ResultType SetValueOfTypeAtPtr(MdType aType, void *aPtr, ExprTokenType &aValue, ResultToken &aResultToken);
 size_t TypeSize(MdType aType);
-MdType TypeCode(LPCTSTR aName);
-LPCTSTR TypeName(MdType aType);

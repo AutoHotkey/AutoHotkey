@@ -196,6 +196,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_TYPE_MISMATCH _T("Type mismatch.")
 #define ERR_NOT_ENUMERABLE _T("Value not enumerable.")
 #define ERR_PROPERTY_READONLY _T("Property is read-only.")
+#define ERR_ITEM_UNSET _T("Item has no value.")
 #define ERR_NO_PROCESS _T("Target process not found.")
 #define ERR_NO_WINDOW _T("Target window not found.")
 #define ERR_NO_CONTROL _T("Target control not found.")
@@ -372,7 +373,8 @@ struct ArgStruct
 enum FuncDefType : UCHAR
 {
 	FuncDefNormal = FALSE,
-	FuncDefFatArrow,
+	FuncDefFatArrowStandalone,
+	FuncDefFatArrow, // Keep in this order for range checks.
 	FuncDefExpression,
 	FuncDefExpressionResolved
 };
@@ -406,11 +408,12 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _f_return_p(...)		_f__ret(_f_set_retval_p(__VA_ARGS__)) // Return a string which is already in persistent memory.
 #define _f_return_retval		return  // Return the value set by _f_set_retval().
 #define _f_return_empty			_f_return_p(_T(""), 0)
-#define _f_return_unset			_f__ret(aResultToken.symbol = SYM_MISSING)
+#define _f_return_unset			_f__ret(aResultToken.Unset(UnsetKind::Unset)) // Follows v2.1 rules.
+#define _f_return_unset_blank	_f__ret(aResultToken.Unset(UnsetKind::Blank)) // Reverts to "" in v2.0 mode.
 #define _f_retval_buf			(aResultToken.buf)
 #define _f_retval_buf_size		MAX_NUMBER_SIZE
 #define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
-#define _f_callee_id			(aResultToken.func->mFID)
+#define _f_callee_id			((BuiltInFunctionID)(UINT_PTR)aResultToken.callee_id)
 // The _o_ macros originally needed different implementations due to differences between the
 // function signature for methods and that for built-in functions.  Currently they're similar
 // enough that most of these macros can just be aliases (kept for maintainability).
@@ -425,8 +428,10 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _o_return_p				_f_return_p
 #define _o_return_FAIL			_f_return_FAIL
 #define _o_return_retval		_f_return_retval
-#define _o_return_empty			_o_return_retval  // Default return value for Invoke is "".
-#define _o_return_unset			return (void)(aResultToken.symbol = SYM_MISSING)
+#define _o_return_empty			_f_return_empty
+#define _o_return_unset_(K)		_o__ret(ASSERT(aResultToken.symbol == SYM_MISSING); aResultToken.unset_kind = (K))
+#define _o_return_unset_blank	_o_return_unset_(UnsetKind::Blank) // Reverts to "" in v2.0 mode.
+#define _o_return_unset			_o_return_unset_(UnsetKind::Unset) // Follows v2.1 rules.
 
 
 struct LoopFilesStruct : WIN32_FIND_DATA
@@ -555,6 +560,7 @@ enum DllArgTypes {
 	, DLL_ARG_DOUBLE
 	, DLL_ARG_WSTR
 	, DLL_ARG_STRUCT
+	, DLL_ARG_VOID // Valid only for return type.
 	, DLL_ARG_STR  = UorA(DLL_ARG_WSTR, DLL_ARG_ASTR)
 	, DLL_ARG_xSTR = UorA(DLL_ARG_ASTR, DLL_ARG_WSTR) // To simplify some sections.
 };  // Some sections might rely on DLL_ARG_INVALID being 0.
@@ -1499,9 +1505,12 @@ public:
 	int mClosureCount = 0;
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
-	FuncDefType mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
+	FuncDefType mIsFuncExpression;
+	inline bool IsInExpression() { return mIsFuncExpression >= FuncDefFatArrow; } // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
+	inline bool IsFatArrow() { return mIsFuncExpression == FuncDefFatArrow || mIsFuncExpression == FuncDefFatArrowStandalone; }
 	bool mIsStatic = false; // Whether the "static" keyword was used with a function (not method); this prevents a nested function from becoming a closure.
-	bool mDefaultReturnUnset = false; // Whether "#DefaultReturn unset" was in effect for the function's block end.
+	bool mBackCompatMode; // true = requires v2.0, false = requires v2.1
+	bool mHasExplicitReturn = false;
 #define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)
 #define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
 #define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
@@ -1977,8 +1986,19 @@ public:
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
 
-	UserMenu(MenuTypeType aMenuType);
-	static UserMenu *Create() { return new UserMenu(MENU_TYPE_POPUP); }
+	static UserMenu *Create()
+	{
+		auto p = new UserMenu(MENU_TYPE_POPUP);
+		p->SetBase(sPrototype);
+		return p;
+	}
+
+	static UserMenu *NewMenuBar(size_t aSuffixSize)
+	{
+		return new (aSuffixSize) UserMenu(MENU_TYPE_BAR);
+	}
+
+	UserMenu(MenuTypeType aMenuType = MENU_TYPE_POPUP);
 	void Dispose();
 	~UserMenu();
 	
@@ -2034,17 +2054,6 @@ public:
 	void RemoveItemIcon(UserMenuItem *aMenuItem);
 };
 
-class UserMenu::Bar : public UserMenu
-{
-	Bar(const Bar &) = delete; // Never instantiated.
-
-public:
-	static UserMenu *Create()
-	{
-		return new UserMenu(MENU_TYPE_BAR);
-	}
-};
-
 
 
 class UserMenuItem
@@ -2094,11 +2103,12 @@ struct DerefList
 
 struct UnresolvedBaseClass
 {
+	UnresolvedBaseClass *next;
 	Object *subclass, *subclass_proto;
 	LPTSTR name;
-	FileIndexType file_index;
 	LineNumberType line_number;
-	UnresolvedBaseClass *next;
+	FileIndexType file_index;
+	bool is_struct;
 };
 
 
@@ -2147,18 +2157,16 @@ private:
 #define FDE_SUBSTITUTE_STRING L"(\u2026){}"
 #define FDE_SUBSTITUTE_STRING_LENGTH (_countof(FDE_SUBSTITUTE_STRING)-1)
 
-	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
-	Label *mLastLabel;  // The last defined label.
+	Line *mLastLine; // The last line added while parsing the current module.
 #ifdef CONFIG_DLL
 	int mLabelCount;
 #endif
 	FuncList mFuncs;
 
-	ScriptModuleList mModules;
 	ScriptModule mBuiltinModule { _T("AHK") };
 	ScriptModule mDefaultModule { _T("__Main") };
 	ScriptModule *mCurrentModule = &mBuiltinModule;
-	ScriptModule *mLastModule = nullptr;
+	ScriptModule *mLastModule = &mDefaultModule;
 	
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mLineParent = nullptr; // While loading the script, the parent line or block-begin for the next line to be added.
@@ -2167,9 +2175,9 @@ private:
 	LPCTSTR mPendingHotkey = nullptr; // The name of a hotkey or hotstring awaiting its block/function.
 	PartialExpression *mExprContainingThisFunc = nullptr;
 	int mExprFuncIndex = INT_MAX;
-	SymbolType mDefaultReturn = SYM_STRING;
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mIgnoreNextBlockBegin;
+	bool mBackCompatMode = true; // Most recently set compatibility mode, used only during load-time.  true = requires v2.0, false = requires v2.1
 
 #define MAX_NESTED_CLASSES 5
 #define MAX_CLASS_NAME_LENGTH UCHAR_MAX
@@ -2207,7 +2215,7 @@ private:
 		~LineBuffer() { free(p); }
 		operator LPTSTR() const { return p; }
 	};
-	size_t GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlockComment, TextStream *ts);
+	size_t GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aLiteralEscape, bool aInBlockComment, TextStream *ts);
 	ResultType GetLineContinuation(TextStream *ts, LineBuffer &aBuf, LineBuffer &aNextBuf
 		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection);
 	ResultType GetLineContExpr(TextStream *ts, LineBuffer &aBuf, LineBuffer &aNextBuf
@@ -2234,7 +2242,7 @@ private:
 	ResultType PreparseExpressions(FuncList &aFuncs);
 	void PreparseHotkeyIfExpr(Line *aLine);
 	ResultType PreparseCommands();
-	ResultType PreparseCommands(Line *aStartingLine);
+	ResultType PreparseCommands(ScriptModule *aModule);
 	ResultType PreparseCatchVar(Line *aLine);
 	ResultType PreparseCatchClass(Line *aLine);
 	bool IsLabelTarget(Line *aLine);
@@ -2349,7 +2357,7 @@ public:
 	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
 	LPTSTR FindLibraryFile(LPTSTR aName, size_t aNameLength, bool aIsModule = false);
 	LPCWSTR InitModuleSearchPath();
-	ResultType FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex);
+	ResultType FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex, FileIndexType aLocalFileIndex);
 #endif
 	IObject *GetBuiltinObject(LPCTSTR aName);
 	static Func *GetBuiltInFunc(LPCTSTR aFuncName);
@@ -2358,13 +2366,14 @@ public:
 	Var *AddFuncVar(UserFunc *aFunc);
 	UserFunc *AddFuncToList(UserFunc *aFunc);
 
-	ResultType DefineClass(LPTSTR aBuf, TCHAR aExport);
+	ResultType DefineClass(LPTSTR aBuf, TCHAR aExport, bool aStruct);
 	UserFunc *DefineClassInit(bool aStatic);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
 	ResultType DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject, ActionTypeType aActionType = ACT_INVALID);
 	ResultType DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasBraceOrNotNeeded);
 	ResultType DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
+	bool ResolveBaseClass(LPCTSTR aClassName, bool aStruct, Object *&aClass, Object *&aProto);
 
 	static SymbolType ConvertWordOperator(LPCTSTR aWord, size_t aLength);
 	static bool EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker);
@@ -2388,14 +2397,19 @@ public:
 	Var *FindGlobalVar(LPCTSTR aVarName, size_t aVarNameLength = 0) { return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL); }
 
 	VarList *GlobalVars() { return &CurrentModule()->mVars; }
+
+	bool &BackCompatMode() { return g->CurrentFunc ? g->CurrentFunc->mBackCompatMode : mCurrentModule->mBackCompatMode; }
 	
 	ScriptModule *CurrentModule() { return g->CurrentFunc ? g->CurrentFunc->mModule : mCurrentModule; }
+	ScriptModule *FindDirectiveModule(LPCTSTR aName, ScriptModule *aList);
 	ResultType ParseModuleDirective(LPCTSTR aName);
-	bool ParseImportStatement(LPTSTR aBuf);
+	ResultType ParseImportDirective(LPTSTR aBuf);
 	ResultType CloseCurrentModule();
-	ResultType ResolveImports();
-	ResultType ResolveImports(ScriptImport &aImport);
-	Var *AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, IObject *aModule, bool aExport);
+	void ReopenModule(ScriptModule *aMod);
+	ScriptModule *CreateModule(LPCTSTR aName);
+	ResultType ResolveImports(ScriptModule *aTerminator = nullptr);
+	void ResolveIndirectImports();
+	ResultType ResolveImports(ScriptImport &aImport, ScriptModule *aDirectiveList);
 	Var *FindImportedVar(LPCTSTR aVarName);
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPCTSTR aBuf);
@@ -2639,11 +2653,15 @@ BIF_DECL(BIF_ObjPtr);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
 BIF_DECL(BIF_ObjXXX);
 
-BIF_DECL(BIF_StructFromPtr);
+BIF_DECL(NewStruct);
+BIF_DECL(StructClass_At);
+BIF_DECL(StructClass_Item);
+BIF_DECL(StructClass_Ptr);
 
 BIF_DECL(BIF_Base);
 BIF_DECL(BIF_HasBase);
 BIF_DECL(BIF_HasProp);
+BIF_DECL(BIF_DefineProp);
 BIF_DECL(BIF_GetMethod);
 BIF_DECL(BIF_Props);
 
@@ -2678,7 +2696,7 @@ ToggleValueType TokenToToggleValue(ExprTokenType &aToken);
 SymbolType TokenIsNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aIsImpureNumeric);
-BOOL TokenIsEmptyString(ExprTokenType &aToken);
+BOOL TokenIsBlank(ExprTokenType &aToken);
 SymbolType TypeOfToken(ExprTokenType &aToken);
 __int64 TokenToInt64(ExprTokenType &aToken);
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE);

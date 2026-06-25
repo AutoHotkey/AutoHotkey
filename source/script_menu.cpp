@@ -310,7 +310,6 @@ UserMenu *Script::FindMenu(HMENU aMenuHandle)
 UserMenu::UserMenu(MenuTypeType aMenuType)
 	: mMenuType(aMenuType)
 {
-	SetBase(sPrototype);
 	g_script.AddMenu(this);
 }
 

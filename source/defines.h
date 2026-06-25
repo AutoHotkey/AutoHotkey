@@ -167,7 +167,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, PURE_INTEGER, PURE_FLOAT
 	, SYM_STRING = PURE_NOT_NUMERIC, SYM_INTEGER = PURE_INTEGER, SYM_FLOAT = PURE_FLOAT // Specific operand types.
 #define IS_NUMERIC(symbol) ((symbol) == SYM_INTEGER || (symbol) == SYM_FLOAT) // Ordered for short-circuit performance.
-	, SYM_MISSING // Only used in parameter lists.
+	, SYM_MISSING
 	, SYM_VAR // An operand that is a variable's contents.
 	, SYM_OBJECT // L31: Represents an IObject interface pointer.
 	, SYM_DYNAMIC // A dynamic variable reference/double-deref.  Also used in Object::Variant to identify dynamic properties.
@@ -197,7 +197,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_OR_MAYBE, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE for the range checks below.
 #define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && ((symbol) >= SYM_IFF_THEN || (symbol) == SYM_MAYBE)) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
 #define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && ((symbol) >= SYM_IFF_ELSE || (symbol) == SYM_MAYBE))
-#define SYM_MAYBE_IGNORES_ON_STACK(symbol) (SYM_USES_CIRCUIT_TOKEN(symbol) && (symbol) != SYM_IFF_THEN || (symbol) == SYM_ASSIGN)
+#define SYM_MAYBE_IGNORES_ON_STACK(symbol) (SYM_USES_CIRCUIT_TOKEN(symbol) && (symbol) != SYM_IFF_THEN || (symbol) == SYM_ASSIGN || (symbol) == SYM_MISSING)
 	, SYM_IS
 	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL, SYM_NOTEQUALCASE // =, ==, !=, !==... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 #define IS_EQUALITY_OPERATOR(symbol) (symbol >= SYM_EQUAL && symbol <= SYM_NOTEQUALCASE)
@@ -233,6 +233,13 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
 	, SYM_TYPED_FIELD
+};
+
+enum class UnsetKind
+{
+	Blank, // Reverts to "" in v2.0 mode.
+	Unset, // Throws UnsetError or UnsetItemError depending on how the function was called.
+	OpenChain // Used only during ExpressionToPostfix.
 };
 
 // This should include all operators which can produce SYM_VAR for a subsequent assignment:
@@ -326,6 +333,7 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define EIF_LEAVE_PARAMS	0x040000
 #define EIF_UNSET_RETURN	0x100000
 #define EIF_UNSET_PROP		0x200000
+#define EIF_ISSET_UNSET		0x400000
 
 
 // Helper function for event handlers and __Delete:
@@ -357,12 +365,14 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				Var *var;             // for SYM_VAR and SYM_DYNAMIC
 				LPTSTR marker;        // for SYM_STRING
 				ExprTokenType *circuit_token; // for short-circuit operators
+				UnsetKind unset_kind; // for SYM_MISSING
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
 				LPCTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
 				size_t marker_length;
 				VarRefUsageType var_usage; // for SYM_DYNAMIC and SYM_VAR (at load time)
+				int pop_count; // for SYM_MAYBE (after infix-to-postfix completion)
 			};
 		};  
 	};
@@ -375,6 +385,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	ExprTokenType(double aValue) { SetValue(aValue); }
 	ExprTokenType(IObject *aValue) { SetValue(aValue); }
 	ExprTokenType(LPTSTR aValue, size_t aLength = -1) { SetValue(aValue, aLength); }
+	ExprTokenType(UnsetKind aValue) { Unset(aValue); }
 	
 	void SetValue(__int64 aValue)
 	{
@@ -402,6 +413,12 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		ASSERT(aValue);
 		symbol = SYM_OBJECT;
 		object = aValue;
+	}
+
+	void Unset(UnsetKind aKind = UnsetKind::Unset)
+	{
+		symbol = SYM_MISSING;
+		unset_kind = aKind;
 	}
 
 	inline void CopyValueFrom(ExprTokenType &other)
@@ -455,7 +472,6 @@ private: // Force code to use one of the CopyFrom() methods, for clarity.
 #define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
 #define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
-class Object;
 class BuiltInFunc;
 struct ResultToken : public ExprTokenType
 {
@@ -468,8 +484,7 @@ struct ResultToken : public ExprTokenType
 	// Utility function for initializing result tokens.
 	void InitResult(LPTSTR aResultBuf)
 	{
-		symbol = SYM_STRING;
-		marker = _T("");
+		ExprTokenType::Unset(UnsetKind::Blank);
 		marker_length = -1; // Helps code size to do this here instead of in ReturnPtr(), which should be inlined.
 		buf = aResultBuf;
 		mem_to_free = nullptr;
@@ -477,6 +492,17 @@ struct ResultToken : public ExprTokenType
 		named_params = nullptr;
 #endif
 		result = OK;
+	}
+	
+	void InitInvokeRetVal()
+	{
+		ExprTokenType::Unset(UnsetKind::Blank);
+	}
+
+	void Unset(UnsetKind aKind = UnsetKind::Unset)
+	{
+		ASSERT(!mem_to_free && symbol != SYM_OBJECT);
+		ExprTokenType::Unset(aKind);
 	}
 
 	// Utility function for properly freeing a token's contents.
@@ -560,7 +586,7 @@ struct ResultToken : public ExprTokenType
 
 	ResultType SoftFail()
 	{
-		symbol = SYM_MISSING;
+		Unset();
 		// Caller may rely on FAIL to unwind stack, but this->result is still OK.
 		return FAIL;
 	}
@@ -593,7 +619,7 @@ struct ResultToken : public ExprTokenType
 	ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType);
 	ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction);
 	
-	BuiltInFunc *func; // For maintainability, this is separate from the ExprTokenType union.  Its main uses are func->mID and func->mOutputVars.
+	void *callee_id; // For maintainability, this is separate from the ExprTokenType union.
 
 private:
 	// Currently can't be included in the value union because meta-functions
@@ -626,10 +652,11 @@ enum enum_act {
 // Keep ACT_BLOCK_BEGIN as the first "control flow" action, for range checks with ACT_FIRST_CONTROL_FLOW:
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_HOTKEY_IF // Must be before ACT_FIRST_COMMAND.
-, ACT_EXIT // Used with AddLine(), but excluded from the "named" range below so that the function is preferred.
+, ACT_END_MODULE // Used with AddLine(), but excluded from the "named" range below so that the function is preferred.
+, ACT_EXPORT
 // ================================================================================
 // Named actions recognized by ConvertActionType:
-, ACT_STATIC, ACT_EXPORT, ACT_GLOBAL, ACT_LOCAL
+, ACT_STATIC, ACT_GLOBAL, ACT_LOCAL
 , ACT_IF
 , ACT_ELSE
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
@@ -654,7 +681,7 @@ enum enum_act {
 #define ACT_IS_LINE_PARENT(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
 	|| ACT_IS_LOOP(ActionType) || (ActionType >= ACT_TRY && ActionType <= ACT_FINALLY) \
 	|| ActionType == ACT_SWITCH)
-#define ACT_IS_VAR_DECL(ActionType) ((ActionType) <= ACT_LOCAL && (ActionType) >= ACT_STATIC)
+#define ACT_IS_VAR_DECL(ActionType) ((ActionType) <= ACT_LOCAL && (ActionType) >= ACT_EXPORT)
 // The following groups of action types do not need ExpandArgs() called by ExecUntil(),
 // for one of the following reasons: 1) action has no args, 2) action's args are
 // always fully resolved at load time, 3) action is never executed by ExecUntil(),
@@ -899,7 +926,6 @@ struct ScriptThreadState
 	ScriptTimer *CurrentTimer; // The timer that launched this thread (if any).
 	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
 	EventInfoType EventInfo;
-	HWND DialogHWND; // MsgBox being shown by this thread.
 	HWND DialogOwner; // This thread's dialog owner, if any.
 #define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : (::g->DialogOwner = NULL)) // Reset to NULL if invalid to mitigate the risk of errors due to HWND reuse by the OS.
 	ResultToken* ThrownToken;
@@ -912,16 +938,23 @@ struct ScriptThreadState
 	DWORD ThreadStartTime;
 
 	bool IsPaused;
-	bool MsgBoxTimedOut; // Meaningful only while a MsgBox call is in progress.
 	bool AllowThreadToBeInterrupted; // Whether this thread can be interrupted by custom menu items, hotkeys, or timers.  Separate from g_AllowInterruption because that's for use by ongoing operations, such as SendKeys, and should override the thread's setting.
 };
 
-struct ScriptThreadSettings
+struct WindowSearchSettings
+{
+	TitleMatchModes TitleMatchMode;
+	bool TitleFindFast; // Whether to use the fast mode of searching window text, or the more thorough slow mode.
+	bool DetectHiddenWindows; // Whether to detect the titles of hidden parent windows.
+	bool DetectHiddenText;    // Whether to detect the text of hidden child windows.
+	bool DetectWindow(HWND aWnd);
+};
+
+struct ScriptThreadSettings : WindowSearchSettings
 {
 	HotkeyCriterion *HotCriterion;
 
 	DWORD PeekFrequency; // DWORD vs. UCHAR might improve performance a little since it's checked so often.
-	TitleMatchModes TitleMatchMode;
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //
@@ -937,9 +970,6 @@ struct ScriptThreadSettings
 	CoordModeType CoordMode; // Bitwise collection of flags.
 
 	// All these one-byte members are kept adjacent to make the struct smaller, which helps conserve stack space:
-	bool TitleFindFast; // Whether to use the fast mode of searching window text, or the more thorough slow mode.
-	bool DetectHiddenWindows; // Whether to detect the titles of hidden parent windows.
-	bool DetectHiddenText;    // Whether to detect the text of hidden child windows.
 	bool AllowTimers; // v1.0.40.01 Whether new timer threads are allowed to start during this thread.
 	bool ThreadIsCritical; // Whether this thread has been marked (un)interruptible by the "Critical" command.
 	UCHAR DefaultMouseSpeed;
@@ -948,7 +978,6 @@ struct ScriptThreadSettings
 	bool ListLinesIsEnabled;
 
 	//inline bool InTryBlock() { return ExcptMode & EXCPTMODE_TRY; } // Currently unused.
-	bool DetectWindow(HWND aWnd);
 };
 
 // global_struct is a combination of thread state (things specific to a thread that
@@ -981,7 +1010,6 @@ inline void global_clear_state(ScriptThreadState &g)
 	//g.IsPaused = false;
 	//g.Priority = 0;
 	//g.UninterruptedLineCount = 0;
-	//g.DialogHWND = NULL;
 	//g.DialogOwner = NULL;
 	//g.mLoopIteration = 0; // Zero seems preferable to 1, to indicate "no loop currently running" when a thread first starts off.  This should probably be left unchanged for backward compatibility (even though script's aren't supposed to rely on it).
 	//g.mLoopFile = NULL;

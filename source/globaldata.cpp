@@ -135,6 +135,7 @@ int g_ScreenDPI = GetScreenDPI();
 bool g_MenuIsVisible = false;
 HMENU g_MenuIsTempModeless = NULL;
 bool g_MenuIsTempTopmost = false;
+bool g_MsgBoxTimedOut[MAX_MSGBOXES];
 int g_nMessageBoxes = 0;
 int g_nFileDialogs = 0;
 int g_nFolderDialogs = 0;
@@ -249,10 +250,10 @@ Action g_act[] =
 	, {_T("}"), 0, 0}
 
 	, {_T("#HotIf"), 0, 1}
-	, {_T(";end"), 0, 0} // ACT_EXIT
+	, {_T(";end"), 0, 0} // ACT_END_MODULE
 
-	, {_T("Static"), 1, 1} // ACT_STATIC - executes once and then the Line is removed.
 	, {_T("Export"), 1, 1} // ACT_EXPORT - used only at load time.
+	, {_T("Static"), 1, 1} // ACT_STATIC - executes once and then the Line is removed.
 	, {_T("Global"), 1, 1} // ACT_GLOBAL - used only at load time.
 	, {_T("Local"), 1, 1} // ACT_LOCAL - used only at load time.
 

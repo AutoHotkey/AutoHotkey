@@ -78,6 +78,9 @@ inline bool IsTextMatch(LPCTSTR aHaystack, LPCTSTR aNeedle)
 #define CRITERION_CLASS 0x08
 #define CRITERION_GROUP 0x10
 #define CRITERION_PATH	0x20
+#define CRITERION_OPT  0x100
+#define CANDIDATE_DETECTED 0x200
+#define CANDIDATE_VISIBILITY 0x400
 
 class WindowSearch
 {
@@ -90,7 +93,7 @@ public:
 	DWORD mCriteria; // Which criteria are currently in effect (ID, PID, Class, Title, etc.)
 
 	// Controlled and initialized by SetCriteria():
-	ScriptThreadSettings *mSettings;           // Settings such as TitleMatchMode and DetectHiddenWindows.
+	WindowSearchSettings mSettings;           // Settings such as TitleMatchMode and DetectHiddenWindows.
 	LPTSTR mCriterionBuf;                     // Contains all of the other string criterion sourced from WinTitle.
 	size_t mCriterionBufSize;
 	LPCTSTR mCriterionTitle;                   // The portion of WinTitle preceding the first "ahk_" keyword.
@@ -113,7 +116,7 @@ public:
 
 	HWND *mAlreadyVisited;      // Array of HWNDs to exclude from consideration.
 	int mAlreadyVisitedCount;   // Count of items in the above.
-	WindowSpec *mFirstWinSpec;  // Linked list used by the WinGroup commands.
+	WinGroup *mSearchGroup;
 	BuiltInFunctionID mActionType; // Used only by WinGroup::PerformShowWindow().
 	int mTimeToWaitForClose;    // Same.
 	Array *mArray;             // Used by WinGetList() to fetch an array of matching HWNDs.
@@ -123,6 +126,7 @@ public:
 	DWORD mCandidateInfo; // Criteria flags indicating which attributes have been retrieved.
 	// Candidate attributes retrieved as needed:
 	DWORD mCandidatePID;
+	bool mCandidateVisible;
 	TCHAR mCandidateTitle[WINDOW_TEXT_SIZE];  // For storing title or class name of the given mCandidateParent.
 	TCHAR mCandidateClass[WINDOW_CLASS_SIZE]; // Must not share mem with mCandidateTitle because even if ahk_class is in effect, ExcludeTitle can also be in effect.
 	TCHAR mCandidatePath[MAX_PATH]; // MAX_PATH vs. T_MAX_PATH because it currently seems to be impossible to run an executable with a longer path (in Windows 10.0.16299).
@@ -138,8 +142,9 @@ public:
 		}
 	}
 
-	ResultType SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText);
-	void SetCriteria(global_struct &aSettings, WinGroup &aGroup);
+	ResultType SetCriteria(WindowSearchSettings const& aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText);
+	void SetCriteria(WindowSearchSettings const& aSettings, WinGroup &aGroup);
+	ResultType ParseOption(LPCTSTR aValue, LPCTSTR aEnd);
 	HWND IsMatch(bool aInvert = false);
 
 	WindowSearch() // Constructor.
@@ -155,7 +160,7 @@ public:
 		// them in those relatively rare cases when they need to be.  WinGroup::ActUponAll() and
 		// WinGroup::Deactivate() (and probably other callers) rely on these attributes being retained
 		// after they were overridden even upon multiple subsequent calls to SetCriteria():
-		, mFindLastMatch(false), mAlreadyVisited(NULL), mAlreadyVisitedCount(0), mFirstWinSpec(NULL), mArray(NULL)
+		, mFindLastMatch(false), mAlreadyVisited(NULL), mAlreadyVisitedCount(0), mSearchGroup(NULL), mArray(NULL)
 	{
 	}
 

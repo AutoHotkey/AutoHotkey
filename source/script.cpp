@@ -53,6 +53,7 @@ FuncEntry g_BIF[] =
 	BIF1(ComObjType, 1, 2),
 	BIF1(ComObjValue, 1, 1),
 	BIF1(Cos, 1, 1),
+	BIF1(DefineProp, 3, 3),
 #ifdef ENABLE_DLLCALL
 	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
@@ -74,7 +75,7 @@ FuncEntry g_BIF[] =
 	BIFi(IsLower, 1, 2, BIF_IsTypeish, VAR_TYPE_LOWER),
 	BIFi(IsNumber, 1, 1, BIF_IsTypeish, VAR_TYPE_NUMBER),
 	BIF1(IsObject, 1, 1),
-	BIFi(IsSetRef, 1, 1, BIF_IsSet, 0, {1}),
+	BIFi(IsSetRef, 1, 1, BIF_IsSet, 1, {1}),
 	BIFi(IsSpace, 1, 1, BIF_IsTypeish, VAR_TYPE_SPACE),
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
@@ -108,7 +109,7 @@ FuncEntry g_BIF[] =
 	BIFn(RegDelete, 0, 2, BIF_Reg),
 	BIFn(RegDeleteKey, 0, 1, BIF_Reg),
 	BIFn(RegRead, 0, 3, BIF_Reg),
-	BIFn(RegWrite, 0, 4, BIF_Reg),
+	BIFn(RegWrite, 1, 4, BIF_Reg),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
 	BIF1(Sin, 1, 1),
@@ -127,13 +128,12 @@ FuncEntry g_BIF[] =
 	BIF1(StrPtr, 1, 1),
 	BIFn(StrPut, 1, 4, BIF_StrGetPut),
 	BIFn(StrTitle, 1, 1, BIF_StrCase),
-	BIF1(StructFromPtr, 2, 2),
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
 	BIF1(Tan, 1, 1),
 	BIF1(Throw, 0, NA),
 	BIFn(Trim, 1, 2, BIF_Trim),
-	BIF1(Type, 1, 1),
+	BIF1(Type, 0, 1),
 	BIF1(VarSetStrCapacity, 1, 2, {1}),
 	BIF1(VerCompare, 2, 2),
 	BIFn(WinActive, 0, 4, BIF_WinExistActive),
@@ -306,11 +306,10 @@ VarEntry g_BIV_A[] =
 
 
 Script::Script()
-	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL)
+	: mLastLine(NULL), mCurrLine(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mOnClipboardChangeIsRunning(false)
-	, mLastLabel(NULL)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mNextLineIsFunctionBody(false)
@@ -589,9 +588,7 @@ ResultType Script::Init(LPTSTR aScriptFilename, IObject *aArgs)
 	// Up to this point, mCurrentModule == &mBuiltinModule for initialization of built-ins.
 	// From this point, declarations should add names to a script module, not mBuiltinModule.
 	mCurrentModule = &mDefaultModule;
-	mModules.Insert(&mDefaultModule, 0); // __Main
-	mModules.Insert(&mBuiltinModule, 1); // AHK
-	ASSERT(mModules.mCount == 2);
+	mDefaultModule.mSelfFileIndex = 0;
 
 	if (aArgs) // Caller-provided command-line args.
 	{
@@ -679,7 +676,7 @@ ResultType Script::CreateWindows()
 
 	// Now that all static initializers (such as for Object::sPrototype)
 	// are guaranteed to have been executed, construct the Tray menu.
-	mTrayMenu = new UserMenu(MENU_TYPE_POPUP);
+	mTrayMenu = UserMenu::Create();
 	mTrayMenu->AppendStandardItems();
 
 	// Stdin scripts leave the menu items enabled, to make it easier to imitate a standard script
@@ -746,6 +743,8 @@ ResultType Script::CreateWindows()
 		// or something.  In other words, it is expected to fail under certain circumstances and
 		// we want to tolerate that:
 		CreateTrayIcon();
+
+	SetWindowsHookEx(WH_MSGFILTER, DialogMessageHookProc, NULL, g_MainThreadID);
 
 	return OK;
 }
@@ -815,7 +814,7 @@ void Script::CreateTrayIcon()
 	// for compatibility with VC++ 6.x.  This is also what AutoIt3 uses:
 	mNIC.cbSize = sizeof(NOTIFYICONDATA);  // NOTIFYICONDATA_V1_SIZE
 	mNIC.hWnd = g_hWnd;
-	mNIC.uID = AHK_NOTIFYICON; // This is also used for the ID, see TRANSLATE_AHK_MSG for details.
+	mNIC.uID = AHK_NOTIFYICON; // This is also used for the ID.
 	mNIC.uFlags = NIF_MESSAGE | NIF_TIP | NIF_ICON;
 	mNIC.uCallbackMessage = AHK_NOTIFYICON;
 	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : g_IconSmall;
@@ -942,6 +941,14 @@ ResultType Script::SetTrayIcon(LPCTSTR aIconFile, int aIconNumber, ToggleValueTy
 		new_icon_small = (HICON)(UINT_PTR)ATOI64(aIconFile + 6);
 		new_icon = new_icon_small; // DestroyIconsIfUnused() handles this case by calling DestroyIcon() only once.
 	}
+	else if (!_tcsnicmp(aIconFile, _T("HBITMAP:"), 8) && aIconFile[8] != '*')
+	{
+		// This case must be handled for the same reasons as above.
+		ICONINFO iconinfo;
+		iconinfo.fIcon = TRUE;
+		iconinfo.hbmColor = iconinfo.hbmMask = (HBITMAP)(UINT_PTR)ATOI64(aIconFile + 8);
+		new_icon_small = new_icon = CreateIconIndirect(&iconinfo);
+	}
 	else if ( new_icon_small = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, aIconNumber, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
 		if ( !(new_icon = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, aIconNumber, false, NULL, &icon_module)) )
 			DestroyIcon(new_icon_small);
@@ -1062,14 +1069,10 @@ ResultType Script::ExecuteModule(ScriptModule *aModule)
 	if (!aModule->mFirstLine || aModule->mExecuted)
 		return OK;
 	aModule->mExecuted = true; // Set first to block recursion in cases where imp->mod imports aModule.
-	for (auto imp = aModule->mImports; imp; imp = imp->next)
-	{
-		auto result = ExecuteModule(imp->mod);
-		if (result != OK)
-			return result;
-	}
-	mCurrentModule = aModule;
-	return aModule->mFirstLine->ExecUntil(UNTIL_RETURN);
+	auto prev = std::exchange(mCurrentModule, aModule);
+	auto result = aModule->mFirstLine->ExecUntil(UNTIL_RETURN);
+	mCurrentModule = prev;
+	return result;
 }
 
 
@@ -1326,7 +1329,6 @@ ResultType Script::ExitApp(ExitReasons aExitReason)
 
 
 
-#ifdef RELEASE_SOME_OBJECTS_ON_EXIT
 void ReleaseVarObjects(VarList &aVars)
 {
 	for (int v = 0; v < aVars.mCount; ++v)
@@ -1350,7 +1352,6 @@ void ReleaseStaticVarObjects(FuncList &aFuncs)
 		ReleaseVarObjects(f.mStaticVars);
 	}
 }
-#endif
 
 
 
@@ -1358,10 +1359,6 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 // Note that g_script's destructor takes care of most other cleanup work, such as destroying
 // tray icons, menus, and unowned windows such as ToolTip.
 {
-#ifdef RELEASE_SOME_OBJECTS_ON_EXIT
-	// v2.1: This was disabled rather than updating it to iterate through module variables because
-	// it has always been incomplete (doesn't finalize all objects) and caused unexpected behaviour
-	// (some global or static variables are arbitrarily unset before __delete executes).
 	// L31: Release objects stored in variables, where possible.
 	if (aExitReason != EXIT_CRITICAL) // i.e. Avoid making matters worse if EXIT_CRITICAL.
 	{
@@ -1370,10 +1367,10 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 		g_AllowInterruption = FALSE;
 		g->IsPaused = false;
 
-		ReleaseVarObjects(mVars);
+		for (auto mod = mLastModule; mod; mod = mod->mPrev)
+			ReleaseVarObjects(mod->mVars);
 		ReleaseStaticVarObjects(mFuncs);
 	}
-#endif
 #ifdef CONFIG_DEBUGGER // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
 	g_Debugger.Exit(aExitReason);
 #endif
@@ -1389,6 +1386,9 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 	// unsafe by the time ~Script() is called since other static objects may or may not have been
 	// destructed already).
 	DestroyWindows();
+
+	// Flush write buffers of any open File objects and other streams, such as Loop Read's OutputFile.
+	TextStream::FlushAllWriteBuffers();
 
 	// I know this isn't the preferred way to exit the program.  However, due to unusual
 	// conditions such as the script having MsgBoxes or other dialogs displayed on the screen
@@ -1445,6 +1445,16 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 	if (!CloseCurrentModule() || !ResolveImports())
 		return LOADING_FAILED;
 
+	if (mBuiltinModule.mFirstLine) // `#Module AHK` was used.
+	{
+		// Add AHK module last, so it will execute first.  Must be done before Preparse calls.
+		// Other modules use a flagged alias (Var::SetImport) for every imported name to trigger
+		// module execution on first reference, but that would be wasteful for the built-in
+		// module since built-in functions are usually called very often and early.
+		mBuiltinModule.mPrev = mLastModule;
+		mLastModule = &mBuiltinModule;
+	}
+
 	// Preparse all expressions and resolve all variable references.  The outer-most scope
 	// is preparsed first, then each function, working inward through all nested functions.
 	// All of a function's non-dynamic local variables are created before variable names
@@ -1494,9 +1504,10 @@ bool Script::IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf)
 	LPTSTR action_start = aBuf;
 	LPTSTR action_end = find_identifier_end(aBuf);
 	bool is_default_export = false;
+	bool is_export = false;
 	if (IS_SPACE_OR_TAB(*action_end) && action_end - action_start == 6) // Allow modifier keywords.
 	{
-		bool is_export = !_tcsnicmp(aBuf, _T("Export"), 6);
+		is_export = !_tcsnicmp(aBuf, _T("Export"), 6);
 		if (is_export || !_tcsnicmp(aBuf, _T("Static"), 6))
 			action_start = omit_leading_whitespace(action_end);
 		if (is_default_export = is_export && !_tcsnicmp(action_start, _T("Default"), 7) && IS_SPACE_OR_TAB(action_start[7]))
@@ -1530,12 +1541,12 @@ bool Script::IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf)
 	LPTSTR next_token = omit_leading_whitespace(param_end + 1);
 	return *next_token == 0 && *aNextBuf == '{' // Brace on next line.
 		|| *next_token == '{' && next_token[1] == 0 // Brace on same line.
-		|| *next_token == '=' && next_token[1] == '>'; // Fn() => expr
+		|| *next_token == '=' && next_token[1] == '>' && !is_export; // Fn() => expr
 }
 
 
 
-inline LPTSTR IsClassDefinition(LPTSTR aBuf, TCHAR *aExport)
+inline LPTSTR IsClassDefinition(LPTSTR aBuf, TCHAR *aExport, bool &aStruct)
 {
 	if (aExport) // Export is permitted.
 	{
@@ -1552,9 +1563,13 @@ inline LPTSTR IsClassDefinition(LPTSTR aBuf, TCHAR *aExport)
 				*aExport = 'E'; // Non-default export.
 		}
 	}
-	if (_tcsnicmp(aBuf, _T("Class"), 5) || !IS_SPACE_OR_TAB(aBuf[5])) // i.e. it's not "Class" followed by a space or tab.
+	if (aStruct = !_tcsnicmp(aBuf, _T("Struct"), 6) && IS_SPACE_OR_TAB(aBuf[6]))
+		aBuf += 7;
+	else if (!_tcsnicmp(aBuf, _T("Class"), 5) && IS_SPACE_OR_TAB(aBuf[5]))
+		aBuf += 6;
+	else
 		return NULL;
-	LPTSTR class_name = omit_leading_whitespace(aBuf + 6);
+	LPTSTR class_name = omit_leading_whitespace(aBuf);
 	if (_tcschr(EXPR_ALL_SYMBOLS, *class_name))
 		// It's probably something like "Class := GetClass()".
 		return NULL;
@@ -1802,6 +1817,9 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 
 	bool blocks_previously_open = mLineParent || mClassObjectCount; // For error detection.
 
+	auto module_previously_open = mCurrentModule;
+	bool caller_backcompatmode = mBackCompatMode;
+
 	LineBuffer buf, next_buf;
 	size_t &buf_length = buf.length, &next_buf_length = next_buf.length;
 
@@ -1911,23 +1929,21 @@ process_completed_line:
 		if (!hotstring_start) // Not a hotstring (hotstring_start is checked *again* in case above block changed it; otherwise hotkeys like ": & x" aren't recognized).
 		{
 			// Note that there may be an action following the HOTKEY_FLAG (on the same line).
-			if (hotkey_flag = _tcsstr(buf, HOTKEY_FLAG)) // Find the first one from the left, in case there's more than 1.
+			if (hotkey_flag = _tcsstr(buf + 1, HOTKEY_FLAG)) // Find the first one from the left, in case there's more than 1.
 			{
-				if (hotkey_flag == buf && hotkey_flag[2] == ':') // v1.0.46: Support ":::" to mean "colon is a hotkey".
-					++hotkey_flag;
-					// Above: Hotkeys like "^:::" and "l & :::" are not supported because: 1) some cases are
-					// ambiguous, such as "^:::" legitimately remapping caret to colon; 2) retaining support
-					// for colon as a remap target would require larger/more complicated code; 3) such hotkeys
-					// are hard for a human to read/interpret.
+				// Above: The search starts from + 1 to support ":::" to define colon as a hotkey.
+				// Hotkeys like "^:::" and "l & :::" are not supported because: 1) some cases are
+				// ambiguous, such as "^:::" legitimately remapping caret to colon; 2) retaining support
+				// for colon as a remap target would require larger/more complicated code; 3) such hotkeys
+				// are hard for a human to read/interpret.
 				// v1.0.40: It appears to be a hotkey, but validate it as such before committing to processing
 				// it as a hotkey.  If it fails validation as a hotkey, try to interpret it as a statement in
 				// case the double-colon is within a quoted string.
 				// Note: Hotstrings can't suffer from this type of ambiguity because a leading colon or pair of
 				// colons makes them easier to detect.
-				auto cp = omit_trailing_whitespace(buf, hotkey_flag); // For maintainability.
-				TCHAR orig_char = *cp;
+				auto cp = hotkey_flag;
 				*cp = '\0'; // Temporarily terminate.
-				hotkey_validity = Hotkey::TextInterpret(omit_leading_whitespace(buf), NULL); // Passing NULL calls it in validate-only mode.
+				hotkey_validity = Hotkey::TextInterpret(buf, NULL); // Passing NULL calls it in validate-only mode.
 				switch (hotkey_validity)
 				{
 				case FAIL:
@@ -1935,12 +1951,20 @@ process_completed_line:
 				case CONDITION_FALSE:
 					hotkey_flag = NULL; // It doesn't look like valid hotkey syntax, so parse it as something else (so the error message won't be ERR_INVALID_KEYNAME).
 					break;
-				//case CONDITION_TRUE:
+				case CONDITION_TRUE:
 					// It's a key that doesn't exist on the current keyboard layout.  Leave hotkey_flag set
 					// so that the section below handles it as a hotkey.  This ensures any same-line action
-					// or trailing block is interpreted correctly.  A warning will be displayed below.
+					// or trailing block is interpreted correctly.
+#ifndef AUTOHOTKEYSC
+					if (!mValidateThenExit) // Current keyboard layout is not relevant in /validate mode.
+#endif
+					{
+						TCHAR msg_text[128];
+						sntprintf(msg_text, _countof(msg_text), _T("Note: The hotkey %s will not be active because it does not exist in the current keyboard layout."), static_cast<LPTSTR>(buf));
+						MsgBox(msg_text);
+					}
 				}
-				*cp = orig_char; // Undo the temp. termination above.
+				*cp = *HOTKEY_FLAG; // Undo the temp. termination above.
 			}
 		}
 
@@ -2060,7 +2084,8 @@ process_completed_line:
 					//    might be a mouse button or some longer key name whose actual/correct VK value is relied
 					//    upon by other places below.
 				{
-					auto result = ParseRemap(buf, remap_dest_vk, remap_name, hotkey_flag);
+					auto result = hotkey_validity == CONDITION_TRUE ? OK // Valid syntax but should have no effect.
+						: ParseRemap(buf, remap_dest_vk, remap_name, hotkey_flag);
 					if (!result)
 						return result;
 					if (result != CONDITION_FALSE)
@@ -2117,15 +2142,7 @@ process_completed_line:
 						if (hotkey_validity != CONDITION_TRUE)
 							return FAIL; // It already displayed the error.
 						// This hotkey uses a single-character key name, which could be valid on some other
-						// keyboard layout.  Allow the script to start, but warn the user about the problem.
-#ifndef AUTOHOTKEYSC
-						if (!mValidateThenExit) // Current keyboard layout is not relevant in /validate mode.
-#endif
-						{
-							TCHAR msg_text[128];
-							sntprintf(msg_text, _countof(msg_text), _T("Note: The hotkey %s will not be active because it does not exist in the current keyboard layout."), static_cast<LPTSTR>(buf));
-							MsgBox(msg_text);
-						}
+						// keyboard layout.  Allow the script to start, as the user has already been warned.
 					}
 				}
 				if (hook_action == HK_NORMAL && hk) // For simplicity, there's no detection of invalid stacking of "inactive" single-letter hotkeys (see above).
@@ -2206,7 +2223,8 @@ process_completed_line:
 		// Since above didn't "goto", it's not a label.
 		if (*buf == '#')
 		{
-			if (!_tcsnicmp(buf, _T("#HotIf"), 6) && IS_SPACE_OR_TAB(buf[6]))
+			if (!_tcsnicmp(buf, _T("#HotIf"), 6) && IS_SPACE_OR_TAB(buf[6])
+				|| !_tcsnicmp(buf, _T("#Import"), 7) && IS_SPACE_OR_TAB(buf[7]))
 			{
 				// Allow an expression enclosed in ()/[]/{} to span multiple lines:
 				if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
@@ -2341,15 +2359,19 @@ process_completed_line:
 
 		// Handle this first so that GetLineContExpr() doesn't need to detect it for OTB exclusion:
 		TCHAR class_export_type = 0;
-		if (LPTSTR class_name = IsClassDefinition(buf, mClassObjectCount ? nullptr : &class_export_type))
+		bool is_struct_class;
+		if (LPTSTR class_name = IsClassDefinition(buf, mClassObjectCount ? nullptr : &class_export_type, is_struct_class))
 		{
-			if (g->CurrentFunc)
-				return ScriptError(_T("Functions cannot contain classes."), buf);
-			if (!ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
+			if (ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
+			{
+				if (g->CurrentFunc)
+					return ScriptError(_T("Functions cannot contain classes."), buf);
+				if (!DefineClass(class_name, class_export_type, is_struct_class))
+					return FAIL;
+				goto continue_main_loop;
+			}
+			else if (!is_struct_class)
 				return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
-			if (!DefineClass(class_name, class_export_type))
-				return FAIL;
-			goto continue_main_loop;
 		}
 
 		// Aside from goto/break/continue, anything not already handled above is either an expression
@@ -2429,10 +2451,6 @@ process_completed_line:
 				return FAIL;
 			goto continue_main_loop;
 		}
-		else if (!mLineParent && ParseImportStatement(buf))
-		{
-			goto continue_main_loop;
-		}
 
 		// Parse the command, assignment or expression, including any same-line open brace or sub-action
 		// for ELSE, TRY, CATCH or FINALLY.  Unlike braces at the start of a line (processed above), this
@@ -2483,7 +2501,12 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		ScriptWarning(g_WarnMode, _T("Some non-ASCII characters could not be decoded.\n\nEnsure that the file is saved as UTF-8."));
 	}
 
-	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
+	if (mCurrentModule != module_previously_open)
+		ReopenModule(module_previously_open);
+
+	// "#Requires AutoHotkey v2.1-" suppresses this mode until EOF.
+	mBackCompatMode = caller_backcompatmode;
+
 	return OK;
 }
 
@@ -2616,10 +2639,9 @@ ResultType Script::ParseRemap(LPCTSTR aSource, vk_type remap_dest_vk, LPCTSTR aD
 				*next_blind_mod++ = mod_string[i*2+1]; // One of ^!+#
 			}
 	*next_blind_mod = '\0';
-	LPTSTR extra_event = _T(""); // Set default.
 	cp += _stprintf(cp
-		, _T("Send(\"{Blind%s}%s%s{%s%s}\")") // DownR vs. Down. See Send's DownR handler for details.
-		, blind_mods, extra_event, remap_dest_modifiers, remap_dest, remap_wheel ? _T("") : _T(" DownR"));
+		, _T("Send(\"{Blind%s}%s{%s%s}\")") // DownR vs. Down. See Send's DownR handler for details.
+		, blind_mods, remap_dest_modifiers, remap_dest, remap_wheel ? _T("") : _T(" DownR"));
 
 	auto define_remap_func = [&]()
 		{
@@ -3000,7 +3022,7 @@ ResultType Script::BalanceExprError(int aBalance, TCHAR aExpect[], LPTSTR aLineT
 ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuffer &next_buf
 	, LineNumberType &phys_line_number, bool &has_continuation_section)
 {
-	bool do_rtrim, literal_escapes, literal_quotes;
+	bool do_rtrim, literal_escapes = false, literal_quotes;
 	#define CONTINUATION_SECTION_WITHOUT_COMMENTS 1 // MUST BE 1 because it's the default set by anything that's boolean-true.
 	#define CONTINUATION_SECTION_WITH_COMMENTS    2 // Zero means "not in a continuation section".
 	int in_continuation_section, indent_level;
@@ -3023,7 +3045,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 	{
 		// This increment relies on the fact that this loop always has at least one iteration:
 		++phys_line_number; // Tracks phys. line number in *this* file (independent of any recursion caused by #Include).
-		next_buf_length = GetLine(next_buf, in_continuation_section, in_comment_section, fp);
+		next_buf_length = GetLine(next_buf, in_continuation_section, literal_escapes, in_comment_section, fp);
 		if (!in_continuation_section)
 		{
 			// v2: The comment-end is allowed at the end of the line (vs. just the start) to reduce
@@ -3354,8 +3376,9 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 		}
 		else if (cp_length)
 		{
-			tmemcpy(buf + buf_length, cp, cp_length + 1); // Append this line to prev. and include the zero terminator.
+			tmemcpy(buf + buf_length, cp, cp_length); // Append this line to prev.
 			buf_length += cp_length; // Must be done only after the old value of buf_length was used above.
+			buf[buf_length] = '\0'; // Null-terminator isn't done by tmemcpy() because cp_length might have been adjusted to omit trailing whitespace.
 		}
 	} // for() each sub-line (continued line) that composes this line.
 	return OK;
@@ -3363,7 +3386,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 
 
 
-size_t Script::GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlockComment, TextStream *ts)
+size_t Script::GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aLiteralEscape, bool aInBlockComment, TextStream *ts)
 {
 	size_t aBuf_length = 0;
 	for (;;)
@@ -3441,6 +3464,10 @@ size_t Script::GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlo
 			*aBuf = '\0';
 			return 0;
 		}
+		else if (*aBuf == '/' && aBuf[1] == '*')
+			// Avoid stripping ;comments since that would prevent detection of the comment-end
+			// in cases like "/* ; */".
+			return aBuf_length;
 	}
 	//else CONTINUATION_SECTION_WITH_COMMENTS (case #3 above), which due to other checking also means that
 	// this line isn't a comment (though it might have a comment on its right side, which is checked below).
@@ -3466,7 +3493,7 @@ size_t Script::GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlo
 			aBuf_length = rtrim_with_nbsp(aBuf, prevp - aBuf); // Since it's our responsibility to return a fully trimmed string.
 			break; // Once the first valid comment-flag is found, nothing after it can matter.
 		}
-		else // No whitespace to the left.
+		else if (!aLiteralEscape)
 		{
 			// The following is done here, at this early stage, to support escaping the comment flag in
 			// hotkeys and directives (the latter is mostly for backward-compatibility).
@@ -3951,12 +3978,24 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 			if (IS_SPACE_OR_TAB(parameter[10]))
 			{
+				bool set_bc_mode = false, bc_mode = true;
 				TCHAR word[32];
 				for (LPCTSTR end, cp = parameter + 11; ; cp = end)
 				{
 					cp = omit_leading_whitespace(cp);
 					if (!*cp)
+					{
+						if (set_bc_mode)
+						{
+							if (!mCurrentModule->mBackCompatModeWasSet)
+							{
+								mCurrentModule->mBackCompatModeWasSet = true;
+								mCurrentModule->mBackCompatMode = bc_mode;
+							}
+							mBackCompatMode = bc_mode;
+						}
 						return CONDITION_TRUE;
+					}
 					
 					for (end = cp; *end && !IS_SPACE_OR_TAB(*end); ++end);
 					tcslcpy(word, cp, min(_countof(word), end - cp + 1));
@@ -3965,11 +4004,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 					if (!_tcsicmp(word, _T(AHK_BIT)))
 						continue;
 
-					// It's either an unment requirement or a version number.
-					if (VersionSatisfies(T_AHK_VERSION, word))
-						continue;
-
-					break;
+					// It's either an unmet requirement or a version number.
+					if (!VersionSatisfies(T_AHK_VERSION, word))
+						break;
+					
+					// Set compatibility mode based on whether 2.0.x would also meet the requirement.
+					bc_mode = bc_mode && VersionSatisfies(_T("2.0.x"), word);
+					set_bc_mode = true;
 				}
 			}
 		}
@@ -3978,26 +4019,22 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 #endif
 	}
 	
-	if (IS_DIRECTIVE_MATCH(_T("#DefaultReturn")))
-	{
-		if (!parameter)
-			return ScriptError(ERR_PARAM1_REQUIRED);
-		if (!_tcsicmp(parameter, _T("unset")))
-			mDefaultReturn = SYM_MISSING;
-		else if (!_tcsicmp(parameter, _T("\"\""))) // Enforce consistency for this back-compat switch; require "" and not ''.
-			mDefaultReturn = SYM_STRING;
-		else
-			return ScriptError(ERR_PARAM1_INVALID, parameter);
-		return CONDITION_TRUE;
-	}
-
 	if (IS_DIRECTIVE_MATCH(_T("#Module")))
 	{
-		if (mLineParent || mClassObjectCount)
+		if (mLineParent || mClassObjectCount || mPendingHotkey)
 			return ScriptError(ERR_UNEXPECTED_DIRECTIVE, aBuf);
 		if (!parameter)
 			return ScriptError(ERR_PARAM1_REQUIRED);
 		return ParseModuleDirective(parameter);
+	}
+
+	if (IS_DIRECTIVE_MATCH(_T("#Import")))
+	{
+		if (mLineParent || mClassObjectCount)
+			return ScriptError(ERR_UNEXPECTED_DIRECTIVE, aBuf);
+		if (!ParseImportDirective(parameter))
+			return ScriptError(_T("Invalid import"), aBuf);
+		return CONDITION_TRUE;
 	}
 
 	if (IS_DIRECTIVE_MATCH(_T("#StructPack")))
@@ -4203,7 +4240,7 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 	if (!*aLabelName)
 		return FAIL; // For now, silent failure because callers should check this beforehand.
 	Label *&first_label = g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mCurrentModule->mFirstLabel;
-	Label *&last_label  = g->CurrentFunc ? g->CurrentFunc->mLastLabel  : mLastLabel;
+	Label *&last_label  = g->CurrentFunc ? g->CurrentFunc->mLastLabel  : mCurrentModule->mLastLabel;
 	if (!aAllowDupe && FindLabel(aLabelName))
 	{
 		// Don't attempt to dereference label->mJumpToLine because it might not
@@ -4268,10 +4305,22 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 		// For v2, the interpretation of a control flow keyword shouldn't be affected by whatever
 		// operator follows it, so this is done before checking for assignments or other operators.
 		if (IS_SPACE_OR_TAB(*end_marker) || *end_marker == '(' || !*end_marker || *end_marker == '{')
+		{
 			aActionType = ConvertActionType(action_name);
-		if (*end_marker == '{' && !(aActionType == ACT_ELSE || aActionType == ACT_LOOP
-			|| aActionType == ACT_SWITCH || aActionType >= ACT_TRY && aActionType <= ACT_FINALLY))
-			aActionType = ACT_INVALID; // Not an action for which "xxx{" is valid.
+			if (!aActionType)
+			{
+				// For backward-compatibility with v2.0, this isn't recognized by ConvertActionType:
+				if (!_tcsicmp(action_name, _T("Export")) && !_tcsnicmp(action_args, _T("Global"), 6)
+					&& IS_SPACE_OR_TAB(action_args[6]))
+				{
+					aActionType = ACT_EXPORT;
+					action_args = omit_leading_whitespace(action_args + 7);
+				}
+			}
+			else if (*end_marker == '{' && !(aActionType == ACT_ELSE || aActionType == ACT_LOOP
+				|| aActionType == ACT_SWITCH || aActionType >= ACT_TRY && aActionType <= ACT_FINALLY))
+				aActionType = ACT_INVALID; // Not an action for which "xxx{" is valid.
+		}
 	}
 	else
 	{
@@ -4429,9 +4478,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 				for (;;) // L35: Loop to fix x.y.z() and similar.
 				{
 					id_end = find_identifier_end(id_begin);
-					if (  id_end == id_begin // No identifier.
-						&& *id_end != g_DerefChar // It's not a.%b%
-						&& !(id_begin[-2] == '?' && (*id_end == '(' || *id_end == '['))  ) // It's not a?.() or a?.[b]
+					if (id_end == id_begin // No identifier.
+						&& *id_end != g_DerefChar) // It's not a.%b%
 						break; // Invalid.
 					if (*id_end == '(' // Allow function/method Call as standalone expression.
 						|| *id_end == g_DerefChar) // Allow dynamic property/method access (too hard to validate what's to the right of %).
@@ -4627,7 +4675,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 		{
 		case ACT_STATIC: declare_type = VAR_DECLARE_STATIC; break;
 		case ACT_LOCAL: declare_type = VAR_DECLARE_LOCAL; break;
-		case ACT_EXPORT: declare_type = VAR_GLOBAL | VAR_EXPORTED; break;
+		case ACT_EXPORT: declare_type = VAR_DECLARE_GLOBAL | VAR_EXPORTED; break;
 		default: declare_type = VAR_DECLARE_GLOBAL; break;
 		}
 
@@ -4710,15 +4758,16 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 				//  - Declaring a built-in variable as local or static.
 				// But permit the following:
 				//  - Exact duplicate declarations, such as for two different code paths.
-				if (var->Scope() != declare_type)
+				//  - Declarations which differ only by the presence of "Export".
+				if ((var->Scope() & ~VAR_EXPORTED) != (declare_type & ~VAR_EXPORTED))
 					return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
 			}
 			else
 			{
 				var = global_var;
-				if (declare_type & VAR_EXPORTED)
-					var->Scope() |= VAR_EXPORTED; // Mightn't be set if var was already defined.
 			}
+			if (declare_type & VAR_EXPORTED)
+				var->Scope() |= VAR_EXPORTED; // Mightn't be set if var was already defined.
 
 			item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 			if (*item_end && *item_end != ',')
@@ -4788,10 +4837,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType)
 			}
 			if (*last_char == ')')
 			{
-				// Remove the parentheses (and possible open brace) and trailing space.
+				// Remove the parentheses (and possible open brace) and leading/trailing space.
 				ASSERT(action_args == end_marker);
-				++action_args;
-				last_char = omit_trailing_whitespace(end_marker, last_char - 1);
+				action_args = omit_leading_whitespace(end_marker + 1);
+				last_char = omit_trailing_whitespace(action_args, last_char - 1);
 				last_char[1] = '\0';
 				// Treat this like a function call: all parameters are sub-expressions.
 				all_args_are_expressions = true;
@@ -5025,12 +5074,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		mIgnoreNextBlockBegin = false;
 		return OK;
 	}
-	if (aActionType == ACT_RETURN && !aArgc && g->CurrentFunc && mDefaultReturn == SYM_MISSING) // SYM_STRING needs no handling as it is the real default, for now.
-	{
-		aArg = (LPTSTR*)_alloca(sizeof(LPTSTR*));
-		*aArg = _T("unset");
-		aArgc = 1;
-	}
 
 	DerefList deref;  // Will be used to temporarily store the var-deref locations in each arg.
 	ArgStruct *new_arg;  // We will allocate some dynamic memory for this, then hang it onto the new line.
@@ -5120,9 +5163,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	Line &line = *the_new_line;  // For performance and convenience.
 
 	line.mPrevLine = mLastLine;  // Whether NULL or not.
-	if (mFirstLine == NULL)
-		mFirstLine = the_new_line;
-	else
+	if (!mCurrentModule->mFirstLine)
+		mCurrentModule->mFirstLine = the_new_line;
+	if (mLastLine)
 		mLastLine->mNextLine = the_new_line;
 	// This must be done after the above:
 	mLastLine = the_new_line;
@@ -5138,8 +5181,13 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// checkers which can operate while the user is editing, before they try to run the script.
 	if (aActionType == ACT_RETURN)
 	{
-		if (aArgc > 0 && !g->CurrentFunc)
-			return ScriptError(_T("Return's parameter should be blank except inside a function."));
+		if (aArgc > 0)
+		{
+			if (g->CurrentFunc)
+				g->CurrentFunc->mHasExplicitReturn = true;
+			else
+				return ScriptError(_T("Return's parameter should be blank except inside a function."));
+		}
 	}
 	
 	if (mNextLineIsFunctionBody)
@@ -5174,7 +5222,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_FINALLY:
 		bool expected = false;
 		Line *parent = mPendingRelatedLine;
-		if (parent->mActionType == ACT_BLOCK_BEGIN) // For mPendingRelatedLine, this means an entire block preceding this line.
+		if (parent && parent->mActionType == ACT_BLOCK_BEGIN) // For mPendingRelatedLine, this means an entire block preceding this line.
 			parent = parent->mParentLine;
 		for (;; parent = parent->mParentLine)
 		{
@@ -5276,7 +5324,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// by searching only g->CurrentFunc, which has no labels in those cases.
 	//if (!mNoUpdateLabels)
 	{
-		for (Label *label = g->CurrentFunc ? g->CurrentFunc->mLastLabel : mLastLabel;
+		for (Label *label = g->CurrentFunc ? g->CurrentFunc->mLastLabel : mCurrentModule->mLastLabel;
 			label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
 		{
 			if (line.mActionType == ACT_ELSE || line.mActionType == ACT_UNTIL || line.mActionType == ACT_CATCH)
@@ -5329,7 +5377,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 		if (g->CurrentFunc && g->CurrentFunc == mLineParent->mAttribute)
 		{
-			g->CurrentFunc->mDefaultReturnUnset = mDefaultReturn == SYM_MISSING;
+			mBackCompatMode = g->CurrentFunc->mBackCompatMode; // Revert any change made by #Requires *within* this function.
 			line.mAttribute = g->CurrentFunc;  // Flag this ACT_BLOCK_END as the ending brace of this function's body.
 			g->CurrentFunc = g->CurrentFunc->mOuterFunc;  // Step out of this function.
 			if (g->CurrentFunc && !g->CurrentFunc->mJumpToLine)
@@ -5814,7 +5862,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, FuncDefType aIsInExpres
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
 		if (!aStatic)
-			class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+			class_object = class_object->ClassGetPrototype();
 
 		*param_start = '\0'; // Temporarily terminate, for simplicity.
 
@@ -6123,6 +6171,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, FuncDefType aIsInExpres
 			return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
 		if (!ParseAndAddLineInBlock(param_start, ACT_RETURN))
 			return FAIL;
+		if (func.mIsFuncExpression == FuncDefNormal)
+			func.mIsFuncExpression = FuncDefFatArrowStandalone;
 	}
 	else
 	{
@@ -6134,13 +6184,16 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, FuncDefType aIsInExpres
 
 
 
-ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport)
+ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport, bool aStruct)
 {
 	if (mClassObjectCount == MAX_NESTED_CLASSES)
 		return ScriptError(_T("This class definition is nested too deep."), aBuf);
 
 	LPTSTR cp, class_name = aBuf, base_class_name = nullptr;
-	Object *outer_class, *base_class = Object::sClass, *base_prototype = Object::sPrototype;
+	Object *outer_class;
+	Object *base_class = aStruct ? Object::sStructClass : Object::sClass;
+	Object *base_prototype = aStruct ? Object::sStructPrototype : Object::sPrototype;
+	bool base_is_known = true;
 	Var *class_var;
 	ExprTokenType token;
 
@@ -6155,8 +6208,7 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport)
 		base_class_name = omit_leading_whitespace(cp + 8);
 		if (!*base_class_name)
 			return ScriptError(_T("Missing class name."), cp);
-		base_class = FindClass(base_class_name);
-		base_prototype = base_class ? (Object *)base_class->GetOwnPropObj(_T("Prototype")) : nullptr;
+		base_is_known = ResolveBaseClass(base_class_name, aStruct, base_class, base_prototype);
 	}
 
 	// Validate the name even if this is a nested definition, for consistency.
@@ -6214,12 +6266,13 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport)
 	Object *prototype = Object::CreatePrototype(mClassName, base_prototype);
 	Object *class_object = Object::CreateClass(prototype, base_class ? base_class : Object::sClassPrototype);
 
-	if (!base_class)
+	if (!base_is_known)
 	{
 		// None of this module's class declarations up to this point match base_class_name,
 		// but it could be a class defined below this point, or a class defined in a module
 		// which hasn't been imported yet or has been imported but hasn't been resolved.
 		auto urc = new UnresolvedBaseClass;
+		urc->is_struct = aStruct;
 		urc->subclass = class_object;
 		urc->subclass_proto = prototype;
 		urc->name = _tcsdup(base_class_name);
@@ -6255,7 +6308,7 @@ ResultType Script::DefineClass(LPTSTR aBuf, TCHAR aExport)
 		if (!DefineClassVarInit(base_class_name, true, class_object, ACT_EXPRESSION))
 			return FAIL;
 	}
-	
+
 	// This line enables a class without any static methods to be freed at program exit,
 	// or sooner if it's a nested class and the script removes it from the outer class.
 	// Classes with static methods are never freed, since the method itself retains a
@@ -6304,7 +6357,7 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasB
 
 	Object *class_object = mClassObject[mClassObjectCount - 1];
 	if (!aStatic)
-		class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+		class_object = class_object->ClassGetPrototype();
 	TCHAR end_char = *name_end; // In case there's no space before =>.
 	*name_end = 0; // Terminate for aBuf use below.
 	switch (class_object->GetOwnPropType(aBuf))
@@ -6365,7 +6418,7 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd)
 ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 {
 	Object *class_object = mClassObject[mClassObjectCount - 1];
-	Object *prototype = aStatic ? class_object : (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+	Object *prototype = aStatic ? class_object : class_object->ClassGetPrototype();
 
 	LPTSTR item, item_end;
 	TCHAR orig_char, buf[LINE_SIZE], type_buf[LINE_SIZE];
@@ -6458,11 +6511,8 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 					//    the current point in the script.
 					auto type_end_char = *type_name_end;
 					*type_name_end = '\0';
-					TCHAR qu[2] { 0 };
-					if (TypeCode(type_name) != MdType::Void)
-						qu[0] = '\'';
-					_sntprintf(type_buf, _countof(type_buf), _T("this.Prototype.DefineProp('%s',{Type:%s%s%s,Pack:%i})")
-						, item, qu, type_name, qu, mClassStructPack[mClassObjectCount]);
+					_sntprintf(type_buf, _countof(type_buf), _T("DefineProp(this.Prototype,'%s',{Type:%s,Pack:%i})")
+						, item, type_name, mClassStructPack[mClassObjectCount]);
 					if (!DefineClassVarInit(type_buf, true, class_object, ACT_EXPRESSION))
 						return FAIL;
 					*type_name_end = type_end_char;
@@ -6669,6 +6719,20 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 }
 
 
+bool Script::ResolveBaseClass(LPCTSTR aClassName, bool aStruct, Object *&aClass, Object *&aProto)
+{
+	auto c = FindClass(aClassName);
+	auto p = c ? c->ClassGetPrototype() : nullptr;
+	if (p && aStruct == (p->IsDerivedFrom(Object::sStructPrototype) || p == Object::sStructPrototype))
+	{
+		aClass = c;
+		aProto = p;
+		return true;
+	}
+	return false;
+}
+
+
 
 #ifndef AUTOHOTKEYSC
 
@@ -6760,8 +6824,9 @@ LPTSTR Script::FindLibraryFile(LPTSTR aFuncName, size_t aFuncNameLength, bool aI
 	// The legacy behaviour for #Include <A_B> is that all Libs are searched for A_B.ahk before
 	// searching for A.ahk, which means that A_B.ahk takes precedence over A.ahk even if A.ahk
 	// is defined in the local Lib and A_B.ahk is not.
-	if (auto first_underscore = _tcschr(aFuncName, '_'))
-		return FindLibraryFile(aFuncName, first_underscore - aFuncName);
+	for (i = 0; i < (int)aFuncNameLength; ++i)
+		if (aFuncName[i] == '_')
+			return FindLibraryFile(aFuncName, i);
 	return nullptr;
 }
 
@@ -6915,6 +6980,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, FuncDefType
 
 	the_new_func->mModule = mCurrentModule;
 	the_new_func->mIsFuncExpression = aIsInExpression;
+	the_new_func->mBackCompatMode = mBackCompatMode;
 
 	if (aClassObject)
 	{
@@ -7252,8 +7318,8 @@ Var *Script::FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner
 		return nullptr;
 	auto &outer = *aInner.mOuterFunc;
 	Var *outer_var;
-	if (  (outer_var = outer.mStaticVars.Find(aVarName)) || aInner.mIsStatic  )
-		return outer_var; // Can be nullptr if aInner.mIsStatic.
+	if (  (outer_var = outer.mStaticVars.Find(aVarName))  )
+		return outer_var;
 	if (  !(outer_var = outer.mVars.Find(aVarName))  )
 	{
 		if (  !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, aVarNameLength, outer, aDisplayError)))  )
@@ -7263,6 +7329,8 @@ Var *Script::FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner
 		if (!outer_var->IsNonStaticLocal())
 			return outer_var;
 	}
+	if (aInner.mIsStatic) // Function was declared static.
+		return nullptr; // "non-static local variables of the outer function are ignored"
 	// At this point, all var refs used in declarations, assignments or &var in the outer
 	// function should have already been parsed, while it's possible that some read-refs
 	// have not.  Ignore all variables that lack an assignment, &var or declaration.
@@ -7625,7 +7693,7 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 ResultType Script::PreparseCommands()
 {
 	for (mCurrentModule = mLastModule; mCurrentModule; mCurrentModule = mCurrentModule->mPrev)
-		if (!PreparseCommands(mCurrentModule->mFirstLine))
+		if (!PreparseCommands(mCurrentModule))
 			return FAIL;
 	mCurrentModule = &mDefaultModule; // Reset in case debugger queries properties prior to AutoExecSection().
 	return OK;
@@ -7633,12 +7701,23 @@ ResultType Script::PreparseCommands()
 
 
 
-ResultType Script::PreparseCommands(Line *aStartingLine)
+ResultType Script::PreparseCommands(ScriptModule *aModule)
 // Preparse any commands which might rely on blocks having been fully preparsed,
 // such as any command which has a jump target (label).
 // Also perform some late-stage optimizations and validation.
 {
-	for (Line *line = aStartingLine; line; line = line->mNextLine)
+	// Terminate each module with a Line so that all labels have a target and
+	// all control flow statements that need it have a non-null mRelatedLine.
+	if (aModule->mLastLine)
+	{
+		mPendingRelatedLine = aModule->mLastLine->mParentLine;
+		mCombinedLineNumber = aModule->mLastLine->mLineNumber + 1; // +1 to distinguish it from the last executable line when debugging.
+		mCurrFileIndex = aModule->mLastLine->mFileIndex;
+	}
+	if (!AddLine(ACT_END_MODULE))
+		return FAIL;
+
+	for (Line *line = aModule->mFirstLine; line; line = line->mNextLine)
 	{
 		LPTSTR line_raw_arg1 = LINE_RAW_ARG1; // Resolve only once to help reduce code size.
 		LPTSTR line_raw_arg2 = LINE_RAW_ARG2; //
@@ -7659,22 +7738,23 @@ ResultType Script::PreparseCommands(Line *aStartingLine)
 				Line *block_begin = line->mParentLine;
 				Line *parent = block_begin->mParentLine;
 
-				if (func.mIsFuncExpression // =>
-					&& block_begin->mParentLine
-					&& block_begin->mParentLine->mActionType != ACT_BLOCK_BEGIN)
+				if (func.mIsFuncExpression == FuncDefFatArrow)
 				{
-					if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN) // It could only be a fat arrow block-begin under these conditions.
-						// There's another =>function after this one (defined within the same
-						// expression), so just continue until the last =>function is found.
-						continue;
-					// This fat arrow function's parent line is a statement with a single-line
-					// action, but that action is currently separated from its parent by one or
+					// If this fat arrow function's parent line is a statement with a single-line
+					// action, that action is currently separated from its parent by one or
 					// more fat arrow functions.  It won't work that way because If/Else/Loop/etc.
 					// all skip an initial ACT_BLOCK_BEGIN (to avoid an extra ExecUntil call),
 					// which would result in executing the function's body instead of skipping it.
-					Line *body = line->mNextLine;
-					// Remove the fat arrow functions to allow the correct body to execute.
-					parent->mNextLine = body, body->mPrevLine = parent;
+					// If the parent is a block, this is needed only to let breakpoints work on the
+					// line which contains the arrow function.
+					Line *next = line->mNextLine;
+					Line *prev = block_begin->mPrevLine;
+					// Remove the fat arrow function from the outer Line list.
+					if (prev)
+						prev->mNextLine = next;
+					else
+						mCurrentModule->mFirstLine = next;
+					next->mPrevLine = prev;
 					// If this wasn't unset, an error dialog would walk upward to find a previous line,
 					// then step forward and fail to find the original target line.  Instead, it will
 					// display from the function's block-begin downward, usually including the expression
@@ -7788,6 +7868,29 @@ ResultType Script::PreparseCommands(Line *aStartingLine)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 				else if (parent->mActionType == ACT_BLOCK_BEGIN && parent->mAttribute)
 					break; // Allow "return" to be used inside a nested function or fat arrow function.
+			if (!line->mArgc && g->CurrentFunc && (g->CurrentFunc->mHasExplicitReturn || g->CurrentFunc->mBackCompatMode))
+			{
+				if (g->CurrentFunc->mBackCompatMode)
+				{
+					// This forces `return` in a v2.0 function to return "" rather than UnsetKind::Blank,
+					// so callers in v2.1 mode receive "".  This is done because v2.0 functions may rely
+					// on the return of "" being implied even when the function can return other values.
+					static ExprTokenType sEmptyEx{ _T(""), 0 };
+					static ArgStruct sEmpty{ ARG_TYPE_NORMAL, false, 0, _T(""), nullptr, &sEmptyEx };
+					line->mArg = &sEmpty;
+				}
+				else // mHasExplicitReturn
+				{
+					// This forces `return` in v2.1 mode to act as `return unset` if the function uses
+					// return with a parameter at all (i.e. a function which never specifies a return
+					// value will return UnsetKind::Blank).  This is mainly so that X() => Y() and
+					// similar will throw UnsetError() if Y is capable of returning a value but doesn't.
+					static ExprTokenType sUnsetEx { UnsetKind::Unset };
+					static ArgStruct sUnset{ ARG_TYPE_NORMAL, false, 0, _T("unset"), nullptr, &sUnsetEx };
+					line->mArg = &sUnset;
+				}
+				line->mArgc = 1;
+			}
 			break;
 
 		case ACT_CATCH:
@@ -7809,9 +7912,6 @@ ResultType Script::PreparseCommands(Line *aStartingLine)
 		case ACT_BREAK:
 		case ACT_CONTINUE:
 		case ACT_GOTO:
-		// v2: ACT_EXIT is always from AddLine(ACT_EXIT), since a script calling Exit would produce ACT_EXPRESSION.
-		//case ACT_EXIT:
-		//case ACT_EXITAPP: // Excluded since it's just a function in v2, and there can't be any expectation that the code following it will execute anyway.
 			Line *next_line = line->mNextLine;
 			if (!next_line // line is the script's last line.
 				|| next_line->mParentLine != line->mParentLine) // line is the one-line action of if/else/loop/etc.
@@ -7820,7 +7920,7 @@ ResultType Script::PreparseCommands(Line *aStartingLine)
 				next_line = next_line->mRelatedLine; // Skip function body.
 			switch (next_line->mActionType)
 			{
-			case ACT_EXIT: // v2: It's from an automatic AddLine(), so should be excluded.
+			case ACT_END_MODULE: // v2: It's from an automatic AddLine(), so should be excluded.
 			case ACT_BLOCK_END: // There's nothing following this line in the same block.
 			case ACT_CASE:
 				continue;
@@ -7897,7 +7997,7 @@ ResultType Script::PreparseCatchClass(Line *aLine)
 		if (end == cp)
 			return aLine->LineError(ERR_EXPR_SYNTAX);
 		auto cls = FindClass(cp, end - cp);
-		if (  !cls || !(prototype[prototype_count++] = cls->GetOwnPropObj(_T("Prototype")))  )
+		if (  !cls || !(prototype[prototype_count++] = cls->ClassGetPrototype())  )
 			return aLine->LineError(_T("Invalid class."), FAIL, cp);
 		cp = next;
 	}
@@ -7923,6 +8023,47 @@ bool Script::IsLabelTarget(Line *aLine)
 
 
 
+void ExpressionPushMaybe(ExprTokenType *maybe, ExprTokenType **stack, int &stack_count
+	, UCHAR *sPrecedence, int *bcmap, ExprTokenType *infix)
+{
+	int n;
+	for (n = stack_count; n > 1; --n)
+	{
+		auto sym = stack[n - 1]->symbol;
+		// Break for any lower precedence symbol; namely OPAREN, OBRACE, OBRACKET, COMMA, ASSIGN_*
+		// and OR_MAYBE.  LOW_CONCAT is included as a necessary evil, so a%b?%c is not permitted.
+		// Pushing MAYBE beneath LOW_CONCAT would "hide" it from OR_MAYBE within %%.
+		if (sPrecedence[sym] < sPrecedence[SYM_MAYBE])
+			break;
+		if (sym == SYM_MAYBE)
+		{
+			// Merge them together so they're handled by one iteration of standard_pop_into_postfix.
+			// circuit_token forms a linked list of MAYBEs until they're popped.  Multiple lists can
+			// be merged in a case like (a?.b?) + (x?.y?).
+			auto tail = maybe;
+			while (auto next = tail->circuit_token) tail = next;
+			tail->circuit_token = stack[n - 1];
+			stack[n - 1] = maybe;
+			return;
+		}
+		// SYM_MISSING can occur when used for validation by a terminated SYM_MAYBE; e.g. (1 ? x := a? : b?).
+		// IS_POSTFIX_OPERATOR(sym) isn't checked because it can only be possible in cases where ? doesn't
+		// apply; i.e. (x++?) will fail at load time, so bcmap and pop_count don't matter.
+		if (!(IS_PREFIX_OPERATOR(sym) || SYM_USES_CIRCUIT_TOKEN(sym) || sym == SYM_MISSING))
+		{
+			// Count the binary operators short-circuited by each '?'.
+			for (auto q = maybe; q; q = q->circuit_token)
+				if (q > stack[n - 1])
+					bcmap[q - infix] += 1;
+		}
+	}
+	for (int i = stack_count++; i > n; --i)
+		stack[i] = stack[i - 1];
+	stack[n] = maybe;
+}
+
+
+
 ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 {
 	ExprTokenType *infix = NULL;
@@ -7941,9 +8082,9 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 	// Also, dimensioning explicitly by SYM_COUNT helps enforce that at compile-time:
 	static UCHAR sPrecedence[SYM_COUNT] =  // Performance: UCHAR vs. INT benches a little faster, perhaps due to the slight reduction in code size it causes.
 	{
-		0,0,0,0,0,0,0,0,0// SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_SUPER, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
+		0,0,0,86,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_SUPER, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
 		, 82, 82         // SYM_POST_INCREMENT, SYM_POST_DECREMENT: Highest precedence operator so that it will work even though it comes *after* a variable name (unlike other unaries, which come before).
-		, 85             // SYM_MAYBE -- Right-associative so that in a chain like a?.b?.c, both operators short-circuit to the same point.
+		, 10             // SYM_MAYBE -- Special handling lets it take precedence over the stack, but this value controls when it gets popped, and is used by ExpressionPushMaybe.
 		, 86             // SYM_DOT
 		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
 		, 6              // SYM_COMMA -- Must be just above SYM_OPAREN so it doesn't pop OPARENs off the stack.
@@ -7951,7 +8092,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 //		, 8              // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 11, 11         // SYM_IFF_ELSE, SYM_IFF_THEN (ternary conditional).  HAS AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for ternaries to perform traditionally when nested in each other without parentheses.
 //		, 12             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
-		, 15             // SYM_OR_MAYBE -- Right-associative as below.
+		, 10             // SYM_OR_MAYBE -- Must be >= SYM_MAYBE for ExpressionPushMaybe, but must also pop SYM_MAYBE, so they're both an even number.
 		, 17             // SYM_OR -- Right-associative so that short-circuit skips the entire right branch, instead of evaluating each one in sequence with the same result.
 		, 21             // SYM_AND -- As above.
 //		, 25             // Reserved for SYM_LOWNOT.
@@ -7990,7 +8131,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 	// IsSet is constructed here because it's a sort of intrinsic function with its own
 	// special rules.  ExprOp<> isn't used because it doesn't have parameter count limits
 	// or a name (which is displayed when the parameter count is invalid, for instance).
-	static BuiltInFunc *sIsSetFunc = new BuiltInFunc { _T("IsSet"), BIF_IsSet, 1, 1 };
+	static BuiltInFunc *sIsSetFunc = new BuiltInFunc { _T("IsSet"), BIF_IsSet, 0, 1 };
 
 	ExprTokenType *infix = NULL;
 	int infix_size = 0, infix_count = 0, allow_for_extra_postfix = 0;
@@ -8418,27 +8559,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					}
 					bool maybe;
 					op_end = omit_leading_whitespace(cp + 1);
-					if (*op_end == '.' && (op_end[1] == '(' || op_end[1] == '[')) // fun?.() or arr?.[i]
-					{
-						// Prohibit x.y?.(z) for now since it's probably ideal to have it short-circuit over (z)
-						// if the method doesn't exist, and call with `this == x` (like JavaScript in both cases).
-						// This can only work with objects which allow checking for the presence of the method.
-						// To implement it that way we would need special handling, perhaps like:
-						//  1. x
-						//     stack: [x]
-						//  2. FUNC {member: 'y', flags: EIF_MAYBE_GET_METHOD}
-						//     stack: [x.GetMethod('y'), x] or [unset]
-						//  3. MAYBE
-						//     goto 6 if unset
-						//  4. z
-						//     stack: [x.y, x, z]
-						//  5. FUNC {flags: IT_CALL}  ; calls (x.y)(x, z)
-						if (op_end[1] == '(' && infix_count && infix[infix_count-1].symbol == SYM_DOT)
-							return LineError(_T("Optional method calls are not supported."), FAIL, cp);
-						maybe = true;
-						cp = op_end; // The loop will skip over '.' itself.
-					}
-					else if (*op_end == '.' && IS_IDENTIFIER_CHAR(op_end[1])) // x?.y or x?.123
+					if (*op_end == '.' && (IS_IDENTIFIER_CHAR(op_end[1]) || op_end[1] == g_DerefChar)) // x?.y or x?.123 or x?.%y%
 					{
 						// Do some extra checks to allow an optional chain enclosed in parentheses to use numeric
 						// property names without breaking expressions like a?.123:b, for backward-compatibility.
@@ -8695,18 +8816,18 @@ unquoted_literal:
 				if (this_deref_ref.type == DT_QSTRING)
 				{
 					cp = omit_leading_whitespace(cp + 1);
-					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&'))
+					if (*cp && _tcschr(_T("+-*&~!"), *cp) && cp[1] != '=' && (cp[1] != '&' || *cp != '&') && cp[1] != '~')
 					{
 						// The symbol following this literal string is either a unary operator or a
 						// binary operator which can't (at least logically) be applied to a literal
 						// string. Since the user's intention isn't clear, treat it as a syntax error.
 						// The most common cases where this helps are:
-						//	MsgBox % "var's address is " &var  ; Misinterpreted as SYM_BITAND.
-						//	MsgBox % "counter is now " ++var   ; Misinterpreted as SYM_POST_INCREMENT.
+						//	MsgBox "var's address is " &var  ; Misinterpreted as SYM_BITAND.
+						//	MsgBox "counter is now " ++var   ; Misinterpreted as SYM_POST_INCREMENT.
 						return LineError(_T("Unexpected operator following literal string."), FAIL, cp);
 					}
 				}
-				if (infix[infix_count - 1].symbol == SYM_IFF_THEN) // Something like %foo?%. Later checks differentiate %invalid?% from this.%valid?%.
+				if (infix[infix_count - 1].symbol == SYM_IFF_THEN) // Something like %a?% or a.%b?%
 					infix[infix_count - 1].symbol = SYM_MAYBE;
 				if (require_paren)
 				{
@@ -8746,7 +8867,7 @@ unquoted_literal:
 				callsite->flags = IT_GET | EIF_STACK_MEMBER;
 			}
 			infix[infix_count].callsite = callsite;
-			infix[infix_count].error_reporting_marker = cp;
+			infix[infix_count].error_reporting_marker = cp - 1;
 		}
 		else if (this_deref_ref.type == DT_WORDOP)
 		{
@@ -8773,19 +8894,12 @@ unquoted_literal:
 				CHECK_AUTO_CONCAT;
 				infix[infix_count].callsite = new CallSite();
 				infix[infix_count].callsite->func = sIsSetFunc;
-				infix[infix_count].error_reporting_marker = cp;
 				this_deref_ref.symbol = SYM_FUNC;
 			}
 			infix[infix_count].symbol = this_deref_ref.symbol;
-			infix[infix_count].error_reporting_marker = this_deref_ref.marker;
+			infix[infix_count].error_reporting_marker = cp;
 			if (this_deref_ref.symbol == SYM_MISSING)
-			{
-				// Insert a SYM_MAYBE to handle validation.
-				infix_count++;
-				infix[infix_count].symbol = SYM_MAYBE;
-				infix[infix_count].circuit_token = &infix[infix_count-1]; // Flag it as already "applied".
-				infix[infix_count].error_reporting_marker = this_deref_ref.marker;
-			}
+				infix[infix_count].unset_kind = UnsetKind::Unset; // This is required for function return values.
 		}
 		else if (this_deref_ref.type == DT_CONST_INT)
 		{
@@ -8845,9 +8959,13 @@ unquoted_literal:
 	// stack must be large enough to hold a malformed expression consisting entirely of operators
 	// (though other checks might prevent this).
 
+	// Used to process SYM_MAYBE, avoiding further overloading ExprTokenType:
+	int *bcmap = nullptr;
+#define IS_INFIX_TOKEN(TP) ((TP) >= infix && (TP) < infix + infix_count)
+
 #ifdef _DEBUG
 #undef STACK_PUSH
-#define STACK_PUSH(token_ptr) (ASSERT(stack_count < infix_count), stack[stack_count++] = (token_ptr))
+#define STACK_PUSH(token_ptr) (ASSERT(stack_count <= infix_count), stack[stack_count++] = (token_ptr))
 #endif
 
 	// SYM_BEGIN is the first item to go on the stack.  It's a flag to indicate that conversion to postfix has begun:
@@ -8870,7 +8988,12 @@ unquoted_literal:
 		{
 			this_postfix = this_infix++;
 			++postfix_count;
-			continue; // Doing a goto to a hypothetical "standard_postfix" (in lieu of these last 3 lines) reduced performance and didn't help code size.
+			if (infix_symbol == SYM_MISSING) // Literal "unset"
+			{
+				STACK_PUSH(this_infix - 1);     // For validating the expression it is used within.
+				goto standard_pop_into_postfix; // Pop it immediately to catch cases like: unset(), unset.x(), unset.x
+			}
+			continue;
 		}
 
 		// Since above didn't "continue", the current infix symbol is not an operand, but an operator or other symbol.
@@ -8999,7 +9122,8 @@ unquoted_literal:
 				token->callsite = new CallSite();
 				if (!token->callsite)
 					return LineError(ERR_OUTOFMEM);
-				token->error_reporting_marker = this_infix->error_reporting_marker;
+				token->error_reporting_marker = this_infix[-1].symbol == SYM_VAR ? this_infix[-1].var_deref->marker
+					: this_infix->error_reporting_marker;
 				STACK_PUSH(token);
 			}
 			else
@@ -9104,6 +9228,7 @@ unquoted_literal:
 			// never goes on the stack, so can't be encountered there).
 			if (   sPrecedence[stack_symbol] < sPrecedence[infix_symbol] + (sPrecedence[infix_symbol] % 2) // Performance: An sPrecedence2[] array could be made in lieu of the extra add+indexing+modulo, but it benched only 0.3% faster, so the extra code size it caused didn't seem worth it.
 				|| IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol) // See note 1 below. Ordered for short-circuit performance.
+				|| infix_symbol == SYM_MAYBE // '?' always takes precedence over stack, and does its own manipulation of stack.
 				|| stack_symbol == SYM_POWER && SYM_OVERRIDES_POWER_ON_STACK(infix_symbol)   ) // See note 2 below.
 			{
 				// NOTE 1: v1.0.46: The IS_ASSIGNMENT_EXCEPT_POST_AND_PRE line above was added in conjunction with
@@ -9148,23 +9273,37 @@ unquoted_literal:
 				// !x  ; Supported even if X contains a negative number, since x is recognized as an isolated operand and not something containing unary minus.
 				//
 
+				sym_prev = this_infix > infix ? this_infix[-1].symbol : SYM_INVALID;
+
+				if (infix_symbol == SYM_HIGHNOT && this_infix[1].symbol == SYM_REGEXMATCH) // v2.1: !~=
+				{
+					++this_infix;
+					infix_symbol = SYM_REGEXMATCH;
+				}
+				
+				sym_next = this_infix[1].symbol; // It will be SYM_INVALID if there are no more.
+
 				// Perform some rough checks to detect most syntax errors.  This is done after the
 				// precedence check so that it isn't done multiple times for a single token when
 				// the stack contains one or more higher-precedence operators, and also so that
 				// the left operand (if this is a binary operator) has been popped into postfix.
-				sym_prev = this_infix > infix ? this_infix[-1].symbol : SYM_INVALID;
-				sym_next = this_infix[1].symbol; // It will be SYM_INVALID if there are no more.
 				SymbolType sym_postfix = postfix_count ? postfix[postfix_count-1]->symbol : SYM_INVALID;
 				if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
 				{
+					ExprTokenType *target;
+					if (sym_postfix == SYM_MAYBE) // Support (v?)++, v?:=...
+						sym_postfix = (target = postfix[postfix_count - 2])->symbol;
+					else
+						target = postfix[postfix_count - 1];
 					// Assignment and postfix operators must be preceded by a variable, except for
 					// assignment operators which have a non-null callsite, indicating that the target
 					// is an object's property.  Postfix operators which apply to an object's property
 					// are fully handled in the standard_pop_into_postfix section.
 					if (this_infix->callsite) // Object property.  Takes precedence over the next checks.
 					{}  // Nothing needed here.
-					else if ((sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC) && postfix[postfix_count-1]->var_usage == VARREF_READ) // var_usage check excludes (var?) :=.
-						postfix[postfix_count-1]->var_usage = (infix_symbol == SYM_ASSIGN_MAYBE) ? VARREF_LVALUE_MAYBE : VARREF_LVALUE; // Mark this as the target of an assignment.
+					else if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
+						target->var_usage = (infix_symbol == SYM_ASSIGN_MAYBE || target->var_usage == VARREF_READ_MAYBE)
+							? VARREF_LVALUE_MAYBE : VARREF_LVALUE; // Mark this as the target of an assignment.
 					else if (infix_symbol == SYM_ASSIGN_MAYBE || !IS_OPERATOR_VALID_LVALUE(sym_postfix))
 						return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_infix->error_reporting_marker);
 				}
@@ -9185,7 +9324,11 @@ unquoted_literal:
 						 || sym_next == SYM_FUNC
 						 || IS_OPAREN_LIKE(sym_next)
 						 || IS_PREFIX_OPERATOR(sym_next))  )
-						return LineError(ERR_EXPR_MISSING_OPERAND, FAIL, this_infix->error_reporting_marker);
+					{
+						if (infix_symbol != SYM_IFF_THEN)
+							return LineError(ERR_EXPR_MISSING_OPERAND, FAIL, this_infix->error_reporting_marker);
+						this_infix->symbol = infix_symbol = SYM_MAYBE; // Since it's not being used as a binary operator, reinterpret it as postfix.
+					}
 				}
 
 				if (infix_symbol == SYM_ASSIGN_MAYBE)
@@ -9206,20 +9349,12 @@ unquoted_literal:
 						bool applied = this_infix->circuit_token != nullptr;
 						if (applied)
 						{
-							bool literal_unset = this_infix->circuit_token->symbol == SYM_MISSING;
+							// Could be:
+							//  (...a?...) ?? b
+							//  (v := ...a?...)?  ; circuit_token must be reset in this case.
 							this_infix->circuit_token = nullptr; // Reset for next phase.
-							if (literal_unset)
-							{
-								if (this_infix[1].symbol != SYM_MAYBE) // Not `unset?`
-								{
-									// Don't put it into postfix, because it's not allowed to short-circuit.
-									STACK_PUSH(this_infix++);
-									goto standard_pop_into_postfix;
-								}
-								this_infix++; // Discard the first SYM_MAYBE so error_reporting_marker will point to '?'.
-							}
 						}
-						else
+						else if (sym_postfix == SYM_FUNC || sym_postfix == sym_prev) // Exclude cases like !a.b ?? c, which would need a short-circuit SYM_MAYBE between a.b and !, i.e. !(a.b?) ?? c
 						{
 							if (sym_prev == SYM_VAR || sym_prev == SYM_DYNAMIC)
 							{
@@ -9231,10 +9366,31 @@ unquoted_literal:
 								this_infix[-1].callsite->flags |= EIF_UNSET_RETURN | EIF_UNSET_PROP;
 								applied = true;
 							}
-							else if ((sym_prev == SYM_CPAREN || sym_prev == SYM_CBRACKET) && this_infix[-1].callsite) // x()?, x[]?, x.y[z]?, x?.[]?
+							else if ((sym_prev == SYM_CPAREN || sym_prev == SYM_CBRACKET) && this_infix[-1].callsite) // x()?, x[]?, x.y[z]?
 							{
 								this_infix[-1].callsite->flags |= EIF_UNSET_RETURN;
 								applied = true;
+							}
+						}
+						if (infix_symbol == SYM_MAYBE)
+						{
+							if (!bcmap)
+							{
+								bcmap = (int*)_alloca(infix_count * sizeof(int));
+								ZeroMemory(bcmap, infix_count * sizeof(int));
+							}
+							ExpressionPushMaybe(this_infix, stack, stack_count, sPrecedence, bcmap, infix);
+							if (applied)
+							{
+								this_postfix = this_infix++;
+								++postfix_count;
+								continue;
+							}
+							if (this_infix->circuit_token)
+							{
+								// Since the last postfix token can't produce unset, this_infix can be omitted from postfix.
+								this_infix++;
+								continue;
 							}
 						}
 						if (!applied)
@@ -9312,8 +9468,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			//	x.y := z	->	x "y" z (set)
 			//	x[y] += z	->	x y (get in-place, assume 2 params) z (add) (set)
 			//	x.y[i] /= z	->	x "y" i 3 (get in-place, n params) z (div) (set)
-			if ((this_postfix->callsite->flags & IT_BITMASK) == IT_GET
-				&& stack_symbol != SYM_MAYBE && infix_symbol != SYM_MAYBE) // Exclude x?.y++ and ++x.y? to provide a better error message.
+			if ((this_postfix->callsite->flags & IT_BITMASK) == IT_GET)
 			{
 				if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol))
 				{
@@ -9339,7 +9494,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					// Now let this_infix be processed by the next iteration, and eventually
 					// have its symbol changed to SYM_FUNC.
 				}
-				else
+				else if (infix_symbol != SYM_MAYBE) // Exclude ++x.y? since it wouldn't work as is.
 				{
 					stack_symbol = stack[stack_count - 1]->symbol;
 					// Post-increment/decrement has higher precedence, so check for it first:
@@ -9391,7 +9546,8 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			}
 			else if ((this_postfix->callsite->flags & IT_BITMASK) == IT_CALL)
 			{
-				if (this_postfix->callsite->param_count == 1 && this_postfix->callsite->func == sIsSetFunc)
+				if (this_postfix->callsite->param_count == 1 && this_postfix->callsite->func == sIsSetFunc
+					&& !(this_postfix->callsite->flags & EIF_ISSET_UNSET))
 				{
 					auto &last_postfix = *postfix[postfix_count - 1];
 					if (last_postfix.symbol == SYM_VAR || last_postfix.symbol == SYM_DYNAMIC)
@@ -9408,14 +9564,19 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 							break;
 						}
 					}
-					return LineError(_T("IsSet requires a variable."), FAIL, this_postfix->error_reporting_marker);
+					if (last_postfix.symbol != SYM_MISSING)
+						return LineError(_T("IsSet requires a variable or unset expression."), FAIL, this_postfix->error_reporting_marker);
 				}
 			}
 			break;
 
 		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
+		{
 			this_postfix->symbol = SYM_FUNC;
+			if ((this_postfix-1)->symbol == SYM_HIGHNOT) // !~=
+				postfix[++postfix_count] = this_postfix-1; // It was skipped before, so insert it straight into postfix.
 			break;
+		}
 
 		case SYM_AND:
 		case SYM_OR:
@@ -9431,22 +9592,30 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			continue; // This token was already put into postfix by an earlier stage, so skip it this time.
 		}
 		case SYM_IFF_THEN:
-			return LineError(_T("Unexpected \"?\""), FAIL, this_postfix->marker);
+			return LineError(_T("Unexpected \"?\""), FAIL, this_postfix->error_reporting_marker);
 		
 		case SYM_MAYBE:
 		{
-			ExprTokenType *chain_end = this_postfix->circuit_token;
-			if (!chain_end)
+			if (stack[stack_count - 1]->symbol == SYM_OPAREN && this_infix->symbol == SYM_CPAREN // (...?)
+				&& !((this_infix[1].symbol == SYM_DOT || this_infix[1].symbol == SYM_FUNC) && (this_infix[1].callsite->flags & EIF_STACK_MEMBER))) // not a.%b?% or a.%b?%()
+				//&& *stack[stack_count - 1]->marker != g_DerefChar) // This would exclude %a?%, which we don't want to exclude.
 			{
-				// This SYM_MAYBE is being popped for the first time, so this is the end of the optional chain
-				// (but not necessarily the final jump target).
-				this_postfix->circuit_token = chain_end = postfix[postfix_count - 1];
-				if (this_postfix == chain_end) // i.e. postfix[postfix_count] == postfix[postfix_count-1]
-					postfix_count--; // Nothing to short-circuit, so remove it from postfix.
+				++this_infix; // Discard CPAREN
+				--stack_count; // Discard OPAREN
+				// Push MAYBE back onto the stack, below any operators to the left which are at
+				// the new nesting level.  It will be popped again at the next CPAREN or at the
+				// end of the unset chain.
+				ASSERT(IS_INFIX_TOKEN(this_postfix));
+				ExpressionPushMaybe(this_postfix, stack, stack_count, sPrecedence, bcmap, infix);
+				continue;
 			}
+			// Fall through:
+		case SYM_MISSING:
+			bool can_jump = this_postfix->symbol == SYM_MAYBE;
+			auto stk = stack + stack_count - 1;
+			stack_symbol = (*stk)->symbol; // The new top of the stack.
 			// Work out where an unset value would end up, and whether it is valid.
 			auto inf = this_infix;
-			auto stk = stack + stack_count - 1;
 			for (;;)
 			{
 				stack_symbol = (*stk)->symbol;
@@ -9471,26 +9640,79 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				}
 				break;
 			}
-			if (infix_symbol == SYM_IFF_ELSE) // The false branch will immediately follow, so may as well short-circuit that too.
+			// SYM_MAYBE has an open chain if it short-circuits any operators to the left or right,
+			// but we make an exception for cases like F(1 + v?), where there's already a "final ?".
+			bool open_chain = can_jump ? this_postfix != postfix[postfix_count - 1] && this_postfix != this_infix - 1
+				: this_postfix->unset_kind == UnsetKind::OpenChain;
+			if (can_jump)
 			{
+				// this_postfix isn't removed even if there's nothing to short-circuit, since there
+				// might be other short-circuit operators (AND/OR/IFF_ELSE) pointing at this one.
+				//if (this_postfix == postfix[postfix_count - 1])
+				//	postfix_count--; // Nothing to short-circuit, so remove it from postfix.
+				// Set jump target for every MAYBE in this chain.
+				for (ExprTokenType *q = this_postfix, *next;; q = next)
+				{
+					next = q->circuit_token;
+					q->circuit_token = postfix[postfix_count - 1];
+					//q->pop_count = bcmap[q - infix]; // Postpone overwriting error_reporting_marker.
+					if (!next)
+						break;
+				}
+				if (open_chain)
+				{
+					// For cases like F(a ? (b?) : c), count it as the "final ?".
+					// The loop handles nested ternary such as F(1 ? 1 ? (b?) : 2 : 3).
+					ExprTokenType *target = postfix[postfix_count - 1];
+					for (int i = postfix_count - 2; i > 0; --i)
+					{
+						if (postfix[i]->symbol == SYM_IFF_ELSE && postfix[i]->circuit_token == target)
+						{
+							target = postfix[--i];
+							if (target == this_postfix)
+							{
+								open_chain = false;
+								break;
+							}
+						}
+						else if (postfix[i] == this_postfix)
+							break;
+					}
+				}
+			}
+			if (infix_symbol == SYM_IFF_ELSE)
+			{
+				// MAYBE places itself above IFF_THEN, so this can only happen when it's blocked by an assignment
+				// (a ? v := (b?) : c) or this is literal unset (a ? unset : b).
 				if (stack_symbol == SYM_IFF_THEN)
 				{
-					// Insert MAYBE above IFF_THEN, to locate end of branch.
+					// Insert SYM_MISSING above SYM_IFF_THEN, to locate end of branch.
 					for (auto mov = stack + stack_count++; mov > stk; --mov)
 						mov[0] = mov[-1];
-					*stk = this_postfix;
+					ExprTokenType *unset = this_postfix;
+					if (can_jump)
+					{
+						unset = (ExprTokenType*)_alloca(sizeof(ExprTokenType));
+						unset->error_reporting_marker = this_postfix->error_reporting_marker;
+						unset->Unset(open_chain ? UnsetKind::OpenChain : UnsetKind::Unset);
+					}
+					*stk = unset;
 					continue;
 				}
 			}
-			if (IS_CPAREN_LIKE(infix_symbol) || infix_symbol == SYM_COMMA)
+			if (infix_symbol == SYM_OR_MAYBE || infix_symbol == SYM_MAYBE) // The second case is for `unset?` and `(unset)?`.
 			{
-				if (stack_symbol == SYM_FUNC && this_postfix < chain_end)
-					return LineError(_T("This unset expression requires a final \"?\" or \"??\"."), FAIL, this_postfix->error_reporting_marker);
+				inf->circuit_token = this_postfix; // Mark it as applied.
 			}
-			else if (infix_symbol == SYM_OR_MAYBE || infix_symbol == SYM_MAYBE) // SYM_MAYBE is right-associative, so found in infix_symbol only due to parentheses; e.g. ((a?.b)?)
+			else if (IS_CPAREN_LIKE(infix_symbol) || infix_symbol == SYM_COMMA)
 			{
-				inf->circuit_token = this_postfix; // Just as a way to flag it as having had an effect.
-				stack_symbol = SYM_MAYBE; // Ignore the stack; it's not relevant until the entire maybe chain has been processed.
+				if (stack_symbol == SYM_FUNC)
+				{
+					if ((**stk).callsite->func == sIsSetFunc)
+						(**stk).callsite->flags |= EIF_ISSET_UNSET;
+					else if (open_chain)
+						return LineError(_T("Unset parameter requires a final \"?\" or \"??\"."), FAIL, this_postfix->error_reporting_marker);
+				}
 			}
 			else if (infix_symbol == SYM_INVALID) // End of expression.
 			{
@@ -9509,31 +9731,18 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					// It's also easier to remember if only `return` and `:=` permit unset, and less likely
 					// to cause issues due to the ambiguity of `?`; e.g. `for x in y? {` could technically
 					// be ternary with an object literal, and it currently works that way.
-					// If this is ever changed, it should probably require this_postfix >= chain_end
-					// when `?` is used in the sense of "omit the parameter".
 					if (  !(mActionType == ACT_RETURN || mActionType == ACT_EXPRESSION || mActionType == ACT_ASSIGNEXPR || mActionType == ACT_STATIC)  )
 						return LineError(_T("This statement's parameters cannot be unset."), FAIL, this_postfix->error_reporting_marker);
 				}
 			}
-			else if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
-				//continue; // Relying on the assignment's own error-checking is insufficient for (x := unset) := y.
-				return LineError(ERR_INVALID_ASSIGNMENT, FAIL, inf->error_reporting_marker);
-			else if (  !((infix_symbol == SYM_FUNC || infix_symbol == SYM_DOT) && (inf->callsite->flags & EIF_STACK_MEMBER))  ) // x.%a?.b%
+			else if (  !((infix_symbol == SYM_FUNC || infix_symbol == SYM_DOT || infix_symbol == SYM_OBRACKET)
+						&& (inf->callsite->flags & EIF_STACK_MEMBER))  ) // not x.%a?%() or x.%a?% or x.%a?%[]
 				return LineError(_T("This operator's left operand must not be unset."), FAIL, infix_symbol == SYM_DYNAMIC ? inf->marker : inf->error_reporting_marker);
-			if (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT
-				|| stack_symbol == SYM_POST_INCREMENT || stack_symbol == SYM_POST_DECREMENT)
-				return LineError(ERR_INVALID_ASSIGNMENT, FAIL, (*stk)->error_reporting_marker);
-			if (  !(stack_symbol == SYM_FUNC || stack_symbol == SYM_MAYBE
+			if (  !(stack_symbol == SYM_FUNC
 				|| IS_OPAREN_LIKE(stack_symbol) || stack_symbol == SYM_BEGIN
 				|| stack_symbol == SYM_REF && (stk < stack + stack_count - 1) && stk[1]->symbol == SYM_ASSIGN)  )
 				return LineError(_T("This operator's right operand must not be unset."), FAIL, (*stk)->error_reporting_marker);
-			this_postfix->circuit_token = postfix[postfix_count - 1]; // Update the final jump target (has no effect unless chain_end is followed by the else branch of a ternary).
-			// For each MAYBE at the top of the stack, pop it off and update its jump target too.
-			// Since this MAYBE passed validation, so should those others; but they wouldn't pass
-			// the function parameter check in a case like f(a?.b?).  This fixes that.
-			while (stack[stack_count - 1]->symbol == SYM_MAYBE)
-				stack[--stack_count]->circuit_token = postfix[postfix_count - 1];
-			continue; // This token was already put into postfix by an earlier stage, so skip it this time.
+			continue; // This token was already put into postfix by an earlier stage (if appropriate).
 		}
 
 		case SYM_REF:
@@ -9560,10 +9769,11 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		case SYM_PRE_DECREMENT:
 			if (postfix_count)
 			{
-				ExprTokenType &target = *postfix[postfix_count - 1];
+				ExprTokenType &target = postfix[postfix_count - 1]->symbol == SYM_MAYBE ? *postfix[postfix_count - 2] : *postfix[postfix_count - 1];
 				// This is nearly identical to the section for assignments under "if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))":
-				if ((target.symbol == SYM_VAR || target.symbol == SYM_DYNAMIC) && target.var_usage != VARREF_READ_MAYBE) // Exclude `++var?` (invalid).
-					target.var_usage = VARREF_LVALUE; // Mark this as the target of an assignment.
+				if (target.symbol == SYM_VAR || target.symbol == SYM_DYNAMIC)
+					target.var_usage = (target.var_usage == VARREF_READ_MAYBE) // ++(var?)
+						? VARREF_LVALUE_MAYBE : VARREF_LVALUE; // Mark this as the target of an assignment.
 				else if (!IS_OPERATOR_VALID_LVALUE(target.symbol))
 					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_postfix->error_reporting_marker);
 			}
@@ -9665,12 +9875,29 @@ end_of_infix_to_postfix:
 		ASSERT((UINT)new_token.symbol < SYM_COUNT);
 		if (SYM_USES_CIRCUIT_TOKEN(new_token.symbol)) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
 		{
-			// circuit_token should always be non-NULL at this point.
-			for (j = i + 1; postfix[j] != new_token.circuit_token; ++j)
+			// circuit_token should always be non-NULL at this point, and is always found within postfix below
+			// unless there's a bug.  An upper bound of postfix_count - 1 is enforced for a more predictable
+			// result in the event that there is a bug.  aArg.postfix[postfix_count] must not be used because
+			// ExpandExpression would execute aArg.postfix[postfix_count + 1].
+			// SYM_MAYBE can sometimes point at itself, so j = i.
+			for (j = i; j < postfix_count - 1; ++j)
 			{
-				ASSERT(j < postfix_count); // Should always be found (unless there's a bug), and always to the right in the postfix array, so no need to check postfix_count in release mode.
+				if (postfix[j] == new_token.circuit_token)
+				{
+					if (j + 1 < postfix_count && postfix[j + 1]->symbol == new_token.symbol) // Optimize cases like (a && b) && c; (a ?? b ?? c).
+						new_token.circuit_token = postfix[j + 1]->circuit_token; // Whenever new_token would short-circuit, so would postfix[j + 1].
+					else
+						break;
+				}
 			}
+			ASSERT(new_token.circuit_token == postfix[j]);
 			new_token.circuit_token = aArg.postfix + j;
+			if (new_token.symbol == SYM_MAYBE)
+			{
+				ASSERT(IS_INFIX_TOKEN(postfix[i]));
+				new_token.pop_count = bcmap[postfix[i] - infix];
+				ASSERT(new_token.pop_count >= 0 && new_token.pop_count <= max_stack / 2);
+			}
 		}
 		// Simple calculation: only operands and SYM_FUNC can increase the stack count,
 		// so this finds the worst-case stack requirement (or slightly higher).
@@ -9696,8 +9923,7 @@ end_of_infix_to_postfix:
 		}
 		// Count the tokens which potentially use to_free[].
 		if (new_token.symbol == SYM_DYNAMIC || new_token.symbol == SYM_FUNC
-			|| new_token.symbol == SYM_CONCAT || new_token.symbol == SYM_REF
-			|| new_token.symbol == SYM_VAR)
+			|| new_token.symbol == SYM_CONCAT || new_token.symbol == SYM_VAR)
 			++max_alloc;
 	}
 	aArg.postfix[postfix_count].symbol = SYM_INVALID;  // Special item to mark the end of the array.
@@ -9711,6 +9937,12 @@ end_of_infix_to_postfix:
 
 ResultType Line::FinalizeExpression(ArgStruct &aArg)
 {
+	if (!aArg.max_stack)
+	{
+		ASSERT(!aArg.is_expression);
+		return OK;
+	}
+
 	auto stack = (ExprTokenType **)_alloca(aArg.max_stack * sizeof(ExprTokenType **));
 	int stack_count = 0;
 	// stack_count checks: Since missing operands are caught at an earlier stage, it doesn't
@@ -10126,7 +10358,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 						// Now line is the ELSE's "I'm finished" jump-point, which is where
 						// we want to be.  If line is now NULL, it will be caught when this
 						// loop iteration is ended by the "continue" stmt below.  UPDATE:
-						// it can't be NULL since all scripts now end in ACT_EXIT.
+						// it can't be NULL since all scripts now end in ACT_END_MODULE.
 					// else the IF had NO else, so we're already at the IF's "I'm finished" jump-point.
 				}
 			}
@@ -10166,7 +10398,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 						// Now line is the ELSE's "I'm finished" jump-point, which is where
 						// we want to be.  If line is now NULL, it will be caught when this
 						// loop iteration is ended by the "continue" stmt below.  UPDATE:
-						// it can't be NULL since all scripts now end in ACT_EXIT.
+						// it can't be NULL since all scripts now end in ACT_END_MODULE.
 				}
 				else if (aMode == ONLY_ONE_LINE)
 					// Since this IF statement has no ELSE, and since it was executed
@@ -10842,14 +11074,20 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				line = line->mRelatedLine;
 				// Now line is the line after the end of this block.  Can be NULL (end of script).
 				// UPDATE: It can't be NULL (not that it matters in this case) since the loader
-				// has ensured that all scripts now end in an ACT_EXIT.
+				// has ensured that all scripts now end in an ACT_END_MODULE.
 			continue;  // Resume looping starting at the above line.  "continue" is actually slightly faster than "break" in these cases.
 
 		case ACT_BLOCK_END:
-			// v2.1: This is handled at runtime rather than by inserting ACT_RETURN avoid complications
+			// v2.1: This is handled at runtime rather than by inserting ACT_RETURN to avoid complications
 			// with 1) auto-generated __Init methods, and 2) #Warn Unreachable.
-			if (line->mAttribute && ((UserFunc*)line->mAttribute)->mDefaultReturnUnset && aResultToken)
-				aResultToken->symbol = SYM_MISSING;
+			if (line->mAttribute && aResultToken)
+			{
+				auto func = (UserFunc*)line->mAttribute;
+				if (func->mBackCompatMode)
+					aResultToken->SetValue(_T(""), 0);
+				else if (func->mHasExplicitReturn)
+					aResultToken->Unset();
+			}
 			// v2: This check is disabled to reduce code size, as it doesn't seem to be needed
 			// now that GOSUB has been removed.  Validation in PreparseBlocks() should make it
 			// impossible to produce this condition:
@@ -10897,7 +11135,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			line = line->mNextLine;
 			continue;
 
-		case ACT_EXIT: // In this context it's the ACT_EXIT added automatically by LoadFromFile().
+		case ACT_END_MODULE: // It was added automatically by LoadFromFile().
 			// Exit at the end of the auto-execute section has historically been equivalent to Return,
 			// but with v2.1 we need this to be distinct from Exit() as it is added to the end of each
 			// module.  Modules aren't given their own initialization thread since they might want to
@@ -11264,8 +11502,6 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, L
 			var->Free(VAR_NEVER_FREE | VAR_CLEAR_ALIASES); // Release var's reference to the VarRef.
 			var->Restore(var_bkp[i]);
 		}
-		if (var_param[i]->symbol == SYM_OBJECT)
-			var_param[i]->object->Release();
 	}
 	return result; // The script's loop is now over.
 }
@@ -12476,18 +12712,21 @@ ResultType Script::PreparseVarRefs()
 {
 	for (mCurrentModule = mLastModule; mCurrentModule; mCurrentModule = mCurrentModule->mPrev)
 	{
+		ResolveIndirectImports();
+
 		if (!PreparseVarRefs(mCurrentModule->mFirstLine))
 			return FAIL;
 
+		mCurrLine = nullptr;
 		while (auto *unc = mCurrentModule->mUnresolvedBaseClass)
 		{
-			Object *proto, *cls = FindClass(unc->name);
-			if (!cls || !(proto = (Object*)cls->GetOwnPropObj(_T("Prototype"))))
+			Object *proto, *cls;
+			if (!ResolveBaseClass(unc->name, unc->is_struct, cls, proto)
+				|| cls == unc->subclass || cls->IsDerivedFrom(unc->subclass))
 			{
-				mCurrLine = NULL;
 				mCurrFileIndex = unc->file_index;
 				mCombinedLineNumber = unc->line_number;
-				return ScriptError(_T("Unknown class."), unc->name);
+				return ScriptError(_T("Invalid base class."), unc->name);
 			}
 			unc->subclass->SetBase(cls);
 			unc->subclass_proto->SetBase(proto);

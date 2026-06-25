@@ -16,9 +16,6 @@
 
 #define ParamIndexIsNumeric(index)  (TokenIsNumeric(*aParam[(index)]))
 
-// For functions that allow "" to mean parameter is omitted.
-#define ParamIndexIsOmittedOrEmpty(index)  (ParamIndexIsOmitted(index) || TokenIsEmptyString(*aParam[(index)]))
-
 // For functions that don't allow "" to mean parameter is omitted.
 #define ParamIndexIsOmitted(index)  ((index) >= aParamCount || aParam[(index)]->symbol == SYM_MISSING)
 
@@ -72,13 +69,3 @@ inline LPTSTR _OptionalStringDefaultHelper(LPTSTR aDef, LPTSTR aBuf = NULL, size
 #define BivRValueToInt64()  TokenToInt64(aValue)
 #define BivRValueToBOOL()  TokenToBOOL(aValue)
 #define BivRValueToObject()  TokenToObject(aValue)
-
-
-template<class T>
-BIF_DECL(NewObject)
-{
-	Object *obj = T::Create();
-	if (!obj)
-		_f_throw_oom;
-	obj->New(aResultToken, aParam, aParamCount);
-}

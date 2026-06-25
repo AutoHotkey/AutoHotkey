@@ -420,8 +420,14 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			aborted = (res == FR_ABORTED);
 		break;
 	case MdType::ResultType: aResultToken.SetResult((ResultType)rup); break;
+#ifndef _WIN64
+	case MdType::IntPtr:
+#endif
 	case MdType::Int32: aResultToken.SetValue(ri32); break;
 	case MdType::UInt64:
+#ifdef _WIN64
+	case MdType::IntPtr:
+#endif
 	case MdType::Int64: aResultToken.SetValue(ri64); break;
 	case MdType::UInt32: aResultToken.SetValue((UINT)rup); break;
 	//case MdType::Float64: aResultToken.SetValue(GetDoubleRetval()); break;
@@ -441,7 +447,8 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				aResultToken.AcceptMem(const_cast<LPTSTR>(strret->Value()), strret->Length());
 			else if (strret->Value())
 				aResultToken.SetValue(const_cast<LPTSTR>(strret->Value()), strret->Length());
-			//else leave aResultToken set to its default value, "".
+			else
+				aResultToken.SetValue(_T(""), 0);
 		}
 		else if (retval_arg_type != MdType::Variant) // Variant type passes aResultToken directly.
 			TypedPtrToToken(retval_arg_type, (void*)args[retval_index], aResultToken);
@@ -535,7 +542,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	{
 		aResultToken.Free();
 		aResultToken.mem_to_free = nullptr; // Because Free() doesn't clear it.
-		aResultToken.SetValue(_T(""), 0);
+		aResultToken.Unset();
 	}
 
 end:
@@ -555,8 +562,14 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 	switch (aType)
 	{
 	case MdType::Bool32:
+#ifndef _WIN64
+	case MdType::IntPtr:
+#endif
 	case MdType::Int32: aToken.SetValue(*(int*)aPtr); break;
 	case MdType::UInt32: aToken.SetValue(*(UINT*)aPtr); break;
+#ifdef _WIN64
+	case MdType::IntPtr:
+#endif
 	case MdType::UInt64:
 	case MdType::Int64: aToken.SetValue(*(__int64*)aPtr); break;
 	case MdType::Float64: aToken.SetValue(*(double*)aPtr); break;
@@ -568,8 +581,10 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 	case MdType::Object:
 		if (auto obj = *(IObject**)aPtr)
 			aToken.SetValue(obj);
-		else
+		else if (g_script.BackCompatMode()) // UnsetKind::Blank isn't used because aToken isn't always a return value.
 			aToken.SetValue(_T(""), 0);
+		else
+			aToken.Unset();
 		break;
 	}
 }
@@ -586,8 +601,14 @@ ResultType SetValueOfTypeAtPtr(MdType aType, void *aPtr, ExprTokenType &aValue, 
 	switch (aType)
 	{
 	//case MdType::Bool32:
+#ifndef _WIN64
+	case MdType::IntPtr:
+#endif
 	case MdType::Int32:
 	case MdType::UInt32: *(UINT*)aPtr = (UINT)nt.value_int64; break;
+#ifdef _WIN64
+	case MdType::IntPtr:
+#endif
 	case MdType::UInt64:
 	case MdType::Int64: *(__int64*)aPtr = nt.value_int64; break;
 	case MdType::Float64: *(double*)aPtr = nt.symbol == SYM_FLOAT ? nt.value_double : (double)nt.value_int64; break;
@@ -618,37 +639,16 @@ size_t TypeSize(MdType aType)
 	case MdType::Float64:
 	case MdType::Int64:
 	case MdType::UInt64: return 8;
+	case MdType::IntPtr: return sizeof(void*);
 	default: return 0;
 	}
 }
 
 
-static LPCTSTR sTypeNames[] = { MDTYPE_NAMES };
-
-
-MdType TypeCode(LPCTSTR aName)
-{
-	for (int i = 1; i < _countof(sTypeNames); ++i)
-		if (!_tcsicmp(sTypeNames[i], aName))
-			return (MdType)i;
-	if (!_tcsicmp(_T("iptr"), aName))
-		return MdType::IntPtr;
-	if (!_tcsicmp(_T("uptr"), aName))
-		return MdType::UIntPtr;
-	return MdType::Void;
-}
-
-
-LPCTSTR TypeName(MdType aType)
-{
-	if ((int)aType > 0 && (int)aType < _countof(sTypeNames))
-		return sTypeNames[(int)aType];
-	return nullptr;
-}
-
-
 bool MdFunc::ArgIsOutputVar(int aIndex)
 {
+	if (mPrototype)
+		--aIndex; // Account for implicit "this" parameter.
 	auto atp = mArgType;
 	for (int ai = 0; ai < mArgSlots; ++ai, ++atp, --aIndex)
 	{
@@ -673,6 +673,8 @@ bool MdFunc::ArgIsOutputVar(int aIndex)
 
 bool MdFunc::ArgIsOptional(int aIndex)
 {
+	if (mPrototype)
+		--aIndex; // Account for implicit "this" parameter.
 	auto atp = mArgType;
 	for (int ai = 0; ai < mArgSlots; ++ai, ++atp, --aIndex)
 	{

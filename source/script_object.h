@@ -37,7 +37,7 @@ public:
 
 	ULONG STDMETHODCALLTYPE Release()
 	{
-		if (mRefCount == 1)
+		if (mRefCount <= 1) // mRefCount == 0 is a special case used to handle circular references; see Object::Delete().
 		{
 			// If an object is implemented by script, it may need to run cleanup code before the object
 			// is deleted.  This introduces the possibility that before it is deleted, the object ref
@@ -108,19 +108,33 @@ struct ObjectMemberListType
 {
 	ObjectMember *duck = nullptr; // Duck-typed members.
 	ObjectMemberMd *meta = nullptr; // Metadata-based members.
+	int count = 0;
 	ObjectMemberListType() {}
-	ObjectMemberListType(ObjectMember *aList) : duck(aList) {}
-	ObjectMemberListType(ObjectMemberMd *aList) : meta(aList) {}
+	ObjectMemberListType(ObjectMember* aList, int N) : duck(aList), count(N) {}
+	ObjectMemberListType(ObjectMemberMd* aList, int N) : meta(aList), count(N) {}
+	template<size_t N>
+	ObjectMemberListType(ObjectMember(&aList)[N]) : duck(aList), count(N) {}
+	template<size_t N>
+	ObjectMemberListType(ObjectMemberMd(&aList)[N]) : meta(aList), count(N) {}
 };
 
 
 // Helper for predefined classes
+typedef Object* (*NewObjectProc)(size_t);
 struct ClassFactoryDef
 {
-	BuiltInFunctionType call;
+	void *call;
+	UINT object_size;
 	UCHAR min_params, max_params, is_variadic;
-	ClassFactoryDef(BuiltInFunctionType aCall, int aMin, int aMax, bool aVariadic = false) : call(aCall), min_params(aMin), max_params(aMax), is_variadic(aVariadic) {}
+	bool is_bif;
+	ClassFactoryDef(BuiltInFunctionType aCall, int aMin, int aMax, bool aVariadic = false) : call(aCall), min_params(aMin), max_params(aMax), is_variadic(aVariadic), is_bif(true) {}
 	ClassFactoryDef(BuiltInFunctionType aCall = nullptr) : ClassFactoryDef(aCall, 1, 1, true) {}
+	ClassFactoryDef(nullptr_t) : ClassFactoryDef((BuiltInFunctionType)nullptr) {}
+
+	// Object size is inferred from the return type of the parameter,
+	// so the return type must be the exact type this factory constructs.
+	template<class T>
+	ClassFactoryDef(T* (*New)(size_t)) : call(New), object_size(sizeof(T)), min_params(1), max_params(1), is_variadic(true), is_bif(false) {}
 };
 
 
@@ -252,9 +266,10 @@ struct TypedProperty
 {
 	MdType type;
 	Object *class_object;
+	Object *pointed_proto;
 	size_t data_offset;
-	size_t object_index;
-	size_t item_count;
+	size_t object_offset;
+	TypedProperty *next_field, *prev_field;
 	~TypedProperty();
 };
 
@@ -266,7 +281,9 @@ struct TypedProperty
 //#define ObjParseIntKey(s, endptr) Exp32or64(UorA(wcstol,strtol),UorA(_wcstoi64,_strtoi64))(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
 #define ObjParseIntKey(s, endptr) UorA(_wcstoi64,_strtoi64)(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
 
+struct DYNAPARM;
 class Array;
+class Map;
 
 class Object : public ObjectBase
 {
@@ -322,15 +339,22 @@ protected:
 
 	struct StructInfo
 	{
+		NewObjectProc create;
 		size_t size;
 		size_t align;
-		size_t nested_count;
-	};
+		size_t nested_object_size;
+		size_t item_count;
+		TypedProperty *first_field, *last_field;
+		Object *pointed_class;
+		Object *pointer_class;
+		Map *array_class_map;
+		UINT object_size;
+		MdType native_type;
+		UCHAR dllcall_type;
+		bool is_unsigned;
 
-	enum EnumeratorType
-	{
-		Enum_Properties,
-		Enum_Methods
+		bool IsPointerType() { return pointed_class && !item_count; }
+		size_t SizeWhenNested() { return IsPointerType() ? sizeof(Object*) : object_size + nested_object_size + sizeof(void*); }
 	};
 
 	ResultType GetEnumProp(UINT &aIndex, Var *aName, Var *aVal, int aVarCount);
@@ -341,26 +365,27 @@ protected:
 #endif
 	enum Flags : decltype(mFlags)
 	{
-		ClassPrototype = 0x01,
-		NativeClassPrototype = 0x02,
-		DataIsSetFlag = 0x04,
-		DataIsAllocatedFlag = 0x08,
-		DataIsStructInfo = 0x10,
-		StructInfoLocked = 0x20,
-		NoCallDelete = 0x40,
-		LastObjectFlag = 0x40
+		ClassPrototype			=   0x1,
+		NativeClassPrototype	=   0x2,
+		ObjectIsClass			=   0x4,
+		DataIsSuffix			=  0x10,
+		DataIsSuffixPtr			=  0x20,
+		StructInfoInitialized	=  0x40,
+		StructInfoLocked		=  0x80,
+		NoCallDelete			= 0x100,
+		CannotOwnProps			= 0x200,
+		LastObjectFlag			= 0x200
 	};
 
 	Object *CloneTo(Object &aTo);
-	Object() { mFlags = 0; }
+	Object(UINT aFlags) { mFlags = aFlags; }
 	~Object();
 	bool Delete() override;
 
 private:
 	Object *mBase = nullptr;
 	FlatVector<FieldType, index_t> mFields;
-	void *mData = nullptr;
-	Object **mNested = nullptr;
+	Object *mOuter = nullptr;
 
 	FieldType *FindField(name_t name, index_t &insert_pos);
 	FieldType *FindField(name_t name)
@@ -378,7 +403,8 @@ private:
 		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
 	
-	StructInfo *GetStructInfo(bool aDefine = false);
+	StructInfo *GetStructInfo();
+	StructInfo *GetStructInfo(bool aLock);
 
 protected:
 	ResultType GetProperty(ResultToken &aResultToken, int aFlags, name_t aName, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
@@ -391,27 +417,41 @@ protected:
 	Object *GetThisForTypedValue(ResultToken &aResultToken, int aFlags, name_t aName, ExprTokenType &aThisToken);
 	ResultType GetTypedValue(ResultToken &aResultToken, int aFlags, TypedProperty &aProp);
 	ResultType SetTypedValue(ResultToken &aResultToken, int aFlags, name_t aName, TypedProperty &aProp, ExprTokenType &aValue);
-	
+	ResultType GetBoxedPointer(ResultToken &aResultToken, UINT_PTR aPtr, Object *aPrototype, size_t aNestOffset);
+	ResultType SetBoxedPointer(ResultToken &aResultToken, ExprTokenType &aValue, UINT_PTR &aPtr, Object *aPrototype, size_t aNestOffset, Object *aPointerClass);
+
 	ResultType CallEtter(ResultToken &aResultToken, int aFlags, IObject *aEtter, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	
 	ResultType CallMeta(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMetaVarg(int aFlags, LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
-	void CallNestedDelete();
-	ResultType NestedNew(ResultToken &aResultToken, StructInfo *si);
-
+	void CallMetaDelete();
+	ResultType NestedNew(ResultToken &aResultToken, UINT_PTR aPtr, Object *aBase);
+	ResultType NestedSparseInit(ResultToken& aResultToken, TypedProperty& aProp, UINT_PTR aPtr);
+	ResultType CArrayNew(ResultToken &aResultToken, StructInfo *si);
+	
 public:
 
+	void *operator new(size_t aObjectSize);
+	void *operator new(size_t aObjectSize, size_t aAdditional);
+	void operator delete(void *p);
+	void operator delete(void *p, size_t);
+
+	Object() { mFlags = 0; }
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
-	static Object *CreateStructPtr(UINT_PTR aPtr, Object *aBase, ResultToken &aResultToken);
-	
+	static Object *CreateStruct(Object *aBase, UINT_PTR aPtr = NULL, UINT aFlags = 0);
+	static Object *CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr) { return CreateStruct(aBase, aPtr, NoCallDelete); }
+	static Object *CreateStructPtr(Object *aBase, UINT_PTR aPtr, UINT aFlags = NoCallDelete);
+	static void NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	static ResultType CreateStruct(ResultToken &aResultToken, Object *aBase, ExprTokenType *aParam[] = nullptr, int aParamCount = 0);
+
 	static ResultType ApplyParams(ResultToken &aThisResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, Object *aOuter = nullptr);
-	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType ConstructNoInit(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, ExprTokenType &aThisToken);
-	
+	ResultType Initialize(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallInitNew(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallNew(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, ExprTokenType &aThisToken);
+
 	class PropEnum;
 
 	bool HasProp(name_t aName);
@@ -523,11 +563,24 @@ public:
 	
 	Property *DefineProperty(name_t aName, bool aEnumerable = true);
 	TypedProperty *DefineTypedProperty(name_t aName);
-	FResult DefineTypedProperty(name_t aName, MdType aType, Object *aClass, size_t aCount, size_t aPack);
+	FResult DefineTypedProperty(name_t aName, Object *aClass, size_t aPack, size_t aOffset);
 	bool DefineMethod(name_t aName, IObject *aFunc);
-	void DefineClass(name_t aName, Object *aClass);
+	void DefineClass(name_t aName, Object *aClass, bool aIsStructPtrClass = false);
 	
-	bool CanSetBase(Object *aNewBase);
+	static void CreatePtrClass(ResultToken &aResultToken, ExprTokenType &aToClass);
+	static Object *CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi);
+	static void CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClass, size_t aCount);
+
+	bool HasData() { return mFlags & (DataIsSuffix | DataIsSuffixPtr); }
+	UINT_PTR DataPtr();
+	UINT_PTR StructSize();
+	UINT_PTR LockStructSize() { auto si = GetStructInfo(); return si ? si->size : 0; }
+
+	bool GetStructArgInfo(DYNAPARM &aType, Object *&aPointedClass);
+	MdType GetStructMdType();
+
+	bool CanSetBase(); // Can Base be changed for this Object?
+	bool CanSetBase(Object *aNewBase); // Is aNewBase a valid Base for this Object?
 	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);
 	void SetBase(Object *aNewBase)
 	{ 
@@ -551,23 +604,30 @@ public:
 	bool IsOfType(Object *aPrototype) override;
 	bool IsDerivedFrom(IObject *aBase); // Always false for non-Object objects, but IObject* allows dynamic_cast to be avoided.
 
+	Object *ClassGetPrototype() { return (mFlags & ObjectIsClass) ? *(Object**)(this + 1) : nullptr; }
+	Object *ClassGetPrototypeBackwardCompatible();
+	void DefinePrototypeGetter();
+
 	void EndClassDefinition();
 	void RemoveMissingProperties();
 	
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 
 	static ObjectMember sMembers[];
-	static ObjectMember sClassMembers[];
 	static ObjectMember sErrorMembers[], sOSErrorMembers[];
 	static Object *sPrototype, *sClass, *sClassPrototype;
 	static IObject *sObjectCall;
+	
+	static ObjectMember sStructMembers[], sPtrMembers[], sCArrayMembers[];
+	static Object *sStructClass, *sStructPrototype, *sPtrClass, *sPtrPrototype, *sCArrayClass, *sCArrayPrototype;
+	static Object *sPrimitiveClass[(int)MdType::LastSupportedPropertyType];
 
 	static void CreateRootPrototypes();
 	static Object *CreateClass(Object *aPrototype, Object *aBase = Object::sClassPrototype);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberMd aMember[], int aMemberCount);
-	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberListType aMember, int aMemberCount);
+	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMemberListType aMember);
 	static Object *DefineMembers(Object *aObject, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount);
 	static Object *DefineMetadataMembers(Object *obj, LPCTSTR aClassName, ObjectMemberMd aMember[], int aMemberCount);
 	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ClassFactoryDef aFactory);
@@ -578,16 +638,8 @@ public:
 	void GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	void SetDataPtr(UINT_PTR aPtr);
+	FResult SetDataPtr(UINT_PTR aPtr);
 	FResult GetDataPtr(UINT_PTR &aPtr);
-	FResult AllocDataPtr(UINT_PTR aSize);
-#ifdef ENABLE_OBJALLOCDATA
-	FResult FreeDataPtr();
-#endif
-	UINT_PTR DataPtr() { return (UINT_PTR)mData + ((mFlags & DataIsAllocatedFlag) ? sizeof(UINT_PTR) : 0); }
-	UINT_PTR DataSize() { return (mFlags & DataIsAllocatedFlag) ? *(UINT_PTR*)mData : 0; }
-	UINT_PTR StructSize() { return (mFlags & DataIsStructInfo) ? ((StructInfo*)mData)->size : mBase ? mBase->StructSize() : 0; }
-	UINT_PTR LockStructSize() { auto si = GetStructInfo(); return si ? si->size : 0; }
 
 	// Methods and functions:
 	void DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -601,6 +653,11 @@ public:
 	enum { M_Error__New, M_OSError__New };
 	void Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	void Error_Show(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	enum { M_Struct_Ptr, M_Struct_Size, M_CArray_Length };
+	void StructGet(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void StructPtrInvoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void CArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// For pseudo-objects:
 	static Object *sAnyPrototype, *sPrimitivePrototype, *sStringPrototype
@@ -662,8 +719,6 @@ private:
 
 	index_t ParamToZeroIndex(ExprTokenType &aParam);
 
-	Array() {}
-	
 public:
 	enum : index_t
 	{
@@ -690,6 +745,7 @@ public:
 	bool ItemToToken(index_t aIndex, ExprTokenType &aToken);
 	ResultType GetEnumItem(UINT &aIndex, Var *, Var *, int);
 
+	Array() {}
 	~Array();
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
 	static Array *FromArgV(LPTSTR *aArgV, int aArgC);
@@ -757,7 +813,6 @@ class Map : public Object
 	static const index_t mKeyOffsetInt = 0;
 	index_t mKeyOffsetObject = 0, mKeyOffsetString = 0;
 
-	Map() {}
 	void Clear();
 	~Map()
 	{
@@ -787,6 +842,7 @@ class Map : public Object
 	ResultType GetEnumItem(UINT &aIndex, Var *, Var *, int);
 
 public:
+	Map() {}
 	static Map *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 
 	bool HasItem(ExprTokenType &aKey)
@@ -933,13 +989,13 @@ private:
 protected:
 	void *mData;
 	size_t mSize;
-	BufferObject(void *aData = nullptr, size_t aSize = 0) : mData(aData), mSize(aSize) {}
 
 public:
 	void *Data() { return mData; }
 	size_t Size() { return mSize; }
 	ResultType Resize(size_t aNewSize);
 
+	BufferObject(void *aData = nullptr, size_t aSize = 0) : mData(aData), mSize(aSize) {}
 	~BufferObject() { free(mData); }
 
 	enum MemberID
@@ -964,13 +1020,10 @@ public:
 
 class ClipboardAll : public BufferObject
 {
-private:
-	ClipboardAll() : BufferObject() {}
-
 public:
+	ClipboardAll() : BufferObject() {}
 	static ObjectMember sMembers[];
 	static Object *sPrototype;
-	static Object *Create();
 	void __New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
@@ -999,6 +1052,7 @@ struct NestedClassInfo
 	Object *class_object;
 	bool constructed;
 };
+BIF_DECL(Class_Prototype);
 BIF_DECL(Class_GetNestedClass);
 BIF_DECL(Class_CallNestedClass);
 BIF_DECL(Class_New);

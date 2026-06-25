@@ -46,6 +46,14 @@ void EarlyAppInit()
 	// reverted afterward, so it affected all subsequent commands.
 	SetErrorMode(SEM_FAILCRITICALERRORS);
 
+	// Without the following, the Start menu on Windows 11 can't be opened with the mouse
+	// if we have a modeless menu active and we're running as admin or with UI access.
+	// It's necessary to allow it at least for the owner of the menu while the menu is
+	// visible, but this is simpler and probably helps to make the windows of our process
+	// behave as the user expects.  Doing it early also means that the script can easily
+	// override it at startup.
+	ChangeWindowMessageFilter(WM_CANCELMODE, MSGFLT_ALLOW);
+
 	// g_WorkingDir is used by various functions but might currently only be used at runtime.
 	// g_WorkingDirOrig needs to be initialized before Script::Init() is called.
 	UpdateWorkingDir();

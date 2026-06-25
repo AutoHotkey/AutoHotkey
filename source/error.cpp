@@ -72,8 +72,8 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Ob
 	FuncResult rt;
 	g_script.mCurrLine = this;
 	g_script.mNewRuntimeException = obj;
-	if (!obj->Construct(rt, aParam, aParamCount))
-		obj = nullptr; // Construct released it.
+	if (!obj->CallInitNew(rt, aParam, aParamCount))
+		obj = nullptr; // CallInitNew released it.
 	g_script.mNewRuntimeException = nullptr;
 	return obj;
 }
@@ -740,8 +740,7 @@ ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR 
 	}
 #endif
 
-	static auto sMod = LoadLibrary(_T("riched20.dll")); // RichEdit20W
-	//static auto sMod = LoadLibrary(_T("msftedit.dll")); // MSFTEDIT_CLASS (RICHEDIT50W)
+	static auto sMod = LoadLibrary(_T("msftedit.dll"));
 	ErrorBoxParam error;
 	error.text = aErrorText;
 	error.type = aErrorType;
@@ -897,7 +896,7 @@ ResultType ResultToken::Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aP
 	// isn't expecting a value, or they might be freed twice (if the callee already freed it).
 	//ASSERT(!mem_to_free); // At least one caller frees it after calling this function.
 	ASSERT(symbol != SYM_OBJECT);
-	return Fail(g_script.RuntimeError(aErrorText, aExtraInfo, FAIL_OR_OK, nullptr, aPrototype));
+	return Fail(g_script.RuntimeError(aErrorText, aExtraInfo, FAIL_OR_OK, g_script.mCurrLine, aPrototype));
 }
 
 __declspec(noinline)
@@ -974,7 +973,9 @@ void TokenTypeAndValue(ExprTokenType &aToken, LPCTSTR &aType, LPCTSTR &aValue, T
 {
 	if (aToken.symbol == SYM_VAR && aToken.var->IsUninitializedNormalVar())
 		aType = _T("unset variable"), aValue = aToken.var->mName;
-	else if (TokenIsEmptyString(aToken))
+	else if (aToken.symbol == SYM_MISSING) // Must be checked before TokenIsBlank() if SYM_MISSING is ever passed here.
+		aType = _T("unset"), aValue = _T("");
+	else if (TokenIsBlank(aToken))
 		aType = _T("empty string"), aValue = _T("");
 	else
 		aType = TokenTypeString(aToken), aValue = TokenToString(aToken, aNBuf);
@@ -995,10 +996,10 @@ ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue)
 ResultType TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPCTSTR aExtraInfo)
 {
 	auto an = [](LPCTSTR thing) {
-		return _tcschr(_T("aeiou"), ctolower(*thing)) ? _T("n") : _T("");
+		return *thing ? _tcschr(_T("aeiou"), ctolower(*thing)) ? _T("an ") : _T("a ") : _T("nothing");
 	};
 	TCHAR msg[512];
-	sntprintf(msg, _countof(msg), _T("Expected a%s %s but got a%s %s.")
+	sntprintf(msg, _countof(msg), _T("Expected %s%s but got %s%s.")
 		, an(aExpectedType), aExpectedType, an(aActualType), aActualType);
 	return g_script.RuntimeError(msg, aExtraInfo, FAIL_OR_OK, nullptr, ErrorPrototype::Type);
 }

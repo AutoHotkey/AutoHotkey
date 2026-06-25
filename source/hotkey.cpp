@@ -69,7 +69,7 @@ HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 BIF_DECL(HotIf_Win)
 {
 	HWND found_hwnd;
-	auto hc = (HotkeyCriterion*)aResultToken.func->mData;
+	auto hc = (HotkeyCriterion*)aResultToken.callee_id;
 	if (hc->Type >= HOT_IF_EXIST)
 	{
 		found_hwnd = WinExist(*g, hc->WinTitle, hc->WinText, _T(""), _T(""), false, true);
@@ -93,7 +93,7 @@ void SetHotIfReturnValue(ResultToken &aResultToken)
 	{
 		// "" seems more in line with the intended use than unset (and consistent with
 		// the other hotkey-related variables); e.g. old := HotIf(new) ... HotIf(old).
-		// A minor drawback is that A_HotIf?.() won't work.
+		// A minor drawback is that (A_HotIf?)() won't work.
 		_f_return_empty;
 	}
 	if (!g->HotCriterion->Callback)
@@ -550,7 +550,7 @@ void Hotkey::AllDestruct()
 
 
 
-bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress)
+bool Hotkey::PrefixHasEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress)
 // aVKorSC contains the virtual key or scan code of the specified prefix key (it's a scan code if aIsSC is true).
 // Returns true if this prefix key has no suffixes that can possibly fire.  Each such suffix is prevented from
 // firing by one or more of the following:
@@ -582,7 +582,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress
 				continue;
 			//else // This alt-tab hotkey is currently active.
 			if ((hk.mNoSuppress & NO_SUPPRESS_PREFIX) || aSuppress)
-				return false; // Since any stored mHotCriterion are ignored for alt-tab hotkeys, no further checking is needed.
+				return true; // Since any stored mHotCriterion are ignored for alt-tab hotkeys, no further checking is needed.
 			has_enabled_suffix = true;
 			continue; // Still need to check other hotkeys for NO_SUPPRESS_PREFIX.
 		}
@@ -598,7 +598,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress
 				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion, hk.mName))   ) // ... and its criteria allow it to fire.
 			{
 				if ((vp->mNoSuppress & NO_SUPPRESS_PREFIX) || aSuppress)
-					return false; // At least one of this prefix's suffixes is eligible for firing.
+					return true; // At least one of this prefix's suffixes is eligible for firing.
 				has_enabled_suffix = true;
 				if (!(hk.mNoSuppress & NO_SUPPRESS_PREFIX))
 					break; // None of this hotkey's variants have NO_SUPPRESS_PREFIX.
@@ -608,7 +608,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress
 	// Since above didn't return, either no hotkeys were found for this prefix that are capable of firing,
 	// or no variants were found with the NO_SUPPRESS_PREFIX flag.
 	aSuppress = has_enabled_suffix;
-	return !has_enabled_suffix;
+	return has_enabled_suffix;
 }
 
 
@@ -1151,7 +1151,7 @@ FResult Hotkey::Dynamic(LPCTSTR aHotkeyName, LPCTSTR aOptions, IObject *aCallbac
 				hk = AddHotkey(aCallback, 0, aHotkeyName, no_suppress);
 			}
 			if (!hk)
-				return FAIL; // AddHotkey() already displayed the error.
+				return FR_FAIL; // AddHotkey() already displayed the error.
 			variant = hk->mLastVariant; // Update for use with the options-parsing section further below.
 			update_all_hotkeys = true;
 			variant_was_just_created = true;
@@ -2646,9 +2646,6 @@ Hotstring *Hotstring::FindHotstring(LPCTSTR aHotstring, bool aCaseSensitive, boo
 
 bif_impl FResult BIF_Hotstring(StrArg name, ExprTokenType *aReplacement, optl<StrArg> aOnOff, ResultToken &aResultToken)
 {
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
-
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 	auto action = aReplacement ? TokenToString(*aReplacement, number_buf) : _T("");
 

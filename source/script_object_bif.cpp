@@ -7,8 +7,6 @@
 #include "script_func_impl.h"
 
 
-extern BuiltInFunc *OpFunc_GetProp, *OpFunc_GetItem, *OpFunc_SetProp, *OpFunc_SetItem;
-
 //
 // Object()
 //
@@ -53,8 +51,7 @@ BIF_DECL(BIF_IsObject)
 
 BIF_DECL(BIF_ObjXXX)
 {
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T(""); // Set default for CallBuiltin().
+	aResultToken.InitInvokeRetVal();
 	
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (obj)
@@ -169,7 +166,7 @@ BIF_DECL(BIF_Base)
 		}
 		// Otherwise, could be Object::sAnyPrototype or SYM_MISSING (via a variadic call).
 	}
-	_f_return_empty;
+	_f_return_unset_blank;
 }
 
 
@@ -217,6 +214,15 @@ BIF_DECL(BIF_HasProp)
 }
 
 
+BIF_DECL(BIF_DefineProp)
+{
+	IObject *iobj = TokenToObject(*aParam[0]);
+	if (!iobj || !iobj->IsOfType(Object::sPrototype))
+		_f_throw_param(0);
+	((Object *)iobj)->DefineProp(aResultToken, 1, 0, aParam + 1, aParamCount - 1);
+}
+
+
 BIF_DECL(BIF_Props)
 {
 	auto obj = ParamToObjectOrBase(*aParam[0]);
@@ -251,25 +257,27 @@ BIF_DECL(BIF_GetMethod)
 	}
 	if (_f_callee_id == FID_HasMethod)
 		_f_return_b(method != nullptr);
-	if (!method) // No method for GetMethod to return: throw MethodError().
-		_f__ret(aResultToken.UnknownMemberError(*aParam[0], IT_CALL, method_name));
+	if (!method)
+	{
+		if (g_script.BackCompatMode())
+			_f__ret(aResultToken.UnknownMemberError(*aParam[0], IT_CALL, method_name));
+		_f_return_unset;
+	}
 	method->AddRef();
 	_f_return(method);
 }
 
 
-BIF_DECL(BIF_StructFromPtr)
+BIF_DECL(StructClass_At)
 {
-	Object *base = dynamic_cast<Object *>(ParamIndexToObject(0));
-	Object *proto = base ? dynamic_cast<Object *>(base->GetOwnPropObj(_T("Prototype"))) : nullptr;
-	if (!proto || proto->LockStructSize() == 0)
-		_f_throw_param(0);
+	auto class_ = ParamIndexToObject(0);
+	auto proto = class_ && class_->IsOfType(Object::sPrototype) ? ((Object*)class_)->ClassGetPrototype() : nullptr;
+	if (!proto || !proto->IsDerivedFrom(Object::sStructPrototype))
+		_f_throw(_T("Invalid class"));
 	auto ptr = (UINT_PTR)ParamIndexToInt64(1);
 	if (ptr < 65536)
-		_f_throw_param(1);
-	auto obj = Object::CreateStructPtr(ptr, proto, aResultToken);
-	if (obj)
-		_f_return(obj);
+		return (void)aResultToken.ParamError(0, aParam[1]);
+	_f_return(Object::CreateStructPtr(proto, ptr));
 }
 
 
@@ -281,16 +289,18 @@ bif_impl FResult ObjSetDataPtr(IObject *aObj, UINT_PTR aPtr)
 {
 	if (!aObj->IsOfType(Object::sPrototype))
 		return FR_E_ARG(0);
-	((Object*)aObj)->SetDataPtr(aPtr);
-	return OK;
+	return ((Object*)aObj)->SetDataPtr(aPtr);
 }
 
-void Object::SetDataPtr(UINT_PTR aPtr)
+FResult Object::SetDataPtr(UINT_PTR aPtr)
 {
-	if (mFlags & DataIsAllocatedFlag)
-		free(mData);
-	mData = (void*)aPtr;
-	mFlags = (mFlags & ~(DataIsAllocatedFlag | DataIsStructInfo)) | DataIsSetFlag;
+	if (mFlags & DataIsSuffixPtr)
+	{
+		auto si = mBase->GetStructInfo();
+		*(UINT_PTR*)((char*)this + si->object_size + si->nested_object_size) = aPtr;
+		return OK;
+	}
+	return FR_E_FAILED;
 }
 
 
@@ -303,33 +313,23 @@ bif_impl FResult ObjGetDataPtr(IObject *aObj, UINT_PTR &aPtr)
 
 FResult Object::GetDataPtr(UINT_PTR &aPtr)
 {
-	if (!(mFlags & DataIsSetFlag))
+	if (!(mFlags & (DataIsSuffixPtr | DataIsSuffix)))
 		return FR_E_FAILED;
 	aPtr = DataPtr();
 	return OK;
 }
 
-
-#ifdef ENABLE_OBJALLOCDATA
-bif_impl FResult ObjAllocData(IObject *aObj, UINT_PTR aSize)
+UINT_PTR Object::DataPtr()
 {
-	if (!aObj->IsOfType(Object::sPrototype))
-		return FR_E_ARG(0);
-	return ((Object*)aObj)->AllocDataPtr(aSize);
-}
-#endif
-
-FResult Object::AllocDataPtr(UINT_PTR aSize)
-{
-	auto p = (UINT_PTR*)malloc(sizeof(UINT_PTR) + aSize);
-	if (!p)
-		return FR_E_OUTOFMEM;
-	if (mFlags & DataIsAllocatedFlag)
-		free(mData);
-	*p = aSize;
-	mData = p;
-	mFlags = DataIsAllocatedFlag | DataIsSetFlag | (mFlags & ~DataIsStructInfo);
-	return OK;
+	UINT_PTR ptr = 0;
+	if (mFlags & (DataIsSuffix | DataIsSuffixPtr))
+	{
+		auto si = mBase->GetStructInfo();
+		ptr = (UINT_PTR)this + si->object_size + si->nested_object_size;
+	}
+	if (mFlags & DataIsSuffixPtr)
+		ptr = *(UINT_PTR*)ptr;
+	return ptr;
 }
 
 
@@ -337,31 +337,6 @@ bif_impl FResult ObjGetDataSize(IObject *aObj, UINT_PTR &aRetVal)
 {
 	if (!aObj->IsOfType(Object::sPrototype))
 		return FR_E_ARG(0);
-	aRetVal = ((Object*)aObj)->DataSize();
-	if (!aRetVal)
-		aRetVal = ((Object*)aObj)->StructSize();
+	aRetVal = ((Object*)aObj)->StructSize();
 	return OK;
 }
-
-
-#ifdef ENABLE_OBJALLOCDATA
-bif_impl FResult ObjFreeData(IObject *aObj)
-{
-	if (!aObj->IsOfType(Object::sPrototype))
-		return FR_E_ARG(0);
-	return ((Object*)aObj)->FreeDataPtr();
-}
-
-FResult Object::FreeDataPtr()
-{
-	if ((mFlags & (DataIsAllocatedFlag | DataIsSetFlag)) == (DataIsAllocatedFlag | DataIsSetFlag))
-	{
-		free(mData);
-		mData = nullptr;
-		mFlags &= ~(DataIsAllocatedFlag | DataIsSetFlag);
-	}
-	else if (mData)
-		return FR_E_FAILED;
-	return OK;
-}
-#endif

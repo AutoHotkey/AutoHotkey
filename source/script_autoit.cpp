@@ -467,7 +467,7 @@ bif_impl FResult ControlAddItem(StrArg aItem, CONTROL_PARAMETERS_DECL, INT_PTR &
 {
 	DETERMINE_TARGET_CONTROL2;
 	UINT msg;
-	FResult fr = FAIL;
+	FResult fr;
 	switch (GetIndexControlType(control_window, fr))
 	{
 	case IC_COMBO: msg = CB_ADDSTRING; break;
@@ -493,7 +493,7 @@ bif_impl FResult ControlDeleteItem(INT_PTR aIndex, CONTROL_PARAMETERS_DECL)
 		return FR_E_ARG(0);
 	DETERMINE_TARGET_CONTROL2;
 	UINT msg;
-	FResult fr = FAIL;
+	FResult fr;
 	switch (GetIndexControlType(control_window, fr))
 	{
 	case IC_COMBO: msg = CB_DELETESTRING; break;
@@ -541,7 +541,7 @@ bif_impl FResult ControlChooseIndex(INT_PTR aIndex, CONTROL_PARAMETERS_DECL)
 		return FR_E_ARG(0);
 	DETERMINE_TARGET_CONTROL2;
 	UINT msg, x_msg, y_msg;
-	FResult fr = FAIL;
+	FResult fr;
 	switch (GetIndexControlType(control_window, fr, true))
 	{
 	case IC_COMBO:
@@ -586,7 +586,7 @@ bif_impl FResult ControlChooseString(StrArg aValue, CONTROL_PARAMETERS_DECL, INT
 {
 	DETERMINE_TARGET_CONTROL2;
 	UINT msg, x_msg, y_msg;
-	FResult fr = FAIL;
+	FResult fr;
 	switch (GetIndexControlType(control_window, fr))
 	{
 	case IC_COMBO:
@@ -646,7 +646,7 @@ bif_impl FResult ControlFindItem(StrArg aString, CONTROL_PARAMETERS_DECL, INT_PT
 {
 	DETERMINE_TARGET_CONTROL2;
 	UINT msg;
-	FResult fr = FAIL;
+	FResult fr;
 	switch (GetIndexControlType(control_window, fr))
 	{
 	case IC_COMBO: msg = CB_FINDSTRINGEXACT; break;
@@ -668,7 +668,7 @@ bif_impl FResult ControlGetIndex(CONTROL_PARAMETERS_DECL, INT_PTR &aRetVal)
 {
 	DETERMINE_TARGET_CONTROL2;
 	UINT msg;
-	FResult fr = FAIL;
+	FResult fr;
 	switch (GetIndexControlType(control_window, fr, true))
 	{
 	case IC_COMBO: msg = CB_GETCURSEL; break;
@@ -689,8 +689,8 @@ bif_impl FResult ControlGetChoice(CONTROL_PARAMETERS_DECL, StrRet &aRetVal)
 {
 	DETERMINE_TARGET_CONTROL2;
 	UINT msg, x_msg, y_msg;
-	FResult fr = FAIL;
-	switch (GetIndexControlType(control_window, fr, true))
+	FResult fr;
+	switch (GetIndexControlType(control_window, fr))
 	{
 	case IC_COMBO:
 		msg = CB_GETCURSEL;
@@ -768,8 +768,8 @@ bif_impl FResult ControlGetItems(CONTROL_PARAMETERS_DECL, IObject *&aRetVal)
 {
 	DETERMINE_TARGET_CONTROL2;
 	UINT msg, x_msg, y_msg;
-	FResult fr = FAIL;
-	switch (GetIndexControlType(control_window, fr, true))
+	FResult fr;
+	switch (GetIndexControlType(control_window, fr))
 	{
 	case IC_COMBO:
 		msg = CB_GETCOUNT;
@@ -1233,7 +1233,8 @@ bif_impl FResult FileGetShortcut(StrArg aShortcutFile, StrRet *aTarget, StrRet *
 					if (aIconNum)
 						if (*buf)
 							aIconNum->SetValue(icon_index + (icon_index >= 0 ? 1 : 0));  // Convert from 0-based to 1-based for consistency with the Menu command, etc. but leave negative resource IDs as-is.
-						//else: Leave it blank to indicate that there is none.
+						else
+							aIconNum->SetValue(_T(""), 0); // "blank if none"
 				}
 				if (aRunState)
 				{

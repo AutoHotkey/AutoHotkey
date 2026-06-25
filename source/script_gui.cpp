@@ -280,7 +280,7 @@ ObjectMemberMd GuiType::sMembers[] =
 	md_member(GuiType, Show, CALL, (In_Opt, String, Options)),
 	md_member(GuiType, Submit, CALL, (In_Opt, Bool32, Hide), (Ret, Object, RetVal)),
 	
-	md_member		(GuiType, __Item, GET, (In, Variant, Index), (Ret, Object, RetVal)),
+	md_member		(GuiType, __Item, GET, (In, Variant, Index), (Ret, Variant, RetVal)),
 	md_property_get	(GuiType, Hwnd, UInt32),
 	md_property		(GuiType, Title, String),
 	md_property		(GuiType, Name, String),
@@ -288,7 +288,7 @@ ObjectMemberMd GuiType::sMembers[] =
 	md_property		(GuiType, BackColor, Variant),
 	md_property		(GuiType, MarginX, Int32),
 	md_property		(GuiType, MarginY, Int32),
-	md_property		(GuiType, MenuBar, Variant)
+	md_property_opt	(GuiType, MenuBar, Variant)
 };
 
 int GuiType::sMemberCount = _countof(sMembers);
@@ -423,7 +423,7 @@ FResult GuiType::set_Title(StrArg aValue)
 }
 
 
-FResult GuiType::get___Item(ExprTokenType &aIndex, IObject *&aRetVal)
+FResult GuiType::get___Item(ExprTokenType &aIndex, ResultToken &aRetVal)
 {
 	GUI_MUST_HAVE_HWND; // Seems clearer than relying on the error below.
 	GuiControlType* ctrl = NULL;
@@ -440,10 +440,14 @@ FResult GuiType::get___Item(ExprTokenType &aIndex, IObject *&aRetVal)
 			ctrl = mControl[u];
 	}
 	if (!ctrl)
-		return FError(_T("The specified control does not exist."), nullptr, ErrorPrototype::UnsetItem);
+	{
+		if (g_script.BackCompatMode())
+			return FError(_T("The specified control does not exist."), nullptr, ErrorPrototype::UnsetItem);
+		return OK; // Leave aRetVal unset.
+	}
 
 	ctrl->AddRef();
-	aRetVal = ctrl;
+	aRetVal.Return(ctrl);
 	return OK;
 }
 
@@ -581,14 +585,14 @@ FResult GuiType::Move(optl<int> aX, optl<int> aY, optl<int> aWidth, optl<int> aH
 
 bif_impl void GuiFromHwnd(UINT aHwnd, optl<BOOL> aRecurse, IObject *&aGui)
 {
-	if (aGui = aRecurse.value_or(FALSE) ? GuiType::FindGuiParent((HWND)(UINT_PTR)aHwnd) : GuiType::FindGui((HWND)(UINT_PTR)aHwnd))
+	if (aGui = aRecurse.value_or(FALSE) ? GuiType::FindGuiParent((HWND)(UINT_PTR)aHwnd, true) : GuiType::FindGui((HWND)(UINT_PTR)aHwnd, true))
 		aGui->AddRef();
 }
 
 
 bif_impl void GuiCtrlFromHwnd(UINT aHwnd, IObject *&aGuiCtrl)
 {
-	if (GuiType* gui = GuiType::FindGuiParent((HWND)(UINT_PTR)aHwnd))
+	if (GuiType* gui = GuiType::FindGuiParent((HWND)(UINT_PTR)aHwnd, true))
 		if (aGuiCtrl = gui->FindControl((HWND)(UINT_PTR)aHwnd))
 			aGuiCtrl->AddRef();
 }
@@ -712,7 +716,7 @@ void GuiControlType::DefineControlClasses()
 
 		// Determine base prototype and control-type-specific members.
 		Object *base_proto = sPrototype, *base_class = ctrl_class;
-		ObjectMemberListType more_items;
+		ObjectMemberMd *more_items = nullptr;
 		int how_many = 0;
 		switch (i)
 		{
@@ -734,8 +738,7 @@ void GuiControlType::DefineControlClasses()
 		TCHAR buf[32];
 		_sntprintf(buf, 32, _T("Gui.%s"), sTypeNames[i]);
 		sPrototypes[i] = CreatePrototype(buf, base_proto, more_items, how_many);
-		auto cls = CreateClass(sPrototypes[i]);
-		cls->SetBase(base_class);
+		auto cls = CreateClass(sPrototypes[i], base_class);
 		gui_class->DefineClass(sTypeNames[i], cls);
 	}
 }
@@ -1081,11 +1084,19 @@ FResult GuiControlType::List_Delete(optl<int> aIndex)
 }
 
 
-GuiType *GuiType::FindGui(HWND aHwnd)
+GuiType *GuiType::FindGui(HWND aHwnd, bool aVerifyProcess)
 {
 	// Check that this window is an AutoHotkey Gui.
 	ATOM atom = (ATOM)GetClassLong(aHwnd, GCW_ATOM);
 	if (atom != sGuiWinClass)
+		return NULL;
+
+	// The atom check is exactly equivalent to a case-insensitive class name check, so a PID
+	// check is needed to avoid crashing when aHwnd is a window created by some other script.
+	// aVerifyProcess allows the check to be skipped when caller is certain the window is ours,
+	// which is mainly to reduce inlined code size rather than for performance.
+	DWORD pid = 0;
+	if (aVerifyProcess && (!GetWindowThreadProcessId(aHwnd, &pid) || pid != GetCurrentProcessId()))
 		return NULL;
 
 	// Retrieve the GuiType object associated to it.
@@ -1093,12 +1104,12 @@ GuiType *GuiType::FindGui(HWND aHwnd)
 }
 
 
-GuiType *GuiType::FindGuiParent(HWND aHwnd)
+GuiType *GuiType::FindGuiParent(HWND aHwnd, bool aVerifyProcess)
 // Returns the GuiType of aHwnd or its closest ancestor which is a Gui.
 {
 	for ( ; aHwnd; aHwnd = GetParent(aHwnd))
 	{
-		if (GuiType *gui = FindGui(aHwnd))
+		if (GuiType *gui = FindGui(aHwnd, aVerifyProcess))
 			return gui;
 		if (!(GetWindowLong(aHwnd, GWL_STYLE) & WS_CHILD))
 			break;
@@ -1119,15 +1130,15 @@ FResult GuiType::get_MenuBar(ResultToken &aResultToken)
 }
 
 
-FResult GuiType::set_MenuBar(ExprTokenType &aParam)
+FResult GuiType::set_MenuBar(ExprTokenType *aParam)
 {
 	GUI_MUST_HAVE_HWND;
 	UserMenu *menu = NULL;
-	if (!TokenIsEmptyString(aParam))
+	if (aParam && !TokenIsBlank(*aParam))
 	{
-		menu = dynamic_cast<UserMenu *>(TokenToObject(aParam));
+		menu = dynamic_cast<UserMenu *>(TokenToObject(*aParam));
 		if (!menu || menu->mMenuType != MENU_TYPE_BAR)
-			return FTypeError(_T("MenuBar"), aParam);
+			return FTypeError(_T("MenuBar"), *aParam);
 		menu->CreateHandle(); // Ensure the menu bar physically exists.
 		menu->AddRef();
 	}
@@ -1849,7 +1860,7 @@ void GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aCon
 		return; // It already displayed the error.
 	length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 	if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-		_o_return_p(_T(""), 0); // Must use this vs _o_return_empty to override TokenSetResult.
+		_o_return_empty; // Override the values set by TokenSetResult.
 	_o_return_retval;
 }
 
@@ -1925,10 +1936,7 @@ void GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType &aCont
 			return;  // It already displayed the error.
 		length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 		if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-		{
-			*aResultToken.marker = 0; // Clear the buffer returned by TokenSetResult.
-			aResultToken.marker_length = 0;
-		}
+			_o_return_empty; // Override the values set by TokenSetResult.
 	}
 	_o_return_retval;
 }
@@ -4083,8 +4091,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTS
 		if (control.hwnd = CreateWindowEx(exstyle, _T("ListBox"), _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
-			if (opt.tabstop_count)
-				SendMessage(control.hwnd, LB_SETTABSTOPS, opt.tabstop_count, (LPARAM)opt.tabstop);
 			// For now, it seems best to always override a height that would cause zero items to be
 			// displayed.  This is because there is a very thin control visible even if the height
 			// is explicitly set to zero, which seems pointless (there are other ways to draw thin
@@ -4112,6 +4118,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPCTSTR aOptions, LPCTS
 					// its specified pixel-width is smaller than the width of the window:
 				opt.height += GetSystemMetrics(SM_CYHSCROLL);
 			}
+			if (opt.tabstop_count)
+				SendMessage(control.hwnd, LB_SETTABSTOPS, opt.tabstop_count, (LPARAM)opt.tabstop);
 			MoveWindow(control.hwnd, opt.x, opt.y, opt.width, opt.height, TRUE); // Repaint, since it might be visible.
 			// Since by default, the OS adjusts list's height to prevent a partial item from showing
 			// (LBS_NOINTEGRALHEIGHT), fetch the actual height for possible use in positioning the
@@ -9278,6 +9286,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// menus are always sent to g_hWnd, but it is kept here for symmetry/maintainability:
 		UninitMenuPopup((HMENU)wParam);
 		break;
+	case WM_MENUSELECT:
+		if (g_MenuIsTempModeless)
+			MenuSelectWorkaround(lParam, wParam);
+		break;
 	case WM_NCACTIVATE:
 		if (!wParam && g_MenuIsTempModeless)
 		{
@@ -11284,5 +11296,5 @@ int GuiType::GetSystemMetrics(int nIndex)
 {
 	static auto metricForDpi = (decltype(&GetSystemMetricsForDpi))GetProcAddress(GetModuleHandle(_T("user32.dll")), "GetSystemMetricsForDpi");
 	// Get the correct metric for this GUI's DPI, if possible; otherwise revert to the DPI-unaware metric.
-	return metricForDpi ? metricForDpi(nIndex, mDPI) : GetSystemMetrics(nIndex);
+	return metricForDpi ? metricForDpi(nIndex, mDPI) : ::GetSystemMetrics(nIndex);
 }

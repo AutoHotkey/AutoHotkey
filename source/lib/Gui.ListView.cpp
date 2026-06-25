@@ -184,7 +184,11 @@ FResult GuiControlType::LV_AddInsertModify(optl<int> aRow, optl<StrArg> aOptions
 
 	bool ensure_visible = false, is_checked = false;  // Checkmark.
 	int col_start_index = 0;
-	LVITEM lvi;
+	// If the ListView has Sort enabled, ListView_InsertItem has been observed to dereference pszText,
+	// and its value affects the sorted position of the item even though the item is blank (when mask
+	// does not include LVIF_TEXT; i.e. Col1 was omitted). That makes no sense so might be an OS bug.
+	// Since it's broken the expectation that unflagged members won't be used, zero-initialize all:
+	LVITEM lvi{};
 	lvi.mask = LVIF_STATE; // LVIF_STATE: state member is valid, but only to the extent that corresponding bits are set in stateMask (the rest will be ignored).
 	lvi.stateMask = 0;
 	lvi.state = 0;

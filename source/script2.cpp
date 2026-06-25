@@ -147,8 +147,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 	else if (g_MsgMonitor.Count() && MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
 
-	TRANSLATE_AHK_MSG(iMsg, wParam)
-	
 	switch (iMsg)
 	{
 	case WM_COMMAND:
@@ -197,12 +195,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		HWND top_box = FindOurTopDialog();
 		if (top_box)
 		{
-
-			// v1.0.33: The following is probably reliable since the AHK_DIALOG should
-			// be in front of any messages that would launch an interrupting thread.  In other
-			// words, the "g" struct should still be the one that owns this MsgBox/dialog window.
-			g->DialogHWND = top_box; // This is used to work around an AHK_TIMEOUT issue in which a MsgBox that has only an OK button fails to deliver the Timeout indicator to the script.
-
 			SetForegroundWindowEx(top_box);
 
 			// Setting the big icon makes AutoHotkey dialogs more distinct in the Alt-tab menu.
@@ -218,13 +210,24 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// without adding any significant benefit:
 			//SendMessage(top_box, WM_SETICON, ICON_SMALL, main_icon);
 
+			// The following is probably reliable since the AHK_DIALOG message should be in front
+			// of any messages that would launch an interrupting thread or otherwise be capable of
+			// bringing one of our dialogs to the top.
 			UINT timeout = (UINT)lParam;  // Caller has ensured that this is non-negative.
 			if (timeout)
+			{
 				// Caller told us to establish a timeout for this modal dialog (currently always MessageBox).
 				// In addition to any other reasons, the first param of the below must not be NULL because
 				// that would cause the 2nd param to be ignored.  We want the 2nd param to be the actual
 				// ID assigned to this timer.
-				SetTimer(top_box, g_nMessageBoxes, (UINT)timeout, MsgBoxTimeout);
+				SetTimer(top_box, g_nMessageBoxes, timeout, MsgBoxTimeout);
+			}
+			// If there's a timer check pending, skip it for this interval to avoid interrupting the
+			// dialog loop before it shows the dialog window.  Otherwise, the MsgBox might disappear
+			// immediately since we've already started the timeout.
+			MSG msg;
+			if (PeekMessage(&msg, g_hWnd, WM_TIMER, WM_TIMER, PM_NOREMOVE) && msg.wParam == TIMER_ID_MAIN && !msg.lParam)
+				PeekMessage(&msg, g_hWnd, WM_TIMER, WM_TIMER, PM_REMOVE);
 		}
 		// else: if !top_box: no error reporting currently.
 		return 0;
@@ -341,18 +344,23 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 	case WM_CLOSE:
 		if (hWnd == g_hWnd) // i.e. not anything other than the main window.
 		{
-			// Receiving this msg is fairly unusual since SC_CLOSE is intercepted and redefined above.
-			// However, it does happen if an external app is asking us to close, such as another
-			// instance of this same script during the Reload command.  So treat it in a way similar
-			// to the user having chosen Exit from the menu.
+			// This message isn't received as a result of the user clicking the window's close button,
+			// since SC_CLOSE is intercepted and redefined above.  The original reason it was made to
+			// have the same effect as "the user having chosen Exit from the menu" was never properly
+			// explained, but now it's enough that scripts rely on WinClose(g_hWnd) exiting the script.
+			// v2.1: Since it always has that effect, we now rely on it for Reload and #SingleInstance,
+			// making use of the normally unused wParam to pass the exit reason.  The chance of wParam
+			// accidentally coinciding with either of these special values is infinitesimal, and the
+			// worst that can happen is that an OnExit callback's ExitReason is incorrect.
 			//
 			// Leave it up to ExitApp() to decide whether to terminate based upon whether
 			// there is an OnExit function, whether that function is already running at
 			// the time a new WM_CLOSE is received, etc.  It's also its responsibility to call
-			// DestroyWindow() upon termination so that the WM_DESTROY message winds up being
-			// received and process in this function (which is probably necessary for a clean
-			// termination of the app and all its windows):
-			g_script.ExitApp(EXIT_CLOSE);
+			// DestroyWindow() upon termination, although that doesn't actually matter since all
+			// of our windows will be destroyed when the process terminates.
+			g_script.ExitApp(wParam == AHK_EXIT_BY_RELOAD ? EXIT_RELOAD
+				: wParam == AHK_EXIT_BY_SINGLEINSTANCE ? EXIT_SINGLEINSTANCE
+				: EXIT_CLOSE);
 			return 0;  // Verified correct.
 		}
 		// Otherwise, some window of ours other than our main window was destroyed.
@@ -364,14 +372,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			g_script.ExitApp((lParam & ENDSESSION_LOGOFF) ? EXIT_LOGOFF : EXIT_SHUTDOWN);
 		//else a prior WM_QUERYENDSESSION was aborted; i.e. the session really isn't ending.
 		return 0;  // Verified correct.
-
-	case AHK_EXIT_BY_RELOAD:
-		g_script.ExitApp(EXIT_RELOAD);
-		return 0; // Whether ExitApp() terminates depends on whether there's an OnExit function and what it does.
-
-	case AHK_EXIT_BY_SINGLEINSTANCE:
-		g_script.ExitApp(EXIT_SINGLEINSTANCE);
-		return 0; // Whether ExitApp() terminates depends on whether there's an OnExit function and what it does.
 
 	case WM_DESTROY:
 		if (hWnd == g_hWnd) // i.e. not anything other than the main window.
@@ -488,34 +488,8 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			EndMenu();
 		break;
 	case WM_MENUSELECT:
-		// The following is a workaround for left click failing to activate a menu item in a modeless
-		// menu if the mouse was moved quickly from the main menu into a submenu (reproduced on Windows
-		// 7 and 11).  Strangely, double-click still activates the item.  Moving the selection restores
-		// normal behaviour, so the workaround just deselects the item and allows it to be reselected.
-		// Care must be taken to avoid a loop, because deselecting the item causes the parent menu to
-		// be reselected, which causes WM_MENUSELECT to be sent.
 		if (g_MenuIsTempModeless)
-		{
-			static HMENU sLastSelectedMenu = NULL; // Limits unnecessarily application of the workaround.
-			static bool sRecursiveCall = false; // Prevents looping due to MN_SELECTITEM causing WM_MENUSELECT.
-			if (sLastSelectedMenu != (HMENU)lParam && !sRecursiveCall)
-			{
-				sLastSelectedMenu = (HMENU)lParam; // Before SendMessage() below.
-				constexpr auto MF_WANTED = MF_MOUSESELECT | MF_HILITE; // Item selected by mouse.
-				constexpr auto MF_UNWANTED = MF_GRAYED | MF_DISABLED | MF_POPUP; // Items not needing the workaround.
-				HWND fore_win;
-				if (   (HMENU)lParam != g_MenuIsTempModeless // Only submenus need the workaround.
-					&& (HIWORD(wParam) & (MF_WANTED | MF_UNWANTED)) == MF_WANTED
-					&& (fore_win = GetForegroundWindow())
-					&& SendMessage(fore_win, MN_GETHMENU, 0, 0) == lParam   )
-				{
-					constexpr auto Mn_SELECTITEM = 0x01E5; // Undocumented message?
-					sRecursiveCall = true;
-					SendMessage(fore_win, Mn_SELECTITEM, -1, 0);
-					sRecursiveCall = false;
-				}
-			}
-		}
+			MenuSelectWorkaround(lParam, wParam);
 		break;
 
 #ifdef CONFIG_DEBUGGER
@@ -1487,7 +1461,7 @@ FResult SetWorkingDir(LPCTSTR aNewDir)
 	// Update in 2018: The reason it wouldn't by default is that "C:" is actually a reference to the
 	// the current directory if it's on C: drive, otherwise a reference to the path contained by the
 	// env var "=C:".  Similarly, "C:x" is a reference to "x" inside that directory.
-	// For details, see https://blogs.msdn.microsoft.com/oldnewthing/20100506-00/?p=14133
+	// For details, see https://devblogs.microsoft.com/oldnewthing/20100506-00/?p=14133
 	// Although the override here creates inconsistency between SetWorkingDir and everything else
 	// that can accept "C:", it is most likely what the user wants, and now there's also backward-
 	// compatibility to consider since this workaround has been in place since 2006.
@@ -1605,44 +1579,44 @@ bif_impl FResult FileSelect(optl<StrArg> aOptions, optl<StrArg> aWorkingDir, opt
 		}
 	}
 
+	TCHAR display_name[128];
 	TCHAR pattern[1024];
-	*pattern = '\0'; // Set default.
+	UINT filter_count = 0;
+	COMDLG_FILTERSPEC filters[2];
+
 	if (aFilter.has_nonempty_value())
 	{
+		filters[0].pszName = filters[0].pszSpec = aFilter.value(); // Set defaults.
+		++filter_count;
+
 		auto pattern_start = _tcschr(aFilter.value(), '(');
 		if (pattern_start)
 		{
-			// Make pattern a separate string because we want to remove any spaces from it.
-			// For example, if the user specified Documents (*.txt; *.doc), the space after
-			// the semicolon should be removed for the pattern string itself but not from
-			// the displayed version of the pattern:
+			// Friendly name is separated from the pattern only to work around an OS bug where the pattern
+			// is duplicated if the friendly name does not contain "*.".  To conserve stack space, unusually
+			// long strings are passed as is.  If a space precedes the parenthesis, it needs to be stripped
+			// out otherwise there will end up being two spaces.  If there is no space, aFilter is passed
+			// as-is for simplicity and to preserve the old behaviour of displaying without a space.
+			size_t name_length = pattern_start - aFilter.value();
+			if (name_length && pattern_start[-1] == ' ' && name_length <= _countof(display_name))
+			{
+				--name_length;
+				tmemcpy(display_name, aFilter.value(), name_length);
+				display_name[name_length] = '\0';
+				filters[0].pszName = display_name;
+			}
+
+			// Make pattern a separate string because we need to terminate at the close parenthesis.
 			tcslcpy(pattern, ++pattern_start, _countof(pattern));
 			LPTSTR pattern_end = _tcsrchr(pattern, ')'); // strrchr() in case there are other literal parentheses.
 			if (pattern_end)
 				*pattern_end = '\0';  // If parentheses are empty, this will set pattern to be the empty string.
+			filters[0].pszSpec = pattern;
+			
+			// Removing leading spaces within a list of patterns such as "*.h; *.cpp" is not necessary,
+			// and embedded spaces can be meaningful so must not be removed (such as for "?? - *.EXT").
+			//StrReplace(pattern, _T(" "), _T(""), SCS_SENSITIVE);
 		}
-		else // No open-paren, so assume the entire string is the filter.
-			tcslcpy(pattern, aFilter.value(), _countof(pattern));
-	}
-	UINT filter_count = 0;
-	COMDLG_FILTERSPEC filters[2];
-	if (*pattern) // aFilter was not omitted or blank.
-	{
-		// Remove any spaces present in the pattern, such as a space after every semicolon
-		// that separates the allowed file extensions.  The API docs specify that there
-		// should be no spaces in the pattern itself, even though it's okay if they exist
-		// in the displayed name of the file-type:
-		// Update by Lexikos: Don't remove spaces, since that gives incorrect behaviour for more
-		// complex patterns like "prefix *.ext" (where the space should be considered part of the
-		// pattern).  Although the docs for OPENFILENAMEW say "Do not include spaces", it may be
-		// just because spaces are considered part of the pattern.  On the other hand, the docs
-		// relating to IFileDialog::SetFileTypes() say nothing about spaces; and in fact, using a
-		// pattern like "*.cpp; *.h" will work correctly (possibly due to how leading spaces work
-		// with the file system).
-		//StrReplace(pattern, _T(" "), _T(""), SCS_SENSITIVE);
-		filters[0].pszName = aFilter.value();
-		filters[0].pszSpec = pattern;
-		++filter_count;
 	}
 	// Always include the All Files (*.*) filter, since there doesn't seem to be much
 	// point to making this an option.  This is because the user could always type
@@ -1673,7 +1647,7 @@ bif_impl FResult FileSelect(optl<StrArg> aOptions, optl<StrArg> aWorkingDir, opt
 	case 'D':
 		++options_str;
 		flags |= FOS_PICKFOLDERS;
-		if (*pattern)
+		if (filter_count > 1)
 			return FR_E_ARG(3);
 		filter_count = 0;
 		break;
@@ -2081,6 +2055,7 @@ BIF_DECL(BIF_String)
 	case SYM_VAR:
 		if (aParam[0]->var->HasObject())
 		{
+			aResultToken.InitInvokeRetVal();
 			ObjectToString(aResultToken, *aParam[0], aParam[0]->var->Object());
 			break;
 		}
@@ -2095,6 +2070,7 @@ BIF_DECL(BIF_String)
 		aResultToken.marker_length = FTOA(aParam[0]->value_double, aResultToken.marker, _f_retval_buf_size);
 		break;
 	case SYM_OBJECT:
+		aResultToken.InitInvokeRetVal();
 		ObjectToString(aResultToken, *aParam[0], aParam[0]->object);
 		break;
 	// Impossible due to parameter count validation:
@@ -2288,9 +2264,9 @@ BIF_DECL(BIF_IsSet)
 	// var should always be non-null for IsSet due to load-time validation.
 	// IsSetRef requires the additional check since general validation permits
 	// objects which aren't VarRefs but could implement __value.
-	if (!var)
+	if (!var && _f_callee_id)
 		_f_throw_param(0, _T("VarRef"));
-	_f_return_b(!var->IsUninitializedNormalVar());
+	_f_return_b(!(var ? var->IsUninitializedNormalVar() : ParamIndexIsOmitted(0)));
 }
 
 
@@ -3137,6 +3113,8 @@ bif_impl FResult LoadPicture(StrArg aFilename, optl<StrArg> aOptions, int *aImag
 
 BIF_DECL(BIF_Type)
 {
+	if (!aParamCount)
+		_f_return_p(_T("unset"));
 	_f_return_p(TokenTypeString(*aParam[0]));
 }
 
@@ -3149,6 +3127,7 @@ LPTSTR TokenTypeString(ExprTokenType &aToken)
 	case SYM_INTEGER: return INTEGER_TYPE_STRING;
 	case SYM_FLOAT: return FLOAT_TYPE_STRING;
 	case SYM_OBJECT: return TokenToObject(aToken)->Type();
+	case SYM_MISSING: return _T("unset");
 	default: return _T(""); // For maintainability.
 	}
 }
@@ -3317,8 +3296,9 @@ BOOL TokenToBOOL(ExprTokenType &aToken)
 	case SYM_FLOAT:
 		return aToken.value_double != 0.0;
 	case SYM_STRING:
+		// Consider any non-empty string beginning with \0 to be TRUE.
 		return ResultToBOOL(aToken.marker)
-			|| aToken.marker_length && !*aToken.marker; // Consider any non-empty string beginning with \0 to be TRUE.
+			|| aToken.marker_length && !*aToken.marker && aToken.marker_length != -1;
 	default:
 		// The only remaining valid symbol is SYM_OBJECT, which is always TRUE.
 		// Check symbol anyway, in case SYM_MISSING or something else sneaks in.
@@ -3399,7 +3379,7 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aNumType)
 }
 
 
-BOOL TokenIsEmptyString(ExprTokenType &aToken)
+BOOL TokenIsBlank(ExprTokenType &aToken)
 {
 	switch (aToken.symbol)
 	{
@@ -3407,10 +3387,8 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken)
 		return !*aToken.marker;
 	case SYM_VAR:
 		return !aToken.var->HasContents();
-	//case SYM_MISSING: // This case is omitted because it currently should be
-		// impossible for all callers except for ParamIndexIsOmittedOrEmpty(),
-		// which checks for it explicitly.
-		//return TRUE;
+	case SYM_MISSING:
+		return TRUE;
 	default:
 		return FALSE;
 	}
@@ -3730,6 +3708,7 @@ ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLen
 			return aResultToken.MemoryError();
 		aResultToken.marker = aResultToken.mem_to_free; // Store the address of the result for the caller.
 	}
+	aResultToken.symbol = SYM_STRING;
 	if (aValue) // Caller may pass NULL to retrieve a buffer of sufficient size.
 		tmemcpy(aResultToken.marker, aValue, aLength);
 	aResultToken.marker[aLength] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
@@ -3771,7 +3750,6 @@ ResultType ResultToken::Return(LPTSTR aValue, size_t aLength)
 // Copy and return a string.
 {
 	ASSERT(aValue);
-	symbol = SYM_STRING;
 	return TokenSetResult(*this, aValue, aLength);
 }
 

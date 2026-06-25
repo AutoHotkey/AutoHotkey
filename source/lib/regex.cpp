@@ -932,13 +932,13 @@ FResult RegExSearch::Replace(ExprTokenType *aReplacement, int *aOutCount, optl<i
 					fresult = CreateMatchArray(offset, captured_pattern_count, matchobj_token.object);
 					if (FAILED(fresult))
 						goto abort;
-					result_token.SetValue(_T(""));
+					result_token.InitInvokeRetVal();
 					callback_obj->Invoke(result_token, IT_CALL, nullptr, ExprTokenType{ callback_obj }, &params, 1);
 					matchobj_token.object->Release();
 					if (result_token.symbol == SYM_OBJECT)
 					{
 						auto obj = result_token.object;
-						result_token.SetValue(_T(""));
+						result_token.InitInvokeRetVal();
 						ObjectToString(result_token, ExprTokenType{ obj }, obj);
 						obj->Release();
 					}

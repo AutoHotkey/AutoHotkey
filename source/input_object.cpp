@@ -13,8 +13,8 @@ ObjectMemberMd InputObject::sMembers[] =
 {
 	#define BOOL_OPTION(OPT)  md_property(InputObject, OPT, Bool32)
 	#define ONX_OPTION(X) \
-		md_property_get(InputObject, On##X, Object), \
-		md_property_set(InputObject, On##X, Variant)
+		md_member(InputObject, On##X, GET, (Ret, Object, RetVal)), \
+		md_member(InputObject, On##X, SET, (In_Opt, Variant, Value))
 	
 	md_member(InputObject, __New, CALL, (In_Opt, String, Options), (In_Opt, String, EndKeys), (In_Opt, String, MatchList)),
 	md_member(InputObject, KeyOpt, CALL, (In, String, Keys), (In, String, KeyOptions)),
@@ -55,12 +55,6 @@ InputObject::InputObject()
 {
 	input.ScriptObject = this;
 	SetBase(sPrototype);
-}
-
-
-Object *InputObject::Create()
-{
-	return new InputObject();
 }
 
 
@@ -157,18 +151,21 @@ FResult InputObject::get_On(IObject *&aRetVal, IObject *&aOn)
 }
 
 
-FResult InputObject::set_On(ExprTokenType &aValue, IObject *&aOn, int aValidParamCount)
+FResult InputObject::set_On(ExprTokenType *aValue, IObject *&aOn, int aValidParamCount)
 {
-	auto obj = TokenToObject(aValue);
-	if (obj)
+	IObject *obj = nullptr;
+	if (aValue && !TokenIsBlank(*aValue))
 	{
-		auto fr = ValidateFunctor(obj, aValidParamCount);
-		if (fr != OK)
-			return fr;
-		obj->AddRef();
+		if (obj = TokenToObject(*aValue))
+		{
+			auto fr = ValidateFunctor(obj, aValidParamCount);
+			if (fr != OK)
+				return fr;
+			obj->AddRef();
+		}
+		else
+			return FTypeError(_T("object"), *aValue);
 	}
-	else if (!TokenIsEmptyString(aValue))
-		return FTypeError(_T("object"), aValue);
 	auto prev = aOn;
 	aOn = obj;
 	if (prev)

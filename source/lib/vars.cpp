@@ -146,7 +146,6 @@ BIV_DECL_R(BIV_Clipboard)
 		aResultToken.marker_length = g_clip.Get(aResultToken.marker);
 		if (aResultToken.marker_length == CLIPBOARD_FAILURE)
 			aResultToken.SetExitResult(FAIL);
-		aResultToken.symbol = SYM_STRING;
 	}
 	g_clip.Close();
 }
@@ -461,9 +460,9 @@ BIV_DECL_R(BIV_MouseHookInstalled)
 
 BIV_DECL_R(BIV_Hotkey)
 {
-	if (aVarName[2] == 'M') // A_MaxHotkeysPerInterval
+	if (ctoupper(aVarName[2]) == 'M') // A_MaxHotkeysPerInterval
 		_f_return_i(g_MaxHotkeysPerInterval);
-	if (aVarName[8] == 'I') // A_HotkeyInterval
+	if (ctoupper(aVarName[8]) == 'I') // A_HotkeyInterval
 		_f_return_i(g_HotkeyThrottleInterval);
 	// A_HotkeyModifierTimeout
 	_f_return_i(g_HotkeyModifierTimeout);
@@ -935,7 +934,6 @@ BIV_DECL_R(BIV_ComSpec)
 	auto size_required = GetEnvironmentVariable(_T("ComSpec"), buf_temp, 0);
 	if (!TokenSetResult(aResultToken, nullptr, size_required)) // Avoids subtracting 1 to be conservative and to reduce code size (due to the need to otherwise check for zero and avoid subtracting 1 in that case).
 		return;
-	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker_length = GetEnvVarReliable(_T("ComSpec"), aResultToken.marker);
 }
 
@@ -1159,7 +1157,6 @@ BIV_DECL_R(BIV_LoopFileDir)
 		--total_length; // Omit the trailing slash.
 	if (!TokenSetResult(aResultToken, nullptr, total_length))
 		return;
-	aResultToken.symbol = SYM_STRING;
 	LPTSTR buf = aResultToken.marker;
 	tmemcpy(buf, lfs.orig_dir, lfs.orig_dir_length);
 	tmemcpy(buf + lfs.orig_dir_length, lfs.file_path_suffix, suffix_length);
@@ -1195,7 +1192,6 @@ void ReturnLoopFilePath(ResultToken &aResultToken, LPTSTR aPattern, LPTSTR aPref
 {
 	if (!TokenSetResult(aResultToken, nullptr, aPrefixLen + aSuffixLen))
 		return;
-	aResultToken.symbol = SYM_STRING;
 	LPTSTR buf = aResultToken.marker;
 	tmemcpy(buf, aPrefix, aPrefixLen);
 	tmemcpy(buf + aPrefixLen, aSuffix, aSuffixLen + 1); // +1 for \0.
@@ -1323,7 +1319,6 @@ BIV_DECL_R(BIV_LoopRegKey)
 	if (!TokenSetResult(aResultToken, nullptr, _tcslen(rootkey) + (*subkey != 0) + _tcslen(subkey)))
 		return;
 	_stprintf(aResultToken.marker, _T("%s%s%s"), rootkey, *subkey ? _T("\\") : _T(""), subkey);
-	aResultToken.symbol = SYM_STRING;
 }
 
 BIV_DECL_R(BIV_LoopRegName)

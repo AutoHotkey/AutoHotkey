@@ -5,7 +5,7 @@ class InputObject : public Object
 	input_type input;
 	
 	FResult get_On(IObject *&aRetVal, IObject *&aOn);
-	FResult set_On(ExprTokenType &aValue, IObject *&aOn, int aValidParamCount);
+	FResult set_On(ExprTokenType *aValue, IObject *&aOn, int aValidParamCount);
 	
 public:
 	IObject *onEnd = nullptr, *onKeyDown = nullptr, *onChar = nullptr, *onKeyUp = nullptr;
@@ -27,8 +27,6 @@ public:
 			onKeyUp->Release();
 	}
 
-	static Object *Create();
-	
 	FResult __New(optl<StrArg> aOptions, optl<StrArg> aEndKeys, optl<StrArg> aMatchList);
 	
 	FResult Start();
@@ -48,7 +46,7 @@ public:
 		FResult get_On##X(IObject *&aRetVal) { \
 			return get_On(aRetVal, on##X); \
 		} \
-		FResult set_On##X(ExprTokenType &aValue) { \
+		FResult set_On##X(ExprTokenType *aValue) { \
 			return set_On(aValue, on##X, N); \
 		}
 	ONX_OPTION(End, 1);

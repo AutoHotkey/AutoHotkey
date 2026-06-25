@@ -245,7 +245,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 	ExprTokenType **aParam_end = aParam + aParamCount, **next_param = aParam;
 
 	LPCVOID source_string; // This may hold an intermediate UTF-16 string in ANSI builds.
-	int source_length;
+	size_t source_length;
 	if (_f_callee_id == FID_StrPut)
 	{
 		// StrPut(String, Address[, Length][, Encoding])
@@ -253,7 +253,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		if (TokenToObject(source_token))
 			_f_throw_param(0, _T("String"));
 		source_string = (LPCVOID)TokenToString(source_token, _f_number_buf); // Safe to use _f_number_buf since StrPut won't use it for the result.
-		source_length = (int)((source_token.symbol == SYM_VAR) ? source_token.var->CharLength() : _tcslen((LPCTSTR)source_string));
+		source_length = (source_token.symbol == SYM_VAR) ? source_token.var->CharLength() : _tcslen((LPCTSTR)source_string);
 		++next_param; // Remove the String param from further consideration.
 	}
 	else
@@ -263,13 +263,10 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		source_length = 0;
 	}
 
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T(""); // Set default in case of early return.
-
 	IObject *buffer_obj;
 	LPVOID 	address;
 	size_t  max_bytes = SIZE_MAX;
-	int 	length = -1; // actual length
+	__int64	length = -1; // actual length
 	bool	length_is_max_size = false;
 	UINT 	encoding = UorA(CP_UTF16, CP_ACP); // native encoding
 
@@ -318,11 +315,11 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		{
 			if (TokenIsNumeric(**next_param)) // Length parameter
 			{
-				length = (int)TokenToInt64(**next_param);
+				length = TokenToInt64(**next_param);
 				if (!source_string) // StrGet
 				{
 					if (length == 0)
-						return; // Get 0 chars.
+						_f_return_empty; // Get 0 chars.
 					if (length < 0)
 						length = -length; // Retrieve exactly this many chars, even if there are null chars.
 					else
@@ -366,9 +363,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 	if (max_bytes != SIZE_MAX)
 	{
 		// Target is a Buffer object with known size, so limit length accordingly.
-		int max_chars = int(max_bytes >> int(encoding == CP_UTF16));
-		if (length > max_chars)
-			_f_throw_value(ERR_INVALID_LENGTH);
+		size_t max_chars = max_bytes >> int(encoding == CP_UTF16);
 		if (source_length > max_chars)
 			_f_throw_param(1);
 		if (length == -1)
@@ -376,11 +371,13 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 			length = max_chars;
 			length_is_max_size = true;
 		}
+		else if ((UINT64)length > max_chars)
+			_f_throw_value(ERR_INVALID_LENGTH);
 	}
 
 	if (source_string) // StrPut
 	{
-		int char_count; // Either bytes or characters, depending on the target encoding.
+		size_t char_count; // Either bytes or characters, depending on the target encoding.
 		aResultToken.symbol = SYM_INTEGER; // Most paths below return an integer.
 
 		if (!source_length)
@@ -405,7 +402,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 			{
 				// Check for sufficient buffer space.  Cast to UINT and compare unsigned values: if length is
 				// -1 it should be interpreted as a very large unsigned value, in effect bypassing this check.
-				if ((UINT)source_length <= (UINT)length)
+				if (source_length <= (size_t)length)
 				{
 					if (source_length == length)
 						// Exceptional case: caller doesn't want a null-terminator (or passed this length in error).
@@ -431,7 +428,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 				// See similar section below for comments.
 				if (length <= 0)
 				{
-					char_count = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)source_string, source_length, NULL, 0) + 1;
+					char_count = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)source_string, (int)source_length, NULL, 0) + 1;
 					if (length == 0)
 					{
 						aResultToken.value_int64 = char_count * (1 + (encoding == CP_UTF16));
@@ -439,31 +436,38 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 					}
 					length = char_count;
 				}
-				char_count = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)source_string, source_length, (LPWSTR)address, length);
+				char_count = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)source_string, (int)source_length, (LPWSTR)address, length);
 				if (char_count && char_count < length)
 					((LPWSTR)address)[char_count++] = '\0';
 			}
 			else // encoding != CP_UTF16
 			{
 				// Convert native ANSI string to UTF-16 first.
-				CStringWCharFromChar wide_buf((LPCSTR)source_string, source_length, CP_ACP);				
+				CStringWCharFromChar wide_buf((LPCSTR)source_string, (int)source_length, CP_ACP);				
 				source_string = wide_buf.GetString();
 				source_length = wide_buf.GetLength();
 #endif
+				// Tests confirmed that WideCharToMultiByte allows source_length == INT_MAX,
+				// and any result that would require a buffer larger than INT_MAX produces
+				// either ERROR_INVALID_PARAMETER or ERROR_INSUFFICIENT_BUFFER.
+				if (source_length > INT_MAX)
+					_f_throw_param(0); // Avoid implicitly truncating the string.
+				int src_count = (int)source_length;
+				int buf_count = (int)min(length, (__int64)INT_MAX); // Use maximum allowable size rather than int truncation.
 				// UTF-8 does not support this flag.  Although the check further below would probably
 				// compensate for this, UTF-8 is probably common enough to leave this exception here.
 				DWORD flags = (encoding == CP_UTF8) ? 0 : WC_NO_BEST_FIT_CHARS;
 				if (length <= 0) // -1 or 0
 				{
 					// Determine required buffer size.
-					char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, NULL, 0, NULL, NULL);
+					char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, src_count, NULL, 0, NULL, NULL);
 					if (!char_count) // Above has ensured source is not empty, so this must be an error.
 					{
 						if (GetLastError() == ERROR_INVALID_FLAGS)
 						{
 							// Try again without flags.  MSDN lists a number of code pages for which flags must be 0, including UTF-7 and UTF-8 (but UTF-8 is handled above).
 							flags = 0; // Must be set for this call and the call further below.
-							char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, NULL, 0, NULL, NULL);
+							char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, src_count, NULL, 0, NULL, NULL);
 						}
 						if (!char_count)
 							_f_throw_win32();
@@ -475,16 +479,16 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 						return;
 					}
 					// Assume there is sufficient buffer space and hope for the best:
-					length = char_count;
+					buf_count = (int)char_count;
 				}
 				// Convert to target encoding.
-				char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, (LPSTR)address, length, NULL, NULL);
+				char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, src_count, (LPSTR)address, buf_count, NULL, NULL);
 				if (!char_count && flags && GetLastError() == ERROR_INVALID_FLAGS) // See the similar check above for comments; this one covers cases where length was specified.
-					char_count = WideCharToMultiByte(encoding, 0, (LPCWSTR)source_string, source_length, (LPSTR)address, length, NULL, NULL);
+					char_count = WideCharToMultiByte(encoding, 0, (LPCWSTR)source_string, src_count, (LPSTR)address, buf_count, NULL, NULL);
 				// Since above did not null-terminate, check for buffer space and null-terminate if there's room.
 				// It is tempting to always null-terminate (potentially replacing the last byte of data),
 				// but that would exclude this function as a means to copy a string into a fixed-length array.
-				if (char_count && char_count < length)
+				if (char_count && (int)char_count < buf_count)
 					((LPSTR)address)[char_count++] = '\0';
 				// else no space to null-terminate; or conversion failed.
 #ifndef UNICODE
@@ -505,9 +509,9 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 			// would convert more than necessary and we'd still have to recalculate the
 			// length.  So find the exact length up front:
 			if (encoding == CP_UTF16)
-				length = (int)wcsnlen((LPWSTR)address, length);
+				length = wcsnlen((LPWSTR)address, (size_t)length);
 			else
-				length = (int)strnlen((LPSTR)address, length);
+				length = strnlen((LPSTR)address, (size_t)length);
 		}
 		if (encoding != UorA(CP_UTF16, CP_ACP))
 		{
@@ -518,10 +522,15 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 				_f_return_empty;
 #ifdef UNICODE
 			// Convert multi-byte encoded string to UTF-16.
-			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, NULL, 0);
+			// Avoid truncating to (int)length characters since it wouldn't produce intuitive results.
+			// In theory, capping at INT_MAX could let us operate up to the limit of MultiByteToWideChar,
+			// but in practice it will not return a truncated string, because MultiByteToWideChar sets
+			// ERROR_INVALID_PARAMETER whenever length >= INT_MAX/2 (found through testing, not documented).
+			int src_count = (int)min(length, INT_MAX);
+			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, src_count, NULL, 0);
 			if (!TokenSetResult(aResultToken, NULL, conv_length)) // DO NOT SUBTRACT 1, conv_length might not include a null-terminator.
 				return; // Out of memory.
-			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, aResultToken.marker, conv_length);
+			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, src_count, aResultToken.marker, conv_length);
 #else
 			CStringW wide_buf;
 			// If the target string is not UTF-16, convert it to that first.
@@ -552,14 +561,13 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		else if (length == -1)
 		{
 			// Return this null-terminated string, no conversion necessary.
-			aResultToken.marker = (LPTSTR) address;
-			aResultToken.marker_length = _tcslen(aResultToken.marker);
+			aResultToken.SetValue((LPTSTR)address);
 		}
 		else
 		{
 			// No conversion necessary, but we might not want the whole string.
 			// Copy and null-terminate the string; some callers might require it.
-			TokenSetResult(aResultToken, (LPCTSTR)address, length);
+			TokenSetResult(aResultToken, (LPCTSTR)address, (size_t)length);
 		}
 	}
 }

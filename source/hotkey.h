@@ -79,6 +79,16 @@ inline int InputLevelFromInfo(ULONG_PTR aExtraInfo)
 	return SendLevelMax + 1;
 }
 
+inline UCHAR InputLevelMaskFromInfo(ULONG_PTR aExtraInfo)
+{
+	// Level 0 is ignored and therefore doesn't need a bit.
+	// Levels 1 through 7 get a unique bit to distinguish them from each other and physical input.
+	// Levels 8 and above get the same bit as physical/non-AutoHotkey input.
+	if (aExtraInfo >= KEY_IGNORE_LEVEL(7) && aExtraInfo <= KEY_IGNORE_LEVEL(1))
+		return (UCHAR)(1 << (KEY_IGNORE_LEVEL(0) - aExtraInfo));
+	return 1;
+}
+
 
 
 struct HotkeyVariant
@@ -187,10 +197,8 @@ public:
 	#define NO_SUPPRESS_PREFIX 0x01               // Bitwise: Bit #1
 	#define AT_LEAST_ONE_VARIANT_HAS_TILDE 0x02   // Bitwise: Bit #2
 	#define AT_LEAST_ONE_VARIANT_LACKS_TILDE 0x04 // Bitwise: Bit #3
-	#define NO_SUPPRESS_NEXT_UP_EVENT 0x08        // Bitwise: Bit #4
 	#define AT_LEAST_ONE_COMBO_HAS_TILDE 0x10
 	#define NO_SUPPRESS_SUFFIX_VARIES (AT_LEAST_ONE_VARIANT_HAS_TILDE | AT_LEAST_ONE_VARIANT_LACKS_TILDE) // i.e. a hotkey that has variants of both types.
-	#define NO_SUPPRESS_STATES NO_SUPPRESS_NEXT_UP_EVENT  // This is a bitwise union (currently only one item) of those of the above that represent a the key's dynamically changing state as the user types.
 	UCHAR mNoSuppress;  // Uses the flags above.  Normally 0, but can be overridden by using the hotkey tilde (~) prefix).
 	bool mKeybdHookMandatory;
 	bool mAllowExtraModifiers;  // False if the hotkey should not fire when extraneous modifiers are held down.
@@ -218,7 +226,7 @@ public:
 	static Hotkey *AddHotkey(IObject *aCallback, HookActionType aHookAction, LPCTSTR aName, UCHAR aNoSuppress);
 	HotkeyVariant *FindVariant();
 	HotkeyVariant *AddVariant(IObject *aCallback, UCHAR aNoSuppress);
-	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress);
+	static bool PrefixHasEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress);
 	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL, ULONG_PTR aExtraInfo = 0, LPTSTR aSingleChar = NULL);
 	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
 		, bool &aFireWithNoSuppress, LPTSTR aSingleChar);

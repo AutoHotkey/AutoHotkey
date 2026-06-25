@@ -19,17 +19,26 @@ GNU General Public License for more details.
 #include "globaldata.h"
 #include "application.h"
 #include "script_func_impl.h"
+#include "MdFunc.h"
 
 
 
 #ifdef ENABLE_REGISTERCALLBACK
+
+struct RCArgType
+{
+	MdType type;
+	Object *proto;
+};
+
+
 struct RCCallbackFunc // Used by BIF_CallbackCreate() and related.
 {
 #ifdef WIN32_PLATFORM
 	ULONG data1;	//E8 00 00 00
 	ULONG data2;	//00 8D 44 24
 	ULONG data3;	//08 50 FF 15
-	UINT_PTR (CALLBACK **callfuncptr)(UINT_PTR*, char*);
+	UINT64 (CALLBACK **callfuncptr)(UINT_PTR*, char*);
 	ULONG data4;	//59 84 C4 nn
 	USHORT data5;	//FF E1
 #endif
@@ -37,22 +46,30 @@ struct RCCallbackFunc // Used by BIF_CallbackCreate() and related.
 	UINT64 data1; // 0xfffffffff9058d48
 	UINT64 data2; // 0x9090900000000325
 	void (*stub)();
-	UINT_PTR (CALLBACK *callfuncptr)(UINT_PTR*, char*);
+	UINT64 (CALLBACK *callfuncptr)(UINT_PTR*, char*);
 #endif
 	//code ends
 	UCHAR actual_param_count; // This is the actual (not formal) number of parameters passed from the caller to the callback. Kept adjacent to the USHORT above to conserve memory due to 4-byte struct alignment.
 #define CBF_CREATE_NEW_THREAD	1
 #define CBF_PASS_PARAMS_POINTER	2
+#define CBF_HAS_ARG_TYPES		4
 	UCHAR flags; // Kept adjacent to above to conserve memory due to 4-byte struct alignment in 32-bit builds.
 	IObject *func; // The function object to be called whenever the callback's caller calls callfuncptr.
 };
+
+
+static float ReturnFloat_(float f) { return f; }
+static double ReturnDouble_(double f) { return f; }
+static void ReturnFloat(float f) { reinterpret_cast<void (*)(float)>(&ReturnFloat_)(f); }
+static void ReturnDouble(double f) { reinterpret_cast<void (*)(double)>(&ReturnDouble_)(f); }
+
 
 #ifdef _WIN64
 extern "C" void RegisterCallbackAsmStub();
 #endif
 
 
-UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used by BIF_RegisterCallback().
+UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used by BIF_RegisterCallback().
 // JGR: On Win32 parameters are always 4 bytes wide. The exceptions are functions which work on the FPU stack
 // (not many of those). Win32 is quite picky about the stack always being 4 byte-aligned, (I have seen only one
 // application which defied that and it was a patched ported DOS mixed mode application). The Win32 calling
@@ -64,6 +81,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 #else
 	RCCallbackFunc &cb = *((RCCallbackFunc*) address);
 #endif
+	auto arg_type = (cb.flags & CBF_HAS_ARG_TYPES) ? (RCArgType*)(&cb + 1) : nullptr;
 
 	BOOL pause_after_execute;
 
@@ -118,27 +136,167 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 
 	g_script.mLastPeekTime = GetTickCount(); // Somewhat debatable, but might help minimize interruptions when the callback is called via message (e.g. subclassing a control; overriding a WindowProc).
 
-	__int64 number_to_return;
-	FuncResult result_token;
-	ExprTokenType *param, one_param;
-	int param_count;
+	UINT64 number_to_return = 0;
+	ExprTokenType **param, one_param, *one_param_ptr;
+	int param_count = 0;
+	int ret_size = 0;
+	void *ret_ptr = nullptr;
+	MdType ret_type = MdType::Void;
+	bool aborted = false;
 
 	if (cb.flags & CBF_PASS_PARAMS_POINTER)
 	{
 		param_count = 1;
-		param = &one_param;
+		param = &one_param_ptr;
+		one_param_ptr = &one_param;
 		one_param.SetValue((UINT_PTR)params);
 	}
 	else
 	{
-		param_count = cb.actual_param_count;
-		param = (ExprTokenType *)_alloca(param_count * sizeof(ExprTokenType));
-		for (int i = 0; i < param_count; ++i)
-			param[i].SetValue((UINT_PTR)params[i]);
+		param = (ExprTokenType **)_alloca(cb.actual_param_count * sizeof(ExprTokenType *));
+		if (arg_type) // v2.1: Convert incoming parameters to previously specified types.
+		{
+			UINT_PTR *next_param = params;
+			
+			auto &ret = arg_type[cb.actual_param_count];
+			if (ret.type == MdType::Struct)
+				ret_size = (int)ret.proto->StructSize();
+			if (ret_size < 3 || ret_size == 4 || ret_size == 8)
+				ret_ptr = &number_to_return;
+			else
+			{
+				ret_ptr = *(void**)next_param; // First real arg is a pointer to the return struct.
+				number_to_return = (UINT_PTR)ret_ptr;
+				next_param++;
+			}
+
+			for (; param_count < cb.actual_param_count; ++param_count, ++next_param)
+			{
+				if (arg_type[param_count].type == MdType::Struct)
+				{
+					FuncResult &result_token = *(new (_alloca(sizeof(FuncResult))) FuncResult);
+					param[param_count] = &result_token;
+					// Create a struct Object as a by-value copy of the parameter, to avoid aliasing
+					// stack memory if the script retains a reference after the function returns.
+#ifdef WIN32_PLATFORM
+					auto p = (UINT_PTR)next_param;
+#else
+					auto ss = arg_type[param_count].proto->StructSize();
+					// For struct parameters of sizes other than those below, x64 passes them by address.
+					auto p = (ss < 3 || ss == 4 || ss == 8) ? (UINT_PTR)next_param : *next_param;
+#endif
+					auto obj = Object::CreateStructCopyNoDelete(arg_type[param_count].proto, p);
+					if (!obj)
+					{
+						aborted = true;
+						break;
+					}
+					auto result = obj->Invoke(result_token, IT_GET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(obj), nullptr, 0);
+					if (result == FAIL || result == EARLY_EXIT)
+					{
+						aborted = true;
+						break;
+					}
+					if (result != INVOKE_NOT_HANDLED)
+						obj->Release();
+					else
+						result_token.SetValue(obj);
+#ifdef WIN32_PLATFORM
+					// Adjust for structs larger than 4 bytes passed by value.
+					next_param += (((int)arg_type[param_count].proto->StructSize() + 3) >> 2) - 1;
+#endif
+				}
+				else
+				{
+					param[param_count] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+					TypedPtrToToken(arg_type[param_count].type, next_param, *param[param_count]);
+#ifdef WIN32_PLATFORM
+					switch (arg_type[param_count].type)
+					{
+					case MdType::Float64:
+					case MdType::Int64:
+					case MdType::UInt64:
+						++next_param; // An additional 4 bytes.
+					}
+#endif
+				}
+			}
+		}
+		else
+		{
+			param_count = cb.actual_param_count;
+			for (int i = 0; i < param_count; ++i)
+			{
+				param[i] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+				param[i]->SetValue((UINT_PTR)params[i]);
+			}
+		}
 	}
 	
-	CallMethod(cb.func, cb.func, nullptr, param, param_count, &number_to_return);
-	// CallMethod()'s own return value is ignored because it wouldn't affect the handling below.
+	FuncResult result_token;
+	if (!aborted)
+	{
+		ExprTokenType this_token(cb.func);
+		auto result = cb.func->Invoke(result_token, IT_CALL, nullptr, this_token, param, param_count);
+		if (result == INVOKE_NOT_HANDLED)
+			result = result_token.UnknownMemberError(this_token, IT_CALL, nullptr);
+		aborted = result == FAIL || result == EARLY_EXIT;
+		if (!arg_type)
+		{
+			// UINT_PTR and not UINT64, to preserve documented behaviour on 32-bit builds.
+			number_to_return = (UINT_PTR)TokenToInt64(result_token);
+		}
+		else if (!(result == FAIL || result == EARLY_EXIT))
+		{
+			auto &ret = arg_type[cb.actual_param_count];
+			ret_type = ret.type;
+			if (ret_type == MdType::Struct)
+			{
+				Object *obj;
+				auto result_obj = TokenToObject(result_token);
+				if (result_obj && result_obj->IsOfType(ret.proto))
+					obj = (Object*)result_obj;
+				else
+				{
+					FuncResult fr;
+					auto result = Object::CreateStruct(fr, ret.proto);
+					if (result == OK)
+					{
+						ASSERT(fr.symbol == SYM_OBJECT && dynamic_cast<Object*>(fr.object));
+						// New has set fr.object=obj but has not called AddRef, so don't call Free.
+						obj = (Object*)fr.object;
+						fr.InitInvokeRetVal();
+						ExprTokenType *prm = &result_token;
+						// Invoke __Value as a "conversion operator".
+						result = obj->Invoke(fr, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS, _T("__Value"), ExprTokenType(obj), &prm, 1);
+						fr.Free();
+						if (result == INVOKE_NOT_HANDLED) // Conversion not handled; report the error.
+						{
+							auto classname = ret.proto->GetOwnPropString(_T("__Class"));
+							TypeError(classname ? classname : _T("Struct"), fr);
+						}
+					}
+					//else an error was already raised.  Copy obj's data anyway (possibly all zeroes),
+					// rather than leaving the return value undefined.
+				}
+				// Copy returned struct by value into the caller-provided space.
+				// obj can be a derived struct class, in which case it must be truncated.
+				memcpy(ret_ptr, (void*)obj->DataPtr(), ret.proto->StructSize());
+				if (obj != result_obj)
+					obj->Release();
+			}
+			else if (ret_type != MdType::Void)
+			{
+				SetValueOfTypeAtPtr(ret_type, ret_ptr, result_token, result_token);
+			}
+		}
+		result_token.Free();
+	}
+
+	if (arg_type)
+		while (--param_count >= 0)
+			if (arg_type[param_count].type == MdType::Struct)
+				((FuncResult *)param[param_count])->Free();
 	
 	if (cb.flags & CBF_CREATE_NEW_THREAD)
 	{
@@ -162,12 +320,19 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		}
 	}
 
-	return (INT_PTR)number_to_return;
+	// Use some hackery to set FPU register immediately prior to return.
+	// It may have already been set as a side-effect of SetValueOfTypeAtPtr,
+	// but there are cases where it can be overwritten before this point.
+	if (ret_type == MdType::Float32)
+		ReturnFloat(*(float*)ret_ptr);
+	else if (ret_type == MdType::Float64)
+		ReturnDouble(*(double*)ret_ptr);
+	return number_to_return;
 }
 
 
 
-bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> aParamCount, UINT_PTR &aRetVal)
+bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, ExprTokenType *aParams, UINT_PTR &aRetVal)
 // Returns: Address of callback procedure.
 // Parameters:
 // 1: Name of the function to be called when the callback routine is executed.
@@ -186,11 +351,22 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 	bool require_param_count = false;
 #endif
 
-	bool params_specified = aParamCount.has_value();
-	if (pass_params_pointer && require_param_count && !params_specified)
+	bool params_specified = aParams != nullptr;
+	Array *param_types = nullptr; // v2.1: Pass an array of parameter types.
+	IObjectRef obj_ref;
+	if (params_specified && !TokenIsNumeric(*aParams))
+	{
+		param_types = Array::FromEnumerable(*aParams);
+		if (!param_types)
+			return FR_FAIL;
+		obj_ref = param_types;
+		param_types->Release();
+	}
+	int actual_param_count = param_types ? (int)param_types->Length() - 1 : aParams ? (int)TokenToInt64(*aParams) : 0;
+	if (pass_params_pointer && (param_types || require_param_count && !params_specified)
+		|| (actual_param_count < 0 || actual_param_count > 255))
 		return FR_E_ARG(2);
 
-	int actual_param_count = aParamCount.value_or(0);
 	ResultToken result_token; // Just used for .result.
 	auto fr = ValidateFunctor(func
 		, pass_params_pointer ? 1 : actual_param_count // Count of script parameters being passed.
@@ -201,10 +377,7 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 	
 #ifdef WIN32_PLATFORM
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
-	{
-		func->Release();
 		return FR_E_ARG(2);
-	}
 #endif
 
 	// GlobalAlloc() and dynamically-built code is the means by which a script can have an unlimited number of
@@ -218,12 +391,65 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 	// to allow the callback to execute.  MSDN currently says only this about the topic in the documentation
 	// for GlobalAlloc:  "To execute dynamically generated code, use the VirtualAlloc function to allocate
 	//						memory and the VirtualProtect function to grant PAGE_EXECUTE access."
-	RCCallbackFunc *callbackfunc=(RCCallbackFunc*) GlobalAlloc(GMEM_FIXED,sizeof(RCCallbackFunc));	//allocate structure off process heap, automatically RWE and fixed.
+	SIZE_T rc_size = sizeof(RCCallbackFunc) + (param_types ? param_types->Length() * sizeof(RCArgType) : 0);
+	RCCallbackFunc *callbackfunc = (RCCallbackFunc*) GlobalAlloc(GMEM_FIXED, rc_size);	//allocate structure off process heap, automatically RWE and fixed.
 	if (!callbackfunc)
 		return FR_E_OUTOFMEM;
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
+	RCArgType *at = nullptr;
+
+	if (param_types) // v2.1: Pass an array of parameter types.
+	{
+		at = (RCArgType*)(callbackfunc + 1);
+		ExprTokenType v;
+		for (UINT i = 0; i < param_types->Length(); ++i)
+		{
+			param_types->ItemToToken(i, v);
+			at[i].type = MdType::Void;
+			at[i].proto = nullptr;
+			if (v.symbol == SYM_OBJECT && v.object->IsOfType(Object::sPrototype))
+			{
+				auto cls = (Object*)v.object;
+				auto proto = cls->ClassGetPrototype();
+				if (proto && proto->IsDerivedFrom(Object::sStructPrototype))
+				{
+					at[i].type = proto->GetStructMdType();
+					if (at[i].type == MdType::Void)
+					{
+						at[i].type = MdType::Struct;
+						at[i].proto = (Object*)proto;
+					}
+					continue;
+				}
+			}
+			else if (v.symbol == SYM_STRING && !_tcsicmp(v.marker, _T("Void")))
+			{
+				if (i + 1 == param_types->Length())
+					continue;
+			}
+			GlobalFree((HGLOBAL)callbackfunc);
+			return FR_E_ARG(2);
+		}
+		for (UINT i = 0; i < param_types->Length(); ++i)
+			if (at[i].proto)
+				at[i].proto->AddRef();
+	}
 
 #ifdef WIN32_PLATFORM
+	int param_slot_count = actual_param_count;
+	if (at && !use_cdecl) // v2.1: Adjust for structs larger than 4 bytes passed by value.
+	{
+		for (int i = 0; i < actual_param_count; ++i)
+			if (at[i].proto)
+				param_slot_count += (((int)at[i].proto->LockStructSize() + 3) >> 2) - 1;
+		if (at[actual_param_count].proto) // Return type is a struct.
+		{
+			int ret_size = (int)at[actual_param_count].proto->LockStructSize();
+			if (!(ret_size < 3 || ret_size == 4 || ret_size == 8)) // Not returned by register.
+				++param_slot_count;
+		}
+	}
+
 	cb.data1=0xE8;       // call +0 -- E8 00 00 00 00 ;get eip, stays on stack as parameter 2 for C function (char *address).
 	cb.data2=0x24448D00; // lea eax, [esp+8] -- 8D 44 24 08 ;eax points to params
 	cb.data3=0x15FF5008; // push eax -- 50 ;eax pushed on stack as parameter 1 for C stub (UINT *params)
@@ -239,11 +465,11 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 	// Typically the latter is used when calling imported functions, etc., as only the pointers (import table),
 	// need to be adjusted, not the calls themselves...
 
-	static UINT_PTR (CALLBACK *funcaddrptr)(UINT_PTR*, char*) = RegisterCallbackCStub; // Use fixed absolute address of pointer to function, instead of varying relative offset to function.
+	static auto funcaddrptr = &RegisterCallbackCStub; // Use fixed absolute address of pointer to function, instead of varying relative offset to function.
 	cb.callfuncptr = &funcaddrptr; // xxxx: Address of C stub.
 
 	cb.data4=0xC48359 // pop ecx -- 59 ;return address... add esp, xx -- 83 C4 xx ;stack correct (add argument to add esp, nn for stack correction).
-		+ (use_cdecl ? 0 : actual_param_count<<26);
+		+ (use_cdecl ? 0 : param_slot_count << 26);
 
 	cb.data5=0xE1FF; // jmp ecx -- FF E1 ;return
 #endif
@@ -270,6 +496,8 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 		cb.flags |= CBF_CREATE_NEW_THREAD;
 	if (pass_params_pointer)
 		cb.flags |= CBF_PASS_PARAMS_POINTER;
+	if (param_types)
+		cb.flags |= CBF_HAS_ARG_TYPES;
 
 	// If DEP is enabled (and sometimes when DEP is apparently "disabled"), we must change the
 	// protection of the page of memory in which the callback resides to allow it to execute:
@@ -287,6 +515,13 @@ bif_impl FResult CallbackFree(UINT_PTR aCallback)
 	RCCallbackFunc *callbackfunc = (RCCallbackFunc *)aCallback;
 	callbackfunc->func->Release();
 	callbackfunc->func = NULL; // To help detect bugs.
+	if (callbackfunc->flags & CBF_HAS_ARG_TYPES)
+	{
+		auto at = (RCArgType*)(callbackfunc + 1);
+		for (int i = 0; i <= callbackfunc->actual_param_count; ++i)
+			if (at[i].proto)
+				at[i].proto->Release();
+	}
 	GlobalFree(callbackfunc);
 	return OK;
 }

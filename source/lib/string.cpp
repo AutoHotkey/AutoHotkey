@@ -343,7 +343,6 @@ BIF_DECL(BIF_StrCase)
 	// Make a modifiable copy of the string to return:
 	if (!TokenSetResult(aResultToken, contents, length))
 		return;
-	aResultToken.symbol = SYM_STRING;
 	contents = aResultToken.marker;
 
 	if (_f_callee_id == FID_StrLower)
@@ -1055,7 +1054,6 @@ BIF_DECL(BIF_Sort)
 	// Allocate space to store the result.
 	if (!TokenSetResult(aResultToken, NULL, aContents_length))
 		goto end;
-	aResultToken.symbol = SYM_STRING;
 
 	// Set default in case original last item is still the last item, or if last item was omitted due to being a dupe:
 	size_t i, item_count_minus_1 = item_count - 1;
@@ -1533,7 +1531,6 @@ BIF_DECL(BIF_Format)
 		// Finished first pass (calculating required size).
 		if (!TokenSetResult(aResultToken, NULL, size))
 			return;
-		aResultToken.symbol = SYM_STRING;
 		target = aResultToken.marker;
 	}
 }

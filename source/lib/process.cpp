@@ -206,8 +206,12 @@ bif_impl FResult Run(StrArg aTarget, optl<StrArg> aWorkingDir, optl<StrArg> aOpt
 	HANDLE hprocess;
 	auto result = g_script.ActionExec(aTarget, nullptr, aWorkingDir.value_or_null(), true
 		, aOptions.value_or_null(), &hprocess, true, true);
-	if (aOutPID && hprocess)
-		aOutPID->SetValue((UINT)GetProcessId(hprocess));
+	if (hprocess)
+	{
+		if (aOutPID)
+			aOutPID->SetValue((UINT)GetProcessId(hprocess));
+		CloseHandle(hprocess);
+	}
 	return result ? OK : FR_FAIL;
 }
 

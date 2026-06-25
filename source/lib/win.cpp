@@ -1131,7 +1131,6 @@ bif_impl FResult ListViewGetContent(optl<StrArg> aOpt, CONTROL_PARAMETERS_DECL, 
 		FreeInterProcMem(handle, p_remote_lvi);
 		return aResultToken.Exited() ? FR_FAIL : FR_ABORTED;
 	}
-	aResultToken.symbol = SYM_STRING;
 	
 	LPTSTR contents = aResultToken.marker;
 	LRESULT capacity = total_length; // LRESULT avoids signed vs. unsigned compiler warnings.

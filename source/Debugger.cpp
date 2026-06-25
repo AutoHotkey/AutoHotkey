@@ -171,7 +171,7 @@ void Debugger::SetBreakpointForLineGroup(Line *line, Breakpoint *bp)
 		auto fl = func.mJumpToLine;
 		// Fat arrow functions are either removed from the main line list or come after the
 		// line which contains them, in which case our caller would have found the latter.
-		if (fl->mLineNumber == line_no && fl->mFileIndex == file_no && func.mIsFuncExpression)
+		if (fl->mLineNumber == line_no && fl->mFileIndex == file_no && func.IsInExpression())
 			fl->mBreakpoint = bp;
 		// After the script loads, a function's parameter default initializers precede mJumpToLine.
 		for (fl = fl->mPrevLine
@@ -342,6 +342,9 @@ int Debugger::ProcessCommands(LPCSTR aBreakReason)
 	// debugger, since it isn't executing within or being called by the current block.
 	auto excptmode = g->ExcptMode;
 	g->ExcptMode = EXCPTMODE_DEBUGGER;
+	// Line::sDerefBuf might be in use for passing a return value if we're currently
+	// stepping out of a function.  This ensures it won't be overwritten during eval:
+	PRIVATIZE_S_DEREF_BUF;
 
 	// Disable notification of READ readiness and reset socket to synchronous mode.
 	u_long zero = 0;
@@ -441,6 +444,7 @@ int Debugger::ProcessCommands(LPCSTR aBreakReason)
 	}
 	ASSERT(mInternalState != DIS_Break);
 	mProcessingCommands = false;
+	DEPRIVATIZE_S_DEREF_BUF;
 	g->ExcptMode = excptmode;
 	// Register for message-based notification of data arrival.  If a command
 	// is received asynchronously, control will be passed back to the debugger
@@ -1596,7 +1600,7 @@ int Debugger::ParsePropertyName(LPWSTR aNamePtr, int aDepth, int aVarScope, Expr
 					// `property_set -n <exception> --` is our non-standard way to "clear the exception" (suppress the error dialog).
 					if (aSetValue)
 					{
-						if (!TokenIsEmptyString(*aSetValue))
+						if (!TokenIsBlank(*aSetValue))
 						{
 							err = DEBUGGER_E_INVALID_OPTIONS;
 							break;
@@ -1678,7 +1682,7 @@ int Debugger::ParsePropertyName(LPWSTR aNamePtr, int aDepth, int aVarScope, Expr
 			else if (inv->outer && (c == ',' || c == inv->end_char))
 			{
 				// Missing parameter or empty parameter list.
-				lastval.symbol = SYM_MISSING;
+				lastval.Unset();
 			}
 			else
 				break; // Syntax error; err will be set due to *cp != 0.
@@ -1995,7 +1999,7 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 		prop.kind = PropValue;
 		if (prop.value.symbol == SYM_OBJECT)
 			prop.value.object->Release();
-		prop.value.symbol = SYM_MISSING;
+		prop.value.Unset();
 	}
 	//else var and field were set by the called function.
 
@@ -2844,7 +2848,7 @@ void Debugger::Buffer::WriteFileURI(LPCWSTR aPath)
 	int c;
 	for (auto ptr = aPath; c = *ptr; ++ptr)
 	{
-		if (cisalnum(c) || strchr("-_.!~*()/", c))
+		if (cisalnum(c) || _tcschr(_T("-_.!~*'()/"), c))
 		{
 			mData[mDataUsed++] = (char)c;
 		}

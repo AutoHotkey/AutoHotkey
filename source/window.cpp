@@ -131,7 +131,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow, bool aBackgroundActivation)
 
 	// This causes more trouble than it's worth.  In fact, the AutoIt author said that
 	// he didn't think it even helped with the IE 5.5 related issue it was originally
-	// intended for, so it seems a good idea to NOT to this, especially since I'm 80%
+	// intended for, so it seems a good idea to NOT do this, especially since I'm 80%
 	// sure it messes up the Z-order in certain circumstances, causing an unexpected
 	// window to pop to the foreground immediately after a modal dialog is dismissed:
 	//BringWindowToTop(aTargetWindow); // AutoIt3: IE 5.5 related hack.
@@ -248,7 +248,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow, bool aBackgroundActivation)
 		// perhaps due to menu weirdness triggered by the alt key."
 		// AutoIt3: OK, this is not funny - bring out the extreme measures (usually for 2000/XP).
 		// Simulate two single ALT keystrokes.  UPDATE: This hardly ever succeeds.  Usually when
-		// it fails, the foreground window is NULL (none).  I'm going to try an Win-tab instead,
+		// it fails, the foreground window is NULL (none).  I'm going to try a Win-tab instead,
 		// which selects a task bar button.  This seems less invasive than doing an alt-tab
 		// because not only doesn't it activate some other window first, it also doesn't appear
 		// to change the Z-order, which is good because we don't want the alt-tab order
@@ -286,7 +286,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow, bool aBackgroundActivation)
 	// having the input focus and being the foreground window, but not actually
 	// being visible (even though IsVisible() and IsIconic() say it is)!  It may
 	// help with other conditions under which this function would otherwise fail.
-	// Here's the way the repeat the failure to test how the absence of this line
+	// Here's the way to repeat the failure to test how the absence of this line
 	// affects things, at least on my XP SP1 system:
 	// y::MsgBox, test
 	// #e::(some hotkey that activates Windows Explorer)
@@ -331,7 +331,7 @@ HWND WinClose(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, int aTime
 		// split-second timing issues.
 	else if (*aTitle || *aText || *aExcludeTitle || *aExcludeText)
 	{
-		// Since EnumWindows() is *not* guaranteed to start proceed in z-order from topmost to
+		// Since EnumWindows() is *not* guaranteed to proceed in z-order from topmost to
 		// bottommost (though it almost certainly does), do it this way to ensure that the
 		// topmost window is closed in preference to any other windows with the same <aTitle>
 		// and <aText>:
@@ -375,7 +375,7 @@ HWND WinClose(HWND aWnd, int aTimeToWaitForClose, bool aKillIfHung)
 		// as minimizing to the tray.  Such apps might shut down entirely if they received
 		// a true WM_CLOSE, which is probably not what the user would want.
 		// Update: Switched back to using WM_CLOSE so that instances of AutoHotkey
-		// can be terminated via another instances use of the WinClose command:
+		// can be terminated via another instance's use of the WinClose command:
 		//PostMessage(aWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
 		PostMessage(aWnd, WM_CLOSE, 0, 0);
 
@@ -405,7 +405,7 @@ HWND WinClose(HWND aWnd, int aTimeToWaitForClose, bool aKillIfHung)
 
 	// Remember that once the first call to MsgSleep() is done, a new hotkey subroutine
 	// may fire and suspend what we're doing here.  Such a subroutine might also overwrite
-	// the values our params, some of which may be in the deref buffer.  So be sure not
+	// the values of our params, some of which may be in the deref buffer.  So be sure not
 	// to refer to those strings once MsgSleep() has been done, below:
 
 	// This is the same basic code used for WinWaitClose and such:
@@ -455,15 +455,10 @@ HWND WinActive(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR 
 	if (!(*aTitle || *aText || *aExcludeTitle || *aExcludeText)) // Use the "last found" window.
 		return (fore_win == GetValidLastUsedWindow(aSettings)) ? fore_win : NULL;
 
-	// Only after the above check should the below be done.  This is because "IfWinActive" (with no params)
-	// should be "true" if one of the script's GUI windows is active:
-	if (!aSettings.DetectWindow(fore_win)) // In this case, the caller's window can't be active.
-		return NULL;
-
 	WindowSearch ws;
 	ws.SetCandidate(fore_win);
 
-	if (ws.SetCriteria(aSettings, aTitle, aText, aExcludeTitle, aExcludeText) && ws.IsMatch()) // aSettings.DetectHiddenWindows was already checked above.
+	if (ws.SetCriteria(aSettings, aTitle, aText, aExcludeTitle, aExcludeText) && ws.IsMatch())
 		UPDATE_AND_RETURN_LAST_USED_WINDOW(fore_win) // This also does a "return".
 	else // If the line above didn't return, indicate that the specified window is not active.
 		return NULL;
@@ -510,11 +505,9 @@ HWND WinExist(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR a
 		// should be no danger of any reasonable script ever passing that value in as a real target window,
 		// which should thus minimize the chance of a crash due to calling various API functions
 		// with invalid window handles.
-		if (   ws.mCriterionHwnd != HWND_BROADCAST // It's not exempt from the other checks on the two lines below.
-			&& (!IsWindow(ws.mCriterionHwnd)    // And it's either not a valid window...
-				// ...or the window is not detectible (in v1.0.40.05, child windows are detectible even if hidden):
-				|| !(aSettings.DetectWindow(ws.mCriterionHwnd)
-					|| (GetWindowLong(ws.mCriterionHwnd, GWL_STYLE) & WS_CHILD)))   )
+		if (ws.mCriterionHwnd == HWND_BROADCAST)
+			ws.mSettings.DetectHiddenWindows = true; // It's exempt from DetectHiddenWindows and IsWindow() checks.
+		else if (!IsWindow(ws.mCriterionHwnd)) // It's not a valid window.
 			return NULL;
 
 		// Otherwise, the window is valid and detectible.
@@ -525,7 +518,7 @@ HWND WinExist(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR a
 	}
 	else // aWinTitle doesn't contain "ahk_id".  Try to find a matching window.
 	{
-		if ((ws.mCriteria & CRITERION_CLASS) && aSettings.TitleMatchMode != FIND_REGEX && !aFindLastMatch)
+		if ((ws.mCriteria & CRITERION_CLASS) && ws.mSettings.TitleMatchMode != FIND_REGEX && !aFindLastMatch)
 		{
 			// This should be a reliable way to find the first window with the given class name.
 			// Benchmarks showed FindWindow to be perhaps 20 times faster than using EnumWindows
@@ -539,15 +532,12 @@ HWND WinExist(global_struct &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR a
 			// omitted in FIND_IN_LEADING_PART or FIND_ANYWHERE modes, otherwise it would exclude valid
 			// candidate windows.  For FIND_EXACT mode, specifying the title makes it more likely that
 			// the found window will be a match, but we still need to do a case-sensitive comparison.
-			LPCTSTR title = ((ws.mCriteria & CRITERION_TITLE) && aSettings.TitleMatchMode == FIND_EXACT) ? ws.mCriterionTitle : nullptr;
+			LPCTSTR title = ((ws.mCriteria & CRITERION_TITLE) && ws.mSettings.TitleMatchMode == FIND_EXACT) ? ws.mCriterionTitle : nullptr;
 			HWND hwnd = FindWindow(ws.mCriterionClass, title);
 			if (!hwnd)
 				return NULL; // There are definitely no matching windows, so skip EnumWindows.
-			if (aSettings.DetectWindow(hwnd))
-			{
-				ws.SetCandidate(hwnd);
-				ws.IsMatch();
-			}
+			ws.SetCandidate(hwnd);
+			ws.IsMatch(); // This sets ws.mFoundParent only if it is a match.
 			// The following could be used to get the atom which corresponds to mCriterionClass,
 			// allowing EnumParentFind to compare atoms and avoid retrieving titles or class names
 			// in many cases.  It isn't done because:
@@ -607,8 +597,6 @@ BOOL CALLBACK EnumParentFind(HWND aWnd, LPARAM lParam)
 // through every window), it returns TRUE:
 {
 	WindowSearch &ws = *(WindowSearch *)lParam;  // For performance and convenience.
-	if (!ws.mSettings->DetectWindow(aWnd)) // Skip windows the script isn't supposed to detect.
-		return TRUE;
 	ws.SetCandidate(aWnd);
 	// If this window doesn't match, continue searching for more windows (via TRUE).  Likewise, if
 	// mFindLastMatch is true, continue searching even if this window is a match.  Otherwise, this
@@ -634,13 +622,13 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 	TCHAR win_text[WINDOW_TEXT_SIZE];
 	WindowSearch &ws = *(WindowSearch *)lParam;  // For performance and convenience.
 
-	if (!(ws.mSettings->DetectHiddenText || IsWindowVisible(aWnd))) // This text element should not be detectible by the script.
+	if (!(ws.mSettings.DetectHiddenText || IsWindowVisible(aWnd))) // This text element should not be detectible by the script.
 		return TRUE;  // Skip this child and keep enumerating to try to find a match among the other children.
 
 	// The below was formerly outsourced to the following function, but since it is only called from here,
 	// it has been moved inline:
 	// int GetWindowTextByTitleMatchMode(HWND aWnd, LPTSTR aBuf = NULL, int aBufSize = 0)
-	int text_length = ws.mSettings->TitleFindFast ? GetWindowText(aWnd, win_text, _countof(win_text))
+	int text_length = ws.mSettings.TitleFindFast ? GetWindowText(aWnd, win_text, _countof(win_text))
 		: GetWindowTextTimeout(aWnd, win_text, _countof(win_text));  // The slower method that is able to get text from more types of controls (e.g. large edit controls).
 	// Older idea that for the above that was not adopted:
 	// Only if GetWindowText() gets 0 length would we try the other method (and of course, don't bother
@@ -658,7 +646,7 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 	// EXCLUDE-TEXT: The following check takes precedence over the next, so it's done first:
 	if (*ws.mCriterionExcludeText) // For performance, avoid doing the checks below when blank.
 	{
-		if (ws.mSettings->TitleMatchMode == FIND_REGEX)
+		if (ws.mSettings.TitleMatchMode == FIND_REGEX)
 		{
 			if (RegExMatch(win_text, ws.mCriterionExcludeText))
 			{
@@ -686,7 +674,7 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 			// first matching control (which might simply be the first control if WinText is blank):
 			//return FALSE; // Match found, so stop searching.
 		}
-		else if (ws.mSettings->TitleMatchMode == FIND_REGEX)
+		else if (ws.mSettings.TitleMatchMode == FIND_REGEX)
 		{
 			if (RegExMatch(win_text, ws.mCriterionText)) // Match found.
 				ws.mFoundChild = aWnd;
@@ -979,7 +967,7 @@ int MsgBox(LPCTSTR aText, UINT uType, LPCTSTR aTitle, double aTimeout, HWND aOwn
 	uType |= MB_SETFOREGROUND;  // Always do these so that caller doesn't have to specify.
 
 	// In the below, make the MsgBox owned by the topmost window rather than our main
-	// window, in case there's another modal dialog already displayed.  The forces the
+	// window, in case there's another modal dialog already displayed.  This forces the
 	// user to deal with the modal dialogs starting with the most recent one, which
 	// is what we want.  Otherwise, if a middle dialog was dismissed, it probably
 	// won't be able to return which button was pressed to its original caller.
@@ -1051,10 +1039,9 @@ int MsgBox(LPCTSTR aText, UINT uType, LPCTSTR aTitle, double aTimeout, HWND aOwn
 	// a negative to be part of the text param.  But if it does happen, timeout after a short time,
 	// which may signal the user that the script passed a bad parameter.
 
-	// v1.0.33: The following is a workaround for the fact that an MsgBox with only an OK button
+	// The following is a workaround for the fact that a MsgBox with only an OK button
 	// doesn't obey EndDialog()'s parameter:
-	g->DialogHWND = NULL;
-	g->MsgBoxTimedOut = false;
+	g_MsgBoxTimedOut[g_nMessageBoxes] = false;
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP // Must be done prior to POST_AHK_DIALOG() below.
@@ -1091,7 +1078,7 @@ int MsgBox(LPCTSTR aText, UINT uType, LPCTSTR aTitle, double aTimeout, HWND aOwn
 	// and why the behavior varies:
 	// Unfortunately, it appears that MessageBox() will return zero rather
 	// than AHK_TIMEOUT that was specified in EndDialog() at least under WinXP.
-	if (g->MsgBoxTimedOut || (!result && aTimeout > 0)) // v1.0.33: Added g->MsgBoxTimedOut, see comment higher above.
+	if (g_MsgBoxTimedOut[g_nMessageBoxes] || (!result && aTimeout > 0))
 		// Assume it timed out rather than failed, since failure should be VERY rare.
 		result = AHK_TIMEOUT;
 	// else let the caller handle the display of the error message because only it knows
@@ -1273,7 +1260,7 @@ bool IsWindowCloaked(HWND aWnd)
 
 
 
-bool ScriptThreadSettings::DetectWindow(HWND aWnd)
+bool WindowSearchSettings::DetectWindow(HWND aWnd)
 {
 	return DetectHiddenWindows || (IsWindowVisible(aWnd) && !IsWindowCloaked(aWnd));
 }
@@ -1402,7 +1389,7 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, INT_PTR aBufSize, UINT aTimeout
 
 
 
-ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText)
+ResultType WindowSearch::SetCriteria(WindowSearchSettings const& aSettings, LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText)
 // Returns FAIL if the new criteria can't possibly match a window (due to ahk_id being in invalid
 // window or the specified ahk_group not existing).  Otherwise, it returns OK.
 // Callers must ensure that aText, aExcludeTitle, and aExcludeText point to buffers whose contents
@@ -1418,12 +1405,11 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 	// here, nor does there seem to be a risk that deref buffer's contents will get overwritten
 	// while this set of criteria is in effect because our callers never allow interrupting script-threads
 	// *during* the duration of any one set of criteria.
-	bool criterion_path_was_name_only = mCriterionPathIsNameOnly;
 	mCriterionExcludeTitle = aExcludeTitle;
 	mCriterionExcludeTitleLength = _tcslen(mCriterionExcludeTitle); // Pre-calculated for performance.
 	mCriterionText = aText;
 	mCriterionExcludeText = aExcludeText;
-	mSettings = &aSettings;
+	mSettings = aSettings;
 
 	DWORD this_criterion = CRITERION_TITLE, next_criterion;
 	LPCTSTR start, end, value, next_value = nullptr;
@@ -1448,6 +1434,8 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 				cp += 3, next_criterion = CRITERION_PATH;
 			else if (!_tcsnicmp(cp, _T("class"), 5))
 				cp += 5, next_criterion = CRITERION_CLASS;
+			else if (!_tcsnicmp(cp, _T("opt"), 3))
+				cp += 3, next_criterion = CRITERION_OPT;
 			else
 				continue;
 			next_value = cp;
@@ -1471,13 +1459,17 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 		case CRITERION_PID:
 			mCriterionPID = ATOU(start);
 			break;
+		case CRITERION_OPT:
+			if (!ParseOption(start, end))
+				return FAIL; // Inform caller of invalid criteria.
+			continue; // Don't add it to mCriteria.
 		default:
 			// In the following line, it may have been preferable to skip only zero or one spaces rather than
 			// calling omit_leading_whitespace().  But now this should probably be kept for backward compatibility.
 			// Besides, even if it's possible for a class name to start with a space, a RegEx dot or other symbol
 			// can be used to match it via SetTitleMatchMode RegEx.
 			start = omit_leading_whitespace(start);
-			if (end == start) // Empty or consists entirely of whitespace.
+			if (end == start || !*start) // Empty or consists entirely of whitespace.
 			{
 				// For backward compatibility, disqualify any title consisting entirely of whitespace,
 				// but otherwise include any trailing whitespace aside from the final delimiting space.
@@ -1535,9 +1527,6 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 				break;
 			case CRITERION_PATH:
 				mCriterionPath = value;
-				// Allow something like "ahk_exe firefox.exe" to be an exact match for the process name
-				// instead of full path, but for flexibility, always use full path when in regex mode.
-				mCriterionPathIsNameOnly = mSettings->TitleMatchMode != FIND_REGEX && !_tcschr(mCriterionPath, '\\');
 				break;
 			case CRITERION_CLASS:
 				mCriterionClass = value;
@@ -1548,23 +1537,82 @@ ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPCTSTR aT
 	}
 
 	// Any previously retrieved attributes of mCandidateParent remain valid, except:
-	if (criterion_path_was_name_only != mCriterionPathIsNameOnly)
-		mCandidateInfo &= ~CRITERION_PATH;
+	if (mCriteria & CRITERION_PATH)
+	{
+		// Allow something like "ahk_exe firefox.exe" to be an exact match for the process name
+		// instead of full path, but for flexibility, always use full path when in regex mode.
+		bool path_is_name_only = mSettings.TitleMatchMode != FIND_REGEX && !_tcschr(mCriterionPath, '\\');
+		if (path_is_name_only != mCriterionPathIsNameOnly)
+		{
+			mCriterionPathIsNameOnly = path_is_name_only;
+			mCandidateInfo &= ~CRITERION_PATH;
+		}
+	}
 
 	return OK;
 }
 
 
 
-void WindowSearch::SetCriteria(global_struct &aSettings, WinGroup &aGroup)
+void WindowSearch::SetCriteria(WindowSearchSettings const& aSettings, WinGroup &aGroup)
 {
 	mCriterionExcludeTitle = _T("");
 	mCriterionExcludeTitleLength = 0;
 	mCriterionText = _T("");
 	mCriterionExcludeText = _T("");
-	mSettings = &aSettings;
 	mCriterionGroup = &aGroup;
 	mCriteria = CRITERION_GROUP;
+	mSettings = aSettings;
+}
+
+
+
+ResultType WindowSearch::ParseOption(LPCTSTR aValue, LPCTSTR aEnd)
+{
+	TCHAR option[12];
+	LPCTSTR end;
+	for (auto cp = aValue;; cp = end)
+	{
+		cp = omit_leading_whitespace(cp);
+		if (aEnd ? cp >= aEnd : !*cp)
+			break;
+		for (end = cp; *end && !IS_SPACE_OR_TAB(*end); ++end);
+		if (end - cp >= _countof(option))
+			return FAIL;
+		tmemcpy(option, cp, end - cp);
+		option[end - cp] = '\0';
+		if (*end)
+			++end;
+		if (!*option)
+			continue;
+
+		auto mode = Line::ConvertTitleMatchMode(option);
+		switch (mode)
+		{
+		default:
+			mSettings.TitleMatchMode = mode;
+			break;
+		case FIND_FAST:
+		case FIND_SLOW:
+			mSettings.TitleFindFast = mode == FIND_FAST;
+			break;
+		case MATCHMODE_INVALID:
+			if (!_tcsnicmp(option, _T("Hidden"), 6))
+			{
+				if (!_tcsnicmp(option + 6, _T("Text"), 4))
+				{
+					if (!option[10] || option[10] == '0' || option[10] == '1')
+						mSettings.DetectHiddenText = option[10] != '0';
+				}
+				else if (!option[6] || option[6] == '0' || option[6] == '1')
+					mSettings.DetectHiddenWindows = option[6] != '0';
+			}
+			else
+				return FAIL;
+			break;
+		}
+	}
+	return OK;
 }
 
 
@@ -1579,7 +1627,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 // called (indirectly) by hook thread too: The hook thread must never call here directly or indirectly with
 // mArray!=NULL because the corresponding section below is probably not thread-safe.
 {
-	if (!mCandidateParent || !mCriteria) // Nothing to check, so no match.
+	if (!mCandidateParent)
 		return NULL;
 
 	// Candidate attributes are retrieved only here when it is known that they will actually be used,
@@ -1591,6 +1639,21 @@ HWND WindowSearch::IsMatch(bool aInvert)
 	// Keep in mind that most windows don't match even the first criterion, so the other criteria can
 	// be skipped many times when enumerating through windows.  The effect can be significant even if
 	// the window exists and is toward the top of the Z-order.
+
+	if (!mSettings.DetectHiddenWindows && !(mCriteria & CRITERION_GROUP))
+	{
+		if (!(mCandidateInfo & CANDIDATE_VISIBILITY))
+		{
+			DWORD style = GetWindowLong(mCandidateParent, GWL_STYLE);
+			// Controls specified by ahk_id are always detected (there shouldn't be any other way for
+			// mCriterionHwnd to be a control HWND).
+			if ((style & WS_CHILD) ? true : (style & WS_VISIBLE) && !IsWindowCloaked(mCriterionHwnd))
+				mCandidateInfo |= CANDIDATE_DETECTED;
+			mCandidateInfo |= CANDIDATE_VISIBILITY;
+		}
+		if (!(mCandidateInfo & CANDIDATE_DETECTED))
+			return NULL;
+	}
 	
 	if (mCriteria & CRITERION_PID)
 	{
@@ -1615,9 +1678,9 @@ HWND WindowSearch::IsMatch(bool aInvert)
 		mCandidateInfo |= CRITERION_TITLE;
 	}
 
-	if ((mCriteria & CRITERION_TITLE) && *mCriterionTitle) // For performance, avoid the calls below (especially RegEx) when mCriterionTitle is blank (assuming it's even possible for it to be blank under these conditions).
+	if (mCriteria & CRITERION_TITLE) // mCriterionTitle is always non-blank when CRITERION_TITLE is present.
 	{
-		switch(mSettings->TitleMatchMode)
+		switch(mSettings.TitleMatchMode)
 		{
 		case FIND_ANYWHERE:
 			if (!_tcsstr(mCandidateTitle, mCriterionTitle)) // Suitable even if mCriterionTitle is blank, though that's already ruled out above.
@@ -1646,7 +1709,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 				*mCandidateClass = '\0';
 			mCandidateInfo |= CRITERION_CLASS;
 		}
-		if (mSettings->TitleMatchMode == FIND_REGEX)
+		if (mSettings.TitleMatchMode == FIND_REGEX)
 		{
 			if (!RegExMatch(mCandidateClass, mCriterionClass))
 				return NULL;
@@ -1671,7 +1734,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 					*mCandidatePath = '\0';
 			mCandidateInfo |= CRITERION_PATH;
 		}
-		if (mSettings->TitleMatchMode == FIND_REGEX)
+		if (mSettings.TitleMatchMode == FIND_REGEX)
 		{
 			if (!RegExMatch(mCandidatePath, mCriterionPath))
 				return NULL;
@@ -1684,7 +1747,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 
 	// The following also handles the fact that mCriterionGroup might be NULL if the specified group
 	// does not exist or was never successfully created:
-	if ((mCriteria & CRITERION_GROUP) && (!mCriterionGroup || !mCriterionGroup->IsMember(mCandidateParent, *mSettings)))
+	if ((mCriteria & CRITERION_GROUP) && (!mCriterionGroup || !mCriterionGroup->IsMember(mCandidateParent, mSettings)))
 		return NULL; // Isn't a member of specified group.
 	//else it's a match so far, but continue onward in case there are other criteria (a little strange in this case, but might be useful).
 
@@ -1705,7 +1768,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 
 	if (*mCriterionExcludeTitle)
 	{
-		switch(mSettings->TitleMatchMode)
+		switch(mSettings.TitleMatchMode)
 		{
 		case FIND_ANYWHERE:
 			if (_tcsstr(mCandidateTitle, mCriterionExcludeTitle))
@@ -1740,9 +1803,11 @@ HWND WindowSearch::IsMatch(bool aInvert)
 		// 2) The specified parent has no children.
 		// Since in both these cases GetLastError() returns ERROR_SUCCESS, we discard the return
 		// value and just check mFoundChild to determine whether a match has been found:
-		mFoundChild = NULL;  // Init prior to each call, in case mFindLastMatch is true.
+		// When mCriterionText is empty and mCriterionExcludeText is not, mFoundChild must
+		// be initialized to a non-null value to avoid excluding windows with no controls.
+		mFoundChild = !*mCriterionText ? mCandidateParent : NULL;  // Init prior to each call, in case mFindLastMatch is true.
 		EnumChildWindows(mCandidateParent, EnumChildFind, (LPARAM)this);
-		if (!mFoundChild) // This parent has no matching child, or no children at all.
+		if (!mFoundChild) // This parent has no matching child, or has an excluded child.
 			return NULL;
 	}
 

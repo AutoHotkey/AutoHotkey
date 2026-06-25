@@ -54,15 +54,27 @@ public:
 	TextStream()
 	{
 		SetCodePage(CP_ACP);
+		if (sLastStream)
+			sLastStream->mNextStream = this;
+		mPrevStream = sLastStream;
+		sLastStream = this;
 	}
 	virtual ~TextStream()
 	{
+		if (sLastStream == this)
+			sLastStream = mPrevStream;
+		if (mNextStream)
+			mNextStream->mPrevStream = mPrevStream;
+		if (mPrevStream)
+			mPrevStream->mNextStream = mNextStream;
 		if (mBuffer)
 			free(mBuffer);
 		//if (mLocale)
 		//	_free_locale(mLocale);
 		// Close() isn't called here, it will rise a "pure virtual function call" exception.
 	}
+
+	static void FlushAllWriteBuffers();
 
 	bool Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage = CP_ACP);
 	void Close()
@@ -239,6 +251,10 @@ protected:
 		LPSTR   mBufferA;
 		LPWSTR  mBufferW;
 	};
+
+	// Linked list of streams used to flush cache on process termination.
+	TextStream *mPrevStream = nullptr, *mNextStream = nullptr;
+	static TextStream *sLastStream;
 };
 
 

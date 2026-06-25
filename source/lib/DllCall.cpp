@@ -88,7 +88,7 @@ extern "C" double GetDoubleRetval();
 
 static inline UINT_PTR DynaParamToElement(DYNAPARM& parm)
 {
-	if(parm.passed_by_address)
+	if (parm.passed_by_address && parm.type != DLL_ARG_STRUCT)
 		return (UINT_PTR) &parm.value_uintptr;
 	else
 		return parm.value_uintptr;
@@ -140,10 +140,13 @@ void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aExcep
 		DYNAPARM &this_param = aParam[i]; // For performance and convenience.
 		if (this_param.type == DLL_ARG_STRUCT)
 		{
-			int& size = this_param.struct_size;
+			int size = this_param.struct_size;
 			ASSERT(!(size % 4));
-			for (pdword = (DWORD*)(this_param.value_uintptr + size); size; size -= 4)
-				*--our_stack = *--pdword;
+			if (size == -1) // -1 is in lieu of passed_by_address == true.
+				*--our_stack = this_param.value_uintptr;
+			else
+				for (pdword = (DWORD*)(this_param.value_uintptr + size); size; size -= 4)
+					*--our_stack = *--pdword;
 		}
 		// Push the arg or its address onto the portion of the stack that was reserved for our use above.
 		else if (this_param.passed_by_address)
@@ -365,6 +368,28 @@ void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
 }
 
 
+bool Object::GetStructArgInfo(DYNAPARM &aType, Object *&aPointedClass)
+{
+	auto &si = *GetStructInfo(true);
+	if (!si.size)
+		return false;
+	if (si.dllcall_type)
+	{
+		aType.type = (DllArgTypes)si.dllcall_type;
+		aType.is_unsigned = si.is_unsigned;
+		aType.passed_by_address = si.pointed_class != nullptr;
+		aPointedClass = nullptr;
+	}
+	else
+	{
+		aType.type = DLL_ARG_STRUCT;
+		aType.struct_size = si.item_count ? -1 : (int)si.size;
+		aPointedClass = si.pointed_class;
+	}
+	return true;
+}
+
+
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
 {
 	int i;
@@ -465,12 +490,7 @@ void GetDllArgObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr)
 		aPtr = (size_t)((BufferObject *)obj)->Data();
 		return;
 	}
-	auto result = GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken, obj->IsOfType(Object::sPrototype));
-	if (result != INVOKE_NOT_HANDLED)
-		return;
-	Object *b = (Object *)obj;
-	if (b->GetDataPtr(aPtr) != OK)
-		aResultToken.UnknownMemberError(ExprTokenType(obj), IT_GET, _T("Ptr"));
+	GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken);
 }
 
 
@@ -614,20 +634,26 @@ BIF_DECL(BIF_DllCall)
 			if (obj->IsOfType(Object::sPrototype))
 			{
 				return_class = (Object*)obj;
-				obj = return_class->GetOwnPropObj(_T("Prototype"));
-				if (obj && obj->IsOfType(Object::sPrototype))
+				return_proto = return_class->ClassGetPrototype();
+				if (return_proto && return_proto->IsDerivedFrom(Object::sStructPrototype))
 				{
-					return_proto = (Object*)obj;
-					if (return_struct_size = (int)return_proto->LockStructSize())
-						return_attrib.type = DLL_ARG_STRUCT;
+					Object *unused;
+					return_proto->GetStructArgInfo(return_attrib, unused);
+					if (return_attrib.type == DLL_ARG_STRUCT)
+					{
+						return_struct_size = return_attrib.struct_size;
+						return_attrib.struct_size = 0;
+					}
 				}
 			}
 		}
 		else
 		{
 			ConvertDllArgType(return_type_string, return_attrib);
+			if (return_attrib.type == DLL_ARG_INVALID && !_tcsicmp(return_type_string, _T("Void")))
+				return_attrib.type = DLL_ARG_VOID;
 		}
-		if (return_attrib.type == DLL_ARG_INVALID)
+		if (return_attrib.type == DLL_ARG_INVALID || return_struct_size == -1)
 			_f_throw_value(ERR_INVALID_RETURN_TYPE);
 
 has_valid_return_type:
@@ -645,12 +671,12 @@ has_valid_return_type:
 
 	if (return_struct_size)
 	{
-		aResultToken.symbol = SYM_STRING; // Set default for Invoke.
-		aResultToken.marker = _T("");
-		auto obj = Object::Create();
-		if (obj->New(aResultToken, aParam + aParamCount, 1) != OK)
-			return; // New releases obj on failure.
-		return_struct_ptr = (void*)obj->DataPtr();
+		aResultToken.InitInvokeRetVal();
+		if (Object::CreateStruct(aResultToken, return_proto) != OK)
+			return; // Initialize releases obj on failure.
+		ASSERT(aResultToken.symbol == SYM_OBJECT);
+		auto obj = (Object*)aResultToken.object;
+		return_struct_ptr = (void*)((Object*)obj)->DataPtr();
 		pObj[nObj++] = obj;
 		aResultToken.symbol = SYM_INTEGER; // Ensure it is not SYM_OBJECT, for maintainability (in case of early exit due to an error).
 	}
@@ -674,18 +700,42 @@ has_valid_return_type:
 		DYNAPARM &this_dyna_param = dyna_param[arg_count];
 		Object *param_class = nullptr, *param_proto = nullptr;
 
+		ExprTokenType &value_param = *aParam[i + 1];
+		IObject *this_param_obj = TokenToObject(value_param);
 		if (IObject *obj = TokenToObject(*aParam[i]))
 		{
 			this_dyna_param.type = DLL_ARG_INVALID;
 			if (obj->IsOfType(Object::sPrototype))
 			{
 				param_class = (Object*)obj;
-				obj = param_class->GetOwnPropObj(_T("Prototype"));
-				if (obj && obj->IsOfType(Object::sPrototype))
+				param_proto = param_class->ClassGetPrototype();
+				if (param_proto && param_proto->IsDerivedFrom(Object::sStructPrototype))
 				{
-					param_proto = (Object*)obj;
-					if (this_dyna_param.struct_size = (int)param_proto->LockStructSize())
-						this_dyna_param.type = DLL_ARG_STRUCT;
+					Object *pointed_class;
+					if (param_proto->GetStructArgInfo(this_dyna_param, pointed_class))
+					{
+						if (pointed_class && !(this_param_obj && this_param_obj->IsOfType(param_proto)))
+						{
+							// Permit unset to mean nullptr, but don't permit integer addresses, since that convenience would come
+							// at the cost of consistency and flexibility.  XX.Ptr,YY should act like the built-in "*" suffix:
+							// convert YY to XX and then pass it by address.  Some XX could take integers; e.g. DECIMAL/VARIANT.
+							// Also, just like the "*" suffix, XX.Ptr should permit the same input values as XX.
+							if (value_param.symbol == SYM_MISSING)
+							{
+								this_dyna_param.struct_size = 0; // Zero the union.
+								this_dyna_param.type = Exp32or64(DLL_ARG_INT64, DLL_ARG_INT);
+								this_dyna_param.value_uintptr = 0;
+								continue;
+							}
+							param_proto = pointed_class->ClassGetPrototype();
+							if (param_proto && param_proto->IsDerivedFrom(Object::sStructPrototype))
+							{
+								param_class = pointed_class;
+								this_dyna_param.struct_size = -1; // In lieu of pass_by_address (which can't be used due to the union).
+								this_dyna_param.type = DLL_ARG_STRUCT;
+							}
+						}
+					}
 				}
 			}
 		}
@@ -697,17 +747,18 @@ has_valid_return_type:
 		if (this_dyna_param.type == DLL_ARG_INVALID)
 			_f_throw_value(ERR_INVALID_ARG_TYPE);
 
-		IObject *this_param_obj = TokenToObject(*aParam[i + 1]);
-		if (this_param_obj && this_dyna_param.type != DLL_ARG_STRUCT)
+		if (this_param_obj)
 		{
-			if ((this_dyna_param.passed_by_address || this_dyna_param.type == DLL_ARG_STR)
+			if (((this_dyna_param.type == DLL_ARG_STRUCT ? this_dyna_param.struct_size == -1 : this_dyna_param.passed_by_address)
+				|| this_dyna_param.type == DLL_ARG_STR)
 				&& this_param_obj->Base() == Object::sVarRefPrototype)
 			{
+				VarRef *varref = static_cast<VarRef*>(this_param_obj);
 				aParam[i + 1] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-				aParam[i + 1]->SetVarRef(static_cast<VarRef*>(this_param_obj));
-				this_param_obj = nullptr;
+				aParam[i + 1]->SetVarRef(varref);
+				this_param_obj = varref->ToObject();
 			}
-			else if (ctoupper(*arg_type_string) == 'P')
+			else if (this_dyna_param.type == Exp32or64(DLL_ARG_INT, DLL_ARG_INT64) && ctoupper(*arg_type_string) == 'P')
 			{
 				// Support Buffer.Ptr, but only for "Ptr" type.  All other types are reserved for possible
 				// future use, which might be general like obj.ToValue(), or might be specific to DllCall
@@ -718,7 +769,7 @@ has_valid_return_type:
 				continue;
 			}
 		}
-		ExprTokenType &this_param = *aParam[i + 1];
+		ExprTokenType &this_param = *aParam[i + 1]; // Take a new reference since it might have been updated above.
 		if (this_param.symbol == SYM_MISSING && this_dyna_param.type != DLL_ARG_STRUCT) // Permit struct classes with __value to handle unset.
 			_f_throw(ERR_PARAM_REQUIRED);
 
@@ -787,52 +838,42 @@ has_valid_return_type:
 		case DLL_ARG_STRUCT: {
 			if (!this_param_obj || !this_param_obj->IsOfType(param_proto))
 			{
-				aResultToken.symbol = SYM_STRING; // Set default for Invoke.
-				aResultToken.marker = _T("");
-				auto obj = Object::Create();
-				if (!obj->New(aResultToken, aParam + i, 1))
-					return; // New releases obj on failure.
+				aResultToken.InitInvokeRetVal();
+				if (Object::CreateStruct(aResultToken, param_proto) != OK)
+					return; // Initialize releases obj on failure.
+				ASSERT(aResultToken.symbol == SYM_OBJECT);
+				auto obj = (Object*)aResultToken.object;
 				pObj[nObj++] = this_param_obj = obj;
-				aResultToken.symbol = SYM_STRING; // Set default for Invoke (New set aResultToken to obj without calling AddRef).
-				aResultToken.marker = _T("");
-				auto result = obj->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS
-					, _T("__Value"), ExprTokenType(obj), aParam + i + 1, 1);
-				if (result == INVOKE_NOT_HANDLED)
+				if (aParam[i+1]->symbol != SYM_VAR || !aParam[i+1]->var->IsUninitialized()) // It's not &var, or var has a value.
 				{
-					if (this_param.symbol == SYM_MISSING)
-						_f_throw(ERR_PARAM_REQUIRED);
-					auto classname = param_proto->GetOwnPropString(_T("__Class"));
-					_f_throw_type(classname ? classname : _T("Object"), *aParam[i + 1]);
+					aResultToken.InitInvokeRetVal(); // Set default for Invoke (New set aResultToken to obj without calling AddRef).
+					auto result = obj->Invoke(aResultToken, IT_SET | IF_BYPASS_METAFUNC | IF_NO_NEW_PROPS
+						, _T("__Value"), ExprTokenType(obj), aParam + i + 1, 1);
+					if (result == INVOKE_NOT_HANDLED && this_param.symbol != SYM_MISSING)
+					{
+						auto classname = param_proto->GetOwnPropString(_T("__Class"));
+						_f_throw_type(classname ? classname : _T("Object"), *aParam[i + 1]);
+					}
+					if (aResultToken.Exited())
+						return;
+					aResultToken.Free(); // It shouldn't have returned anything, but it could.
 				}
-				if (aResultToken.Exited())
-					return;
-				aResultToken.Free(); // It shouldn't have returned anything, but it could.
 				aResultToken.symbol = SYM_INTEGER; // Revert to the BIF default in case return type is integer, and to ensure Free() won't Release().
 				aResultToken.mem_to_free = nullptr;
 			}
+			else
+				pObj[nObj++] = nullptr; // Reserve a slot to simplify output parameter handling.
 			// The parameter size is based on the struct itself, so there's little sense
 			// in querying a Ptr property; we always want the struct's own address.
 			this_dyna_param.value_uintptr = ((Object*)this_param_obj)->DataPtr();
-			int& size = this_dyna_param.struct_size;
+			int &size = this_dyna_param.struct_size;
 #ifdef _WIN64
-			this_dyna_param.type = DLL_ARG_INT64;
-			if (size <= 8)
+			if (size == 8 || size == 4 || size == 2 || size == 1)
 				this_dyna_param.value_int64 = *(__int64*)this_dyna_param.ptr;
-			size = 0;
 #else
-			size = (size + sizeof(void*) - 1) & -(int)sizeof(void*);
+			size = (size + 3) & -4;
 			if (size > 8)
 				struct_extra_size += size - 8;
-			else if (size > 4) {
-				this_dyna_param.type = DLL_ARG_INT64;
-				this_dyna_param.value_int64 = *(__int64*)this_dyna_param.ptr;
-				size = 0;
-			}
-			else {
-				this_dyna_param.type = DLL_ARG_INT;
-				this_dyna_param.value_int = *(int*)this_dyna_param.ptr;
-				size = 0;
-			}
 #endif // _WIN64
 			break;
 		}
@@ -1037,26 +1078,27 @@ has_valid_return_type:
 			aResultToken.symbol = SYM_FLOAT; // There is no SYM_DOUBLE since all floats are stored as doubles.
 			aResultToken.value_double = return_value.Double;
 			break;
-		//case DLL_ARG_STRUCT: // This case is handled once successful return is certain.
-		//	aResultToken.SetValue(pObj[0]);
-		//	break;
-		//default: // Should never be reached unless there's a bug.
-		//	aResultToken.symbol = SYM_STRING;
-		//	aResultToken.marker = "";
+		default: // Should never be reached unless there's a bug (but might as well handle it, since it doesn't increase code size).
+		case DLL_ARG_VOID: // Return blank-unset, which is also the default Invoke return value.
+		case DLL_ARG_STRUCT: // Structs are handled later, but need aResultToken initialized like this.
+			aResultToken.InitInvokeRetVal();
+			break;
 		} // switch(return_attrib.type)
 	} // Storing the return value when no exception occurred.
 
 	// Store any output parameters back into the input variables.  This allows a function to change the
 	// contents of a variable for the following arg types: String and Pointer to <various number types>.
-	int nxStr = -1;
+	int nxStr = -1, n_pObj = return_struct_size ? 1 : 0;
 	for (arg_count = 0, i = 0; i < aParamCount; ++arg_count, i += 2) // Same loop as used above, so maintain them together.
 	{
 		ExprTokenType &this_param = *aParam[i + 1];  // Resolved for performance and convenience.
 		DYNAPARM &this_dyna_param = dyna_param[arg_count];
 
-		if (IObject * obj = TokenToObject(this_param)) // Implies the type is "Ptr" or "Ptr*".
+		if (this_dyna_param.type == DLL_ARG_STRUCT)
+			++n_pObj;
+		else if (IObject * obj = TokenToObject(this_param)) 
 		{
-			if (this_dyna_param.passed_by_address)
+			if (this_dyna_param.passed_by_address) // Under these conditions, it can only be "Ptr*".
 				SetObjectIntProperty(obj, _T("Ptr"), this_dyna_param.value_int64, aResultToken);
 			continue;
 		}
@@ -1084,7 +1126,8 @@ has_valid_return_type:
 			// so its length doesn't need updating, and 2) the buffer that was passed was only as large
 			// as the input string, so has very little practical use for output.
 			// No other types can be output parameters when !passed_by_address.
-			continue;
+			if (this_dyna_param.type != DLL_ARG_STRUCT)
+				continue;
 		}
 		if (VARREF_IS_READ(this_param.var_usage))
 			continue; // Output parameters are copied back only if provided with a VarRef (&variable).
@@ -1132,6 +1175,31 @@ has_valid_return_type:
 		case DLL_ARG_xSTR: // AStr* on Unicode builds and WStr* on ANSI builds.
 			if (this_dyna_param.ptr != pStr[nxStr]->GetString())
 				result = output_var.AssignStringFromCodePage(UorA(LPSTR,LPWSTR)this_dyna_param.ptr);
+			break;
+		case DLL_ARG_STRUCT:
+			auto &obj = pObj[n_pObj - 1];
+			if (!obj) // It's null if the caller passed a struct of the right type.
+				break;
+			FuncResult result_token;
+			result = obj->Invoke(result_token, IT_GET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(obj), nullptr, 0);
+			if (result_token.Exited())
+				break;
+			if (result == INVOKE_NOT_HANDLED)
+			{
+				result = output_var.AssignSkipAddRef(obj);
+				obj = nullptr;
+			}
+			else if (result_token.mem_to_free)
+			{
+				ASSERT(result_token.symbol == SYM_STRING && result_token.marker == result_token.mem_to_free);
+				result = output_var.AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
+				result_token.mem_to_free = nullptr;
+			}
+			else if (result_token.symbol == SYM_OBJECT)
+				output_var.AssignSkipAddRef(result_token.object);
+			else
+				output_var.Assign(result_token);
+			break;
 		}
 		if (!result)
 		{
@@ -1142,8 +1210,6 @@ has_valid_return_type:
 
 	if (return_struct_size && !aResultToken.Exited())
 	{
-		aResultToken.symbol = SYM_STRING; // Set default for Invoke.
-		aResultToken.marker = _T("");
 		auto result = pObj[0]->Invoke(aResultToken, IT_GET | IF_BYPASS_METAFUNC, _T("__value"), ExprTokenType(pObj[0]), nullptr, 0);
 		if (result == INVOKE_NOT_HANDLED)
 		{

@@ -742,6 +742,7 @@ DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBu
 
 int GetSystemTrayIconSize();
 
+HBITMAP ParseImageHandleSpec(LPCTSTR aFilespec, bool &aScriptOwnsHandle);
 HBITMAP LoadPicture(LPCTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
 	, bool aUseGDIPlusIfAvailable, bool *apNoDelete = NULL, HMODULE *apModule = NULL);
 HBITMAP IconToBitmap(HICON ahIcon, bool aDestroyIcon);

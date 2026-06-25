@@ -114,6 +114,7 @@ extern int g_ScreenDPI;
 extern bool g_MenuIsVisible;
 extern HMENU g_MenuIsTempModeless;
 extern bool g_MenuIsTempTopmost;
+extern bool g_MsgBoxTimedOut[MAX_MSGBOXES];
 extern int g_nMessageBoxes;
 extern int g_nFileDialogs;
 extern int g_nFolderDialogs;

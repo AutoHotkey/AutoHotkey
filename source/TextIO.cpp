@@ -36,6 +36,19 @@ bool IsLeadByteACP(BYTE b)
 //
 // TextStream
 //
+
+
+TextStream *TextStream::sLastStream = nullptr;
+
+
+void TextStream::FlushAllWriteBuffers()
+{
+	for (auto ts = sLastStream; ts; ts = ts->mPrevStream)
+		ts->FlushWriteBuffer();
+}
+
+
+
 bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 {
 	mLength = 0; // Set the default value here so _Open() can change it.

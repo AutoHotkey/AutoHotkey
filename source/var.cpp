@@ -41,12 +41,9 @@ ResultType Var::Assign(Var &aVar)
 	Var &target_var = *ResolveAlias();
 	Var &source_var = *aVar.ResolveAlias();
 
-	// Caller already handled virtual target_var.
-	ASSERT(!target_var.IsVirtual());
-
 	if (source_var.mAttrib & VAR_ATTRIB_UNINITIALIZED)
 	{
-		target_var.UninitializeNonVirtual();
+		target_var.AssignUnset();
 		return OK;
 	}
 
@@ -70,12 +67,6 @@ ResultType Var::Assign(ExprTokenType &aToken)
 // Writes aToken's value into aOutputVar based on the type of the token.
 // Caller must ensure that aToken.symbol is an operand (not an operator or other symbol).
 {
-	if (VarTypeIsVirtual(mType))
-	{
-		if (aToken.symbol == SYM_MISSING)
-			return g_script.RuntimeError(ERR_INVALID_ASSIGNMENT);
-		return AssignVirtual(aToken);
-	}
 	switch (aToken.symbol)
 	{
 	case SYM_STRING:  return Assign(aToken.marker, aToken.marker_length);
@@ -86,8 +77,7 @@ ResultType Var::Assign(ExprTokenType &aToken)
 	default:
 		ASSERT(!"Unhandled symbol");
 	case SYM_MISSING:
-		UninitializeNonVirtual();
-		return OK;
+		return AssignUnset();
 	}
 	// Since above didn't return, it can only be SYM_STRING.
 	return Assign(aToken.marker, aToken.marker_length);
@@ -97,11 +87,16 @@ ResultType Var::Assign(ExprTokenType &aToken)
 
 ResultType Var::AssignVirtual(ExprTokenType &aValue)
 {
+	if (mType == VAR_ALIAS)
+		return mAliasFor->AssignVirtual(aValue);
+
 	FuncResult result_token;
 	if (mType == VAR_VIRTUAL)
 	{
 		if (!mVV->Set) // Might be impossible due to prior validation of assignments/output vars.
 			return g_script.VarIsReadOnlyError(this);
+		if (aValue.symbol == SYM_MISSING)
+			return g_script.RuntimeError(ERR_INVALID_ASSIGNMENT);
 		mVV->Set(result_token, mName, aValue);
 	}
 	else
@@ -215,27 +210,24 @@ void Var::UpdateVirtualObj(IObject *aTargetRef)
 
 IObject *Var::GetRef()
 {
+	// GetRef() should only be called on actual variables referenced by the script,
+	// so if "this" is a VarRef or downvar, there's probably a bug.  Avoid temptation
+	// to return (VarRef*)this, since downvars have VAR_VARREF and aren't VarRefs.
+	ASSERT(!(mScope & VAR_VARREF));
 	auto target_var = this;
 	if (mType == VAR_ALIAS)
 	{
 		if (mAttrib & VAR_ATTRIB_IS_OBJECT)
-		{
-			mObject->AddRef();
 			return mObject;
-		}
 		target_var = mAliasFor;
 		// It is also possible for a non-object alias to point to an object alias if the reference operator
 		// is applied to target_var itself or some other alias after this var became an alias of target_var.
 		if (target_var->mType == VAR_ALIAS && (target_var->mAttrib & VAR_ATTRIB_IS_OBJECT))
-		{
-			target_var->mObject->AddRef();
 			return target_var->mObject;
-		}
 	}
 	else if (mType == VAR_VIRTUAL_OBJ)
 	{
 		ASSERT(mAttrib & VAR_ATTRIB_IS_OBJECT);
-		mObject->AddRef();
 		return mObject;
 	}
 	auto ref = new VarRef();
@@ -247,6 +239,9 @@ IObject *Var::GetRef()
 	if (mType == VAR_ALIAS)
 		target_var->UpdateAlias(ref);
 	UpdateAlias(ref);
+	// Return an uncounted reference to avoid AddRef() and Release() calls in several places.
+	// Callers rely on the counted reference in this->mObject to keep the object alive.
+	ref->Release();
 	return ref;
 }
 
@@ -1277,7 +1272,7 @@ void VarBkp::ToToken(ExprTokenType &aValue)
 	case VAR_ATTRIB_IS_DOUBLE: aValue.SetValue(mContentsDouble); break;
 	default:
 		if (mAttrib & VAR_ATTRIB_UNINITIALIZED)
-			aValue.symbol = SYM_MISSING;
+			aValue.Unset();
 		else
 			aValue.SetValue(mCharContents, mByteLength / sizeof(TCHAR));
 	}
@@ -1413,19 +1408,70 @@ LPTSTR ResultToken::Malloc(LPTSTR aValue, size_t aLength)
 
 
 
-ResultType Var::InitializeConstant()
+ResultType Var::SelfInitialize()
 {
-	// Caller has verified !IsInitialized() && Type() == VAR_CONSTANT.
-	Var &var = *ResolveAlias();
-	ASSERT(var.mType == VAR_CONSTANT && var.IsObject() && dynamic_cast<::Object*>(var.mObject));
+	ASSERT(CanSelfInitialize());
+	Line *caller_line = g_script.mCurrLine;
+	ScriptModule *mod = nullptr;
+	ResultType result;
+	Var *cur = this;
+	for(;;)
+	{
+		Var &var = *cur;
+		if (var.mType == VAR_ALIAS) // Import.
+		{
+			ASSERT(dynamic_cast<ScriptModule*>(var.mObject));
+			mod = (ScriptModule*)var.mObject;
+			cur = var.mAliasFor;
+		}
+		else
+		{
+			ASSERT(var.mType == VAR_CONSTANT && var.IsObject());
+			if (var.mObject->Base() == ScriptModule::sPrototype)
+				mod = (ScriptModule*)var.mObject;
+			else
+				break;
+		}
+
+		var.mAttrib &= ~VAR_ATTRIB_UNINITIALIZED; // Only make one attempt; prevents recursion.
+		result = g_script.ExecuteModule(mod);
+		if (result != OK && result != EARLY_RETURN)
+			return result;
+
+		g_script.mCurrLine = caller_line; // Restore this for any subsequent error reports.
+
+		if (!cur->CanSelfInitialize())
+			// cur is either the module itself or an import which doesn't need initialization.
+			return OK;
+		// cur is an imported var, and either a class or something imported from another module.
+		// The next iteration will determine which and either execute the module or break.
+	}
+	// cur is a reference to a class, either imported or defined in the current module.
+	Var &var = *cur;
+	ASSERT(var.IsObject() && var.mObject->IsOfType(Object::sClassPrototype) && var.IsUninitialized());
 	var.mAttrib &= ~VAR_ATTRIB_UNINITIALIZED; // Only make one attempt; prevents infinite recursion.
 	FuncResult result_token;
 	auto cls = (::Object*)var.mObject;
-	cls->AddRef(); // Necessary because Construct() calls Release() on failure.
-	auto result = cls->Construct(result_token, nullptr, 0);
+	cls->AddRef(); // Necessary because CallInitNew() calls Release() on failure.
+	result = cls->CallInitNew(result_token, nullptr, 0);
 	if (result == OK)
 		cls->Release();
 	return result;
+}
+
+
+
+void Var::SetImport(IObject *aModule, Var *aImported)
+{
+	mObject = aModule;
+	mAliasFor = aImported;
+	mType = aImported ? VAR_ALIAS : VAR_CONSTANT;
+	mAttrib |= VAR_ATTRIB_UNINITIALIZED | VAR_ATTRIB_HAS_ASSIGNMENT;
+	if (!aImported)
+	{
+		mAttrib |= VAR_ATTRIB_IS_OBJECT;
+		aModule->AddRef();
+	}
 }
 
 

@@ -193,7 +193,6 @@ private:
 
 	// Caller has verified mType == VAR_VIRTUAL.
 	bool HasSetter() { return mVV->Set; }
-	// Caller has verified VarTypeIsVirtual(mType).
 	ResultType AssignVirtual(ExprTokenType &aValue);
 
 	// Unconditionally accepts new memory, bypassing the usual redirection to Assign() for VAR_VIRTUAL.
@@ -464,7 +463,7 @@ public:
 				// to indicate a missing array item.  It should not be translated to a parameter's
 				// default value, because an unset var in that context would have raised an error.
 				// Some other callers may use this in place of IsUninitialized().
-				aToken.symbol = SYM_MISSING;
+				aToken.Unset();
 			else
 				aToken.SetValue(var.Contents(), var.Length());
 		}
@@ -500,8 +499,9 @@ public:
 	#define DISPLAY_CLASS_ERROR 3
 	#define DISPLAY_GROUP_ERROR 4
 	#define DISPLAY_METHOD_ERROR 5
+	#define DISPLAY_MODULE_ERROR 6
 	#define VALIDATENAME_SUBJECT_INDEX(n) (n-1)
-	#define VALIDATENAME_SUBJECTS { _T("variable"), _T("function"), _T("class"), _T("group"), _T("method") }
+	#define VALIDATENAME_SUBJECTS { _T("variable"), _T("function"), _T("class"), _T("group"), _T("method"), _T("module") }
 	static ResultType ValidateName(LPCTSTR aName, int aDisplayError = DISPLAY_VAR_ERROR);
 
 	LPTSTR ObjectToText(LPTSTR aName, LPTSTR aBuf, int aBufSize);
@@ -817,6 +817,7 @@ public:
 	{
 		mAliasFor = aTargetVar; // Should always be non-NULL due to various checks elsewhere.
 		mType = VAR_ALIAS; // It might already be this type, so this is just in case it's VAR_NORMAL.
+		mAttrib &= ~VAR_ATTRIB_UNINITIALIZED; // Reserve the VAR_ALIAS,VAR_ATTRIB_UNINITIALIZED combination for use with imports.
 	}
 
 	// Retrieves the IObject interface for managing this var's lifetime,
@@ -886,12 +887,28 @@ public:
 	void operator delete(void *aPtr, void *) {}
 	void operator delete[](void *aPtr) {}
 
-	ResultType InitializeConstant();
+	ResultType SelfInitialize();
+	void SetImport(IObject *aModule, Var *aImported);
+
+	bool CanSelfInitialize()
+	{
+		return IsUninitializedSelf() && (IsAlias() || IsDirectConstant());
+	}
 
 	bool IsUninitializedNormalVar()
 	{
 		Var &var = *ResolveAlias();
 		return var.mType == VAR_NORMAL && (var.mAttrib & VAR_ATTRIB_UNINITIALIZED);
+	}
+
+	bool IsUninitializedSelf()
+	{
+		return mAttrib & VAR_ATTRIB_UNINITIALIZED;
+	}
+
+	bool IsUninitializedAliasFor()
+	{
+		return mType == VAR_ALIAS && (mAliasFor->mAttrib & VAR_ATTRIB_UNINITIALIZED);
 	}
 
 	bool IsUninitialized()
