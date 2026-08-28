@@ -269,6 +269,7 @@ VarEntry g_BIV_A[] =
 	A_(Temp), // Debatably should be A_TempDir, but brevity seemed more popular with users, perhaps for heavy uses of the temp folder.,
 	A_(ThisFunc),
 	A_(ThisHotkey),
+	A_(ThreadId),
 	A_(TickCount),
 	A_x(TimeIdle, BIV_TimeIdle),
 	A_x(TimeIdleKeyboard, BIV_TimeIdle),
@@ -1217,8 +1218,32 @@ ResultType Script::Reload(bool aDisplayErrors)
 
 
 
-bif_impl ResultType Exit(optl<int> aExitCode)
+bif_impl FResult Exit(optl<int> aExitCode, optl<INT64> aThreadId, ResultToken& aResultToken)
 {
+	INT64 uThreadId = aThreadId.value_or(g->ThreadId); // Default is the currently running thread
+	int nCurrentThreadIndex = g->ThreadId & THREADID_INDEX;
+	int nTargetThreadIndex = uThreadId & THREADID_INDEX;
+	aResultToken.SetValue(0); // Default return value
+
+	if (!nTargetThreadIndex || nTargetThreadIndex > g_nThreads) // Ensure valid index for g_array access
+		return OK;
+
+	// Auto-execute thread is located at g_array[0], but nTargetThreadIndex is 1-based, so in that case decrease by 1
+	// If auto-execute section is not running, then g_array and nTargetThreadIndex indexing match (g_array[0] stores the default settings)
+	if (g_script.mAutoExecSectionIsRunning)
+		--nTargetThreadIndex; 
+
+	INT64 uThreadIdAtIndex = g_array[nTargetThreadIndex].ThreadId;
+	if (!uThreadIdAtIndex || g_array[nTargetThreadIndex].IsMarkedEarlyExit)
+		return OK; // The target thread has already been marked to exit
+
+	// Return 0 if the thread id at the specified index isn't the target thread, and the target thread isn't a plain index
+	if ((uThreadIdAtIndex != uThreadId) && (uThreadId >> 16))
+		return OK;
+
+	aResultToken.SetValue(uThreadIdAtIndex);
+	g_array[nTargetThreadIndex].ThreadId = 0; // Needed because CallbackCreate callback might need to set IsMarkedEarlyExit
+
 	// Even if the script isn't persistent, this thread might've interrupted another which should
 	// be allowed to complete normally.  This is especially important in v2 because a persistent
 	// script can become non-persistent by disabling a timer, closing a GUI, etc.  So if there
@@ -1232,9 +1257,20 @@ bif_impl ResultType Exit(optl<int> aExitCode)
 	// going to immediately terminate the script.  Avoid checking IsPersistent() here because
 	// conditions can change during stack-unwind due to __delete or FINALLY.  Instead, this is
 	// reset to 0 in ResumeUnderlyingThread().
-	if (g_nThreads <= 1)
+	if (nTargetThreadIndex <= 2)
 		g_script.mPendingExitCode = aExitCode.has_value() ? *aExitCode : 0;
-	return EARLY_EXIT;
+
+	// If the thread to be exited is the current one then use EARLY_EXIT, which causes the thread
+	// to exit properly (calling __delete, FINALLY etc). Otherwise mark the target thread for early
+	// exit, which is checked once the target thread becomes active again and ExecUntil starts evaluating
+	// a new line. This means that if the thread was interrupted during chained expressions, then the remaining
+	// expressions will still be evaluated before exiting the thread. 
+	if ((uThreadIdAtIndex & THREADID_INDEX) == nCurrentThreadIndex) {
+		aResultToken.SetExitResult(EARLY_EXIT);
+		return EARLY_EXIT;
+	} else
+		g_array[nTargetThreadIndex].IsMarkedEarlyExit = 1;
+	return OK;
 }
 
 bif_impl ResultType ExitApp(optl<int> aExitCode)
@@ -10161,6 +10197,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 		//    similar to the below is also done for single commmands that take a long time, such
 		//    as Download, FileSetAttrib, etc.
 		LONG_OPERATION_UPDATE
+
+		if (g.IsMarkedEarlyExit) {
+			g.IsMarkedEarlyExit = 0;
+			return EARLY_EXIT;
+		}
 
 		// If interruptions are currently forbidden, it's our responsibility to check if the number
 		// of lines that have been run since this quasi-thread started now indicate that

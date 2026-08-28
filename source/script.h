@@ -2256,6 +2256,7 @@ public:
 	MsgMonitorList mOnExit, mOnClipboardChange, mOnError; // Event handlers for OnExit(), OnClipboardChange() and OnError().
 	bool mOnClipboardChangeIsRunning;
 	int mPendingExitCode = 0;
+	DWORD mTotalThreadCount = 1;  // Counts the number of threads created in total during the execution of the script
 
 	ScriptTimer *mFirstTimer, *mLastTimer;  // The first and last script timers in the linked list.
 	UINT mTimerCount, mTimerEnabledCount;
@@ -2525,6 +2526,7 @@ BIV_DECL_RW(BIV_MenuMaskKey);
 BIV_DECL_R (BIV_IsPaused);
 BIV_DECL_R (BIV_IsCritical);
 BIV_DECL_R (BIV_IsSuspended);
+BIV_DECL_R (BIV_ThreadId);
 BIV_DECL_R (BIV_IsCompiled);
 BIV_DECL_RW(BIV_FileEncoding);
 BIV_DECL_RW(BIV_RegView);
