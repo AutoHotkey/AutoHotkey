@@ -342,8 +342,8 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-#define MAX_HOTSTRING_LENGTH 40  // Hard to imagine a need for more than this, and most are only a few chars long.
-#define MAX_HOTSTRING_LENGTH_STR _T("40")  // Keep in sync with the above.
+#define MAX_HOTSTRING_LENGTH 400  // Hard to imagine a need for more than this, and most are only a few chars long.
+#define MAX_HOTSTRING_LENGTH_STR _T("400")  // Keep in sync with the above.
 #define HOTSTRING_BLOCK_SIZE 1024
 typedef UINT HotstringIDType;
 
