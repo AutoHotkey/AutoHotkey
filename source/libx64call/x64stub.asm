@@ -14,14 +14,14 @@ RegisterCallbackAsmStub proc frame
 .allocstack 8*5
 .endprolog
 
-	; For the 'mov' further below
-	add rsp, 8
+	; For the 'push' further below
+	add rsp, 8*5
 
 	; Save the parameters in the spill area for consistency
-	mov qword ptr[rsp+8*0], rcx
-	mov qword ptr[rsp+8*1], rdx
-	mov qword ptr[rsp+8*2], r8
-	mov qword ptr[rsp+8*3], r9
+	push r9
+	push r8
+	push rdx
+	push rcx
 
 	; Set parameters for the upcoming function call
 	mov rcx, rsp ; UINT_PTR* aParams

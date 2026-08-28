@@ -39,28 +39,31 @@ PerformDynaCall proc frame
 	.endprolog
 
 	; Arguments:
-	; rcx: size of arguments to be passed via stack
+	; rcx: number of QWORDs to be passed as arguments via stack
 	; rdx: pointer to arguments to be passed via stack
 	; r8:  pointer to arguments to be passed by registers
 	; r9:  target function pointer
 
-	; Setup stack frame by subtracting the size of the arguments
-	sub rsp, rcx
+	test rcx, rcx
+	jz save_func_address
 
 	; Ensure the stack is 16-byte aligned
 	mov rax, rcx
-	and rax, 15
-	mov rsi, 16
-	sub rsi, rax
-	sub rsp, rsi
+	and rax, 1
+	add rax, rcx
+	shl rax, 3
 
-	; Save function address
-	mov rax, r9
+	; Setup stack frame by subtracting the size of the arguments
+	sub rsp, rax
 
 	; Copy the stack arguments
 	mov rsi, rdx ; let rsi point to the arguments.
 	mov rdi, rsp ; store pointer to beginning of stack arguments in rdi (for rep movsb).
-	rep movsb    ; @@@ should be optimized (e.g. movq)
+	rep movsq
+
+save_func_address:
+	; Save function address
+	mov rax, r9
 
 	; Copy the register arguments
 	mov rcx,  qword ptr[r8   ] ; copy first four arguments to rcx, rdx, r8, r9 and xmm0-xmm3.
