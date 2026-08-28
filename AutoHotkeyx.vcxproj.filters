@@ -121,9 +121,6 @@
     <ClCompile Include="source\script_autoit.cpp">
       <Filter>Built-in library</Filter>
     </ClCompile>
-    <ClCompile Include="source\script_gui.cpp">
-      <Filter>Built-in library</Filter>
-    </ClCompile>
     <ClCompile Include="source\script_menu.cpp">
       <Filter>Built-in library</Filter>
     </ClCompile>
@@ -189,6 +186,9 @@
     </ClCompile>
     <ClCompile Include="source\script2.cpp">
       <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_gui.cpp">
+      <Filter>Built-in library\Gui</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -302,6 +302,9 @@
     </ClInclude>
     <ClInclude Include="source\DispObject.h">
       <Filter>DLL</Filter>
+    </ClInclude>
+    <ClInclude Include="source\script_gui.h">
+      <Filter>Built-in library\Gui</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

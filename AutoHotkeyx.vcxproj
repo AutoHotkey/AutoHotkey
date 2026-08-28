@@ -311,6 +311,7 @@
     <ClInclude Include="source\script.h" />
     <ClInclude Include="source\script_com.h" />
     <ClInclude Include="source\script_func_impl.h" />
+    <ClInclude Include="source\script_gui.h" />
     <ClInclude Include="source\script_module.h" />
     <ClInclude Include="source\script_object.h" />
     <ClInclude Include="source\SimpleHeap.h" />
