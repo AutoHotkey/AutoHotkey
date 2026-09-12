@@ -7654,11 +7654,11 @@ ResultType Script::PreparseCommands(ScriptModule *aModule)
 {
 	// Terminate each module with a Line so that all labels have a target and
 	// all control flow statements that need it have a non-null mRelatedLine.
-	if (aModule->mLastLine)
+	if (mLastLine = aModule->mLastLine)
 	{
-		mPendingRelatedLine = aModule->mLastLine->mParentLine;
-		mCombinedLineNumber = aModule->mLastLine->mLineNumber + 1; // +1 to distinguish it from the last executable line when debugging.
-		mCurrFileIndex = aModule->mLastLine->mFileIndex;
+		mPendingRelatedLine = mLastLine->mActionType == ACT_UNTIL ? mLastLine : mLastLine->mParentLine;
+		mCombinedLineNumber = mLastLine->mLineNumber + 1; // +1 to distinguish it from the last executable line when debugging.
+		mCurrFileIndex = mLastLine->mFileIndex;
 	}
 	if (!AddLine(ACT_END_MODULE))
 		return FAIL;
