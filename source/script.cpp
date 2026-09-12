@@ -5913,6 +5913,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, FuncDefType aIsInExpres
 				return ConflictingDeclarationError(_T("parameter"), this_param.var);
 			if (   !(this_param.var = AddVar(param_start, param_length, varlist, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
 				return FAIL; // It already displayed the error, including attempts to have reserved names as parameter names.
+			if (this_param.is_byref)
+				this_param.var->Scope() |= VAR_BYREF;
 			param_start = omit_leading_whitespace(param_end);
 		}
 		else
@@ -12741,7 +12743,7 @@ ResultType Script::PreparseVarRefs(Line *aStartingLine)
 			}
 			if (arg.type == ARG_TYPE_INPUT_VAR)
 			{
-				if (arg.postfix->symbol != SYM_VAR || arg.postfix->var->Type() != VAR_NORMAL)
+				if (arg.postfix->symbol != SYM_VAR || arg.postfix->var->Type() != VAR_NORMAL || arg.postfix->var->IsByRefParam())
 				{
 					// Can't be ARG_TYPE_INPUT_VAR after all, as VAR_VIRTUAL and VAR_CONSTANT require ExpandExpression
 					// (unless it's a constant which was converted to SYM_OBJECT above).

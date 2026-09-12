@@ -179,7 +179,8 @@ private:
 	#define VAR_LOCAL_FUNCPARAM	0x10 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
 	#define VAR_LOCAL_STATIC	0x20 // Indicates this local var retains its value between function calls.
 	#define VAR_DECLARED		0x40 // Indicates this var was declared somehow, not automatic.
-	#define VAR_IMPORTED		0x80 // This is a non-exported import alias.
+	#define VAR_IMPORTED		0x80 // If global, this is a non-exported import alias.
+	#define VAR_BYREF			0x80 // If this is a parameter, it is ByRef.
 	UCHAR mScope;  // Bitwise combination of the above flags.
 	VarTypeType mType; // Keep adjacent/contiguous with the above due to struct alignment, to save memory.
 	// Performance: Rearranging mType and the other byte-sized members with respect to each other didn't seem
@@ -624,7 +625,13 @@ public:
 
 	bool IsExported()
 	{
+		ASSERT(mScope & VAR_GLOBAL);
 		return !(mScope & VAR_IMPORTED);
+	}
+
+	bool IsByRefParam()
+	{
+		return (mScope & (VAR_LOCAL_FUNCPARAM | VAR_BYREF)) == (VAR_LOCAL_FUNCPARAM | VAR_BYREF);
 	}
 
 	UCHAR &Scope()

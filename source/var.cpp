@@ -203,7 +203,7 @@ void Var::UpdateVirtualObj(IObject *aTargetRef)
 	mType = VAR_VIRTUAL_OBJ;
 	_SetObject(aTargetRef);
 	// Remove VAR_ATTRIB_NOT_NUMERIC so IsNumeric() will evaluate the property.
-	// Remove VAR_ATTRIB_UNINITIALIZED so IsUninitialized() is false (PerformAssign() relies on this).
+	// Remove VAR_ATTRIB_UNINITIALIZED, since its unset status is effectively dynamic.
 	mAttrib &= ~(VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED);
 	aTargetRef->AddRef();
 }
