@@ -489,6 +489,7 @@ public:
 	FResult set_MenuBar(ExprTokenType *aValue);
 	FResult get___Item(ExprTokenType &aIndex, ResultToken &aRetVal);
 	FResult get_FocusedCtrl(IObject *&aRetVal);
+	FResult get_FontHandle(UINT &aRetVal);
 	FResult get_MarginX(int &aRetVal) { return get_Margin(aRetVal, mMarginX); }
 	FResult get_MarginY(int &aRetVal) { return get_Margin(aRetVal, mMarginY); }
 	FResult set_MarginX(int aValue) { mMarginX = Scale(aValue); return OK; }

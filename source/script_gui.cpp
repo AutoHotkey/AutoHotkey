@@ -281,14 +281,15 @@ ObjectMemberMd GuiType::sMembers[] =
 	md_member(GuiType, Submit, CALL, (In_Opt, Bool32, Hide), (Ret, Object, RetVal)),
 	
 	md_member		(GuiType, __Item, GET, (In, Variant, Index), (Ret, Variant, RetVal)),
-	md_property_get	(GuiType, Hwnd, UInt32),
-	md_property		(GuiType, Title, String),
-	md_property		(GuiType, Name, String),
-	md_property_get	(GuiType, FocusedCtrl, Object),
 	md_property		(GuiType, BackColor, Variant),
+	md_property_get	(GuiType, FocusedCtrl, Object),
+	md_property_get	(GuiType, FontHandle, UInt32),
+	md_property_get	(GuiType, Hwnd, UInt32),
 	md_property		(GuiType, MarginX, Int32),
 	md_property		(GuiType, MarginY, Int32),
-	md_property_opt	(GuiType, MenuBar, Variant)
+	md_property_opt	(GuiType, MenuBar, Variant),
+	md_property		(GuiType, Name, String),
+	md_property		(GuiType, Title, String)
 };
 
 int GuiType::sMemberCount = _countof(sMembers);
@@ -459,6 +460,13 @@ FResult GuiType::get_FocusedCtrl(IObject *&aRetVal)
 	aRetVal = hwnd ? FindControl(hwnd) : nullptr;
 	if (aRetVal)
 		aRetVal->AddRef();
+	return OK;
+}
+
+
+FResult GuiType::get_FontHandle(UINT &aRetVal)
+{
+	aRetVal = (UINT)(UINT_PTR)sFont[mCurrentFontIndex].hfont;
 	return OK;
 }
 
