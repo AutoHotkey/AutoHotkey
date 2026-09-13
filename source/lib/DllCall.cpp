@@ -78,7 +78,7 @@ struct DYNAPARM
 
 #ifdef _WIN64
 // This function was borrowed from http://dyncall.org/
-extern "C" UINT_PTR PerformDynaCall(size_t stackArgsSize, DWORD_PTR* stackArgs, DWORD_PTR* regArgs, void* aFunction);
+extern "C" UINT_PTR PerformDynaCall(size_t stackArgsCount, DWORD_PTR* stackArgs, DWORD_PTR* regArgs, void* aFunction);
 
 // Retrieve a float or double return value.  These don't actually do anything, since the value we
 // want is already in the xmm0 register which is used to return float or double values.
@@ -218,7 +218,7 @@ void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aExcep
 	int params_left = aParamCount, i = 0, r = 0;
 	DWORD_PTR regArgs[4];
 	DWORD_PTR* stackArgs = NULL;
-	size_t stackArgsSize = 0;
+	size_t stackArgsCount = 0;
 
 	if (!register_return)
 	{
@@ -233,8 +233,8 @@ void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aExcep
 	// Copy the remaining parameters
 	if(params_left)
 	{
-		stackArgsSize = params_left * 8;
-		stackArgs = (DWORD_PTR*) _alloca(stackArgsSize);
+		stackArgsCount = params_left;
+		stackArgs = (DWORD_PTR*) _alloca(stackArgsCount*sizeof(DWORD_PTR));
 
 		for(int i = 0; i < params_left; i ++)
 			stackArgs[i] = DynaParamToElement(aParam[i+4]);
@@ -243,7 +243,7 @@ void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aExcep
 	// Call the function.
 	__try
 	{
-		Res.UIntPtr = PerformDynaCall(stackArgsSize, stackArgs, regArgs, aFunction);
+		Res.UIntPtr = PerformDynaCall(stackArgsCount, stackArgs, regArgs, aFunction);
 	}
 	__except(EXCEPTION_EXECUTE_HANDLER)
 	{
