@@ -101,6 +101,8 @@ GNU General Public License for more details.
 #define GET_BIT(buf,n) (((buf) & (1 << (n))) >> (n))
 #define SET_BIT(buf,n,val) ((val) ? ((buf) |= (1<<(n))) : (buf &= ~(1<<(n))))
 
+#define THREADID_INDEX 0xFFFF
+
 // FAIL = 0 to remind that FAIL should have the value zero instead of something arbitrary
 // because some callers may simply evaluate the return result as true or false
 // (and false is a failure):
@@ -936,6 +938,9 @@ struct ScriptThreadState
 	int UninterruptibleDuration; // Must be int to preserve negative values found in g_script.mUninterruptibleTime.
 	DWORD ThreadStartTime;
 
+	__int64 ThreadId; // Lower 16 bits contains the value of g_nThreads, higher 32 bits contain g_script.mTotalThreadCount at the time of the thread creation.
+	bool IsMarkedEarlyExit; // Set by Exit() if a thread id is provided to terminate underlying threads
+
 	bool IsPaused;
 	bool AllowThreadToBeInterrupted; // Whether this thread can be interrupted by custom menu items, hotkeys, or timers.  Separate from g_AllowInterruption because that's for use by ongoing operations, such as SendKeys, and should override the thread's setting.
 };
@@ -1063,6 +1068,7 @@ inline void global_init(global_struct &g)
 {
 	global_clear_state(g);
 	global_set_defaults(g);
+	g.ThreadId = (1 << 16) | 1; // Set the auto-execute thread id to 65537
 }
 
 

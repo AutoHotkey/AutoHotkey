@@ -94,7 +94,7 @@ md_func(EditPaste, (In, String, Value), MD_CONTROL_ARGS)
 md_func(EnvGet, (In, String, VarName), (Ret, String, RetVal))
 md_func(EnvSet, (In, String, VarName), (In_Opt, String, Value))
 
-md_func_x(Exit, Exit, ResultType, (In_Opt, Int32, ExitCode))
+md_func(Exit, (In_Opt, Int32, ExitCode), (In_Opt, Int64, ThreadId), (Ret, Variant, RetVal))
 md_func_x(ExitApp, ExitApp, ResultType, (In_Opt, Int32, ExitCode))
 
 md_func(FileAppend, (In, Variant, Value), (In_Opt, String, Path), (In_Opt, String, Options))
