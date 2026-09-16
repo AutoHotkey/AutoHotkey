@@ -95,6 +95,8 @@ int g_nLayersNeedingTimer = 0;
 int g_nThreads = 0;
 int g_nPausedThreads = 0;
 int g_MaxHistoryKeys = 40;
+bool g_ShowMouseKeyHistory = true;
+bool g_ShowKeyboardKeyHistory = true;
 DWORD g_InputTimeoutAt = 0;
 
 UCHAR g_MaxThreadsPerHotkey = 1;
