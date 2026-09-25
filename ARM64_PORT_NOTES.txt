@@ -1,0 +1,27 @@
+AutoHotkey v2.0.26 ARM64 Port
+
+Platform:
+Windows 11 ARM64
+
+Compiler:
+Visual Studio 2026
+
+Modified files:
+- AutoHotkeyx.vcxproj
+- source\lib_pcre\lib_pcre.vcxproj
+- source\lib\DllCall.cpp
+- source\lib\CCallback.cpp
+- source\libx64call\arm64call.asm
+
+Major fixes:
+- ARM64 project configuration
+- ARM64 DllCall support
+- ARM64 float/double parameter handling
+- ARM64 CallbackCreate support
+
+Tested:
+- Pure AHK
+- DllCall
+- CallbackCreate
+- HMPlayer (BASS/BASSWASAPI)
+- WLAN Monitor (WlanRegisterNotification)
