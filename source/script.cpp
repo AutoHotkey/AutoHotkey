@@ -12200,6 +12200,9 @@ ResultType Script::DerefInclude(LPTSTR &aOutput, LPCTSTR aBuf)
 	LPCTSTR cp, cp1;
 	LPTSTR dest;
 
+	LPCTSTR dir_override = nullptr;
+	size_t dir_override_length = 0;
+
 	// Do two passes:
 	// #1: Calculate the space needed.
 	// #2: Expand the contents of aBuf into aOutput.
@@ -12212,9 +12215,28 @@ ResultType Script::DerefInclude(LPTSTR &aOutput, LPCTSTR aBuf)
 			if (  !(aOutput = tmalloc(expanded_length+1))  )
 				return FAIL;
 			dest = aOutput;
+
+			if (dir_override)
+			{
+				tmemcpy(dest, dir_override, dir_override_length);
+				dest += dir_override_length;
+			}
 		}
 		else // First pass.
+		{
 			expanded_length = 0; // Init prior to accumulation.
+
+			cp = Line::sSourceFile[mCurrFileIndex];
+			if (*cp == '*' && cp[1] // Embedded script.
+				&& !_tcschr(_T(".\\%"), *aBuf) && aBuf[1] != ':') // Detect a limited/safe subset of relative paths.
+			{
+				dir_override = cp; // Includes the asterisk.
+				cp1 = _tcsrchr(dir_override, '\\');
+				if (cp1)
+					dir_override_length = cp1 - dir_override;
+				expanded_length += ++dir_override_length;
+			}
+		}
 
 		for (cp = aBuf; *cp; ++cp)  // Increment to skip over the deref/escape just found by the inner for().
 		{
