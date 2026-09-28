@@ -141,6 +141,18 @@
       <AdditionalManifestFiles>source\resources\AutoHotkey.exe.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
     </Manifest>
   </ItemDefinitionGroup>
+  <!-- AutoHotkey_setup.exe -->
+  <ItemDefinitionGroup Condition="'$(AhkBuildVariant)'=='Installer'">
+    <ResourceCompile>
+      <PreprocessorDefinitions>CONFIG_INSTALLER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+    <ClCompile>
+      <PreprocessorDefinitions>CONFIG_INSTALLER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <PropertyGroup Condition="'$(AhkBuildVariant)'=='Installer'">
+	<TargetName>AutoHotkey_setup</TargetName>
+  </PropertyGroup>
   <!-- AutoHotkey.dll -->
   <ItemDefinitionGroup Condition="$(ConfigDll)">
     <ClCompile>

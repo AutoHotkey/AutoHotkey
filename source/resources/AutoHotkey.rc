@@ -203,7 +203,11 @@ BEGIN
             VALUE "ProductName", ""
             VALUE "ProductVersion", AHK_VERSION
 #else
+#ifdef CONFIG_INSTALLER
+            VALUE "FileDescription", "AutoHotkey installer"
+#else
             VALUE "FileDescription", AHK_DESCRIPTION
+#endif
             VALUE "FileVersion", AHK_VERSION
             VALUE "CompanyName", "AutoHotkey Foundation LLC"
             VALUE "ProductName", "AutoHotkey"

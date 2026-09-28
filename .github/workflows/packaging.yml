@@ -1,0 +1,47 @@
+name: Build installer package
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        submodules: true
+        fetch-depth: 0
+        filter: tree:0
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v3
+
+    - name: Build interpreter binaries
+      run: |
+        msbuild AutoHotkeyx.sln /m /p:Configuration=Release /p:Platform=Win32
+        msbuild AutoHotkeyx.sln /m /p:Configuration=Release /p:Platform=Win32 /p:AhkBuildVariant=Installer
+        msbuild AutoHotkeyx.sln /m /p:Configuration=Release /p:Platform=x64
+
+    - name: Build help file
+      timeout-minutes: 5
+      run: bin\AutoHotkey32.exe help\compile_chm.ahk
+
+    - name: Assemble setup exe
+      timeout-minutes: 1
+      run: bin\AutoHotkey32.exe packaging\make-setup.ahk
+    
+    - uses: actions/upload-artifact@v7
+      with:
+        name: AutoHotkey_setup.exe
+        path: packaging\AutoHotkey_setup.exe
+        overwrite: true
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: AutoHotkey.zip
+        path: packaging\content\*
+        overwrite: true

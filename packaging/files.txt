@@ -1,0 +1,9 @@
+AutoHotkey32.exe
+AutoHotkey64.exe
+AutoHotkey.chm
+WindowSpy.ahk
+license.txt
+Install.cmd
+UX\*.ahk
+UX\inc
+UX\Templates

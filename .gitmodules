@@ -1,0 +1,8 @@
+[submodule "UX"]
+	path = packaging/content/UX
+	url = git@github.com:AutoHotkey/AutoHotkeyUX.git
+	branch = main
+[submodule "help"]
+	path = help
+	url = git@github.com:AutoHotkey/AutoHotkeyDocs.git
+	branch = alpha
