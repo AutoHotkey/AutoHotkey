@@ -168,6 +168,7 @@ ResultType Script::ParseImportDirective(LPTSTR aBuf)
 	imp->is_export = is_export;
 	imp->line_number = mCombinedLineNumber;
 	imp->file_index = mCurrFileIndex;
+	imp->scope = g->CurrentFunc;
 	imp->next = mCurrentModule->mImports;
 	mCurrentModule->mImports = imp;
 	return OK;
@@ -180,13 +181,24 @@ Var *Script::FindImportedVar(LPCTSTR aVarName)
 }
 
 
+bool ScriptImport::IsInScope()
+{
+	if (!scope)
+		return true;
+	for (auto f = g->CurrentFunc; f; f = f->mOuterFunc)
+		if (f == scope)
+			return true;
+	return false;
+}
+
+
 Var *ScriptModule::FindImportedVar(LPCTSTR aVarName)
 {
 	if (*aVarName == '_')
 		return nullptr;
 	for (auto imp = mImports; imp; imp = imp->next)
 	{
-		if (imp->wildcard && imp->mod) // mod can be null during DerefInclude().
+		if (imp->wildcard && imp->mod && imp->IsInScope()) // mod can be null during DerefInclude().
 		{
 			auto var = imp->mod->mVars.Find(aVarName);
 			if (!var && imp->mod->mHasWildcardExports)
@@ -201,7 +213,7 @@ Var *ScriptModule::FindImportedVar(LPCTSTR aVarName)
 				if (imp->mod->mExecuted)
 					return var;
 				// AddNewImportVar must be used to support executing the module on first reference.
-				return AddNewImportVar(var->mName, var, imp->mod, imp->is_export);
+				return AddNewImportVar(var->mName, var, *imp);
 			}
 		}
 	}
@@ -236,17 +248,18 @@ Var *ScriptModule::FindImportableVar(LPCTSTR aVarName, bool aAllowCreate)
 // Raises an error if a conflicting declaration exists.
 // May use an existing Var if not previously marked as declared, such as if created by Export.
 // Caller provides persistent memory for aVarName.
-Var *ScriptModule::AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, IObject *aModule, bool aExport)
+Var *ScriptModule::AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, ScriptImport &aImp)
 {
-	ASSERT(aVarName && aModule);
+	ASSERT(aVarName && aImp.mod);
 	int at;
-	auto var = mVars.Find(aVarName, &at);
+	auto &vars = aImp.scope ? aImp.scope->mStaticVars : mVars;
+	auto var = vars.Find(aVarName, &at);
 	if (var)
 	{
 		// mVars should contain only declared or exported variables at this point.
 		if (var->IsDeclared() || aAliasFor && aAliasFor->ResolveAlias() == var)
 		{
-			if (aAliasFor ? var->IsAlias() && var->GetAliasFor() == aAliasFor : var->ToObject() == aModule)
+			if (aAliasFor ? var->IsAlias() && var->GetAliasFor() == aAliasFor : var->ToObject() == aImp.mod)
 				return var; // Already imported.
 			g_script.ConflictingDeclarationError(_T("import"), var);
 			return nullptr;
@@ -256,14 +269,14 @@ Var *ScriptModule::AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, IObject *aMo
 	}
 	else
 		var = new Var(aVarName, VAR_DECLARE_GLOBAL);
-	if (!mVars.Insert(var, at))
+	if (!vars.Insert(var, at))
 	{
 		delete var;
 		MemoryError();
 		return nullptr;
 	}
-	var->SetImport(aModule, aAliasFor);
-	if (!aExport)
+	var->SetImport(aImp.mod, aAliasFor);
+	if (!aImp.is_export)
 		var->Scope() |= VAR_IMPORTED;
 	return var;
 }
@@ -383,7 +396,7 @@ ResultType Script::ResolveImports(ScriptImport &imp, ScriptModule *aDirectiveLis
 
 	if (imp.var_name)
 	{
-		auto var = mCurrentModule->AddNewImportVar(imp.var_name, nullptr, imp.mod, imp.is_export);
+		auto var = mCurrentModule->AddNewImportVar(imp.var_name, nullptr, imp);
 		if (!var)
 			return FAIL;
 	}
@@ -421,7 +434,7 @@ ResultType Script::ResolveImports(ScriptImport &imp, ScriptModule *aDirectiveLis
 				auto exported = imp.mod->FindImportableVar(mod_name, true);
 				if (!exported)
 					return MemoryError();
-				auto imported = mCurrentModule->AddNewImportVar(var_name, exported, imp.mod, imp.is_export);
+				auto imported = mCurrentModule->AddNewImportVar(var_name, exported, imp);
 				if (!imported)
 					return FAIL;
 			}

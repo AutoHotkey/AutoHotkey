@@ -2472,7 +2472,7 @@ public:
 	void WarnUnassignedVar(Var *aVar, Line *aLine);
 	void WarnLocalSameAsGlobal(LPCTSTR aVarName);
 
-	ResultType PreprocessLocalVars(FuncList &aFuncs);
+	ResultType FinalizeFuncs(FuncList &aFuncs);
 	ResultType PreprocessLocalVars(UserFunc &aFunc);
 	ResultType PreparseVarRefs();
 	ResultType PreparseVarRefs(Line *aStartingLine);

@@ -6,10 +6,13 @@ struct ScriptImport
 	LPTSTR names = nullptr, mod_path = nullptr, mod_name = nullptr, var_name = nullptr;
 	ScriptModule *mod = nullptr;
 	ScriptImport *next = nullptr;
+	UserFunc *scope = nullptr;
 	LineNumberType line_number = 0;
 	FileIndexType file_index = 0;
 	bool wildcard = false;
 	bool is_export = false;
+
+	bool IsInScope();
 
 	ScriptImport() {}
 	ScriptImport(ScriptModule *aMod) : mod(aMod), names(_T("*")), wildcard(true) {}
@@ -55,7 +58,7 @@ public:
 	IObject *FindGlobalObject(LPCTSTR aName);
 	Var *FindImportedVar(LPCTSTR aName);
 	Var *FindImportableVar(LPCTSTR aName, bool aAllowCreate = false);
-	Var *AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, IObject *aModule, bool aExport);
+	Var *AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, ScriptImport &aImp);
 
 	ScriptModule() {}
 	ScriptModule(LPCTSTR aName) : mName(aName) {}
