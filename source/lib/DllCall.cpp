@@ -723,7 +723,7 @@ has_valid_return_type:
 							if (value_param.symbol == SYM_MISSING)
 							{
 								this_dyna_param.struct_size = 0; // Zero the union.
-								this_dyna_param.type = Exp32or64(DLL_ARG_INT64, DLL_ARG_INT);
+								this_dyna_param.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64);
 								this_dyna_param.value_uintptr = 0;
 								continue;
 							}
