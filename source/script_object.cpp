@@ -2311,7 +2311,7 @@ ResultType FillPropertyFlags(IObject *aObj, bool aSetter, Property &aProp, Resul
 
 void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (mFlags & CannotOwnProps)
+	if (!CanOwnProps())
 		_o_throw_type(_T("Object"), ExprTokenType(this));
 	auto name = ParamIndexToString(0, _f_number_buf);
 	if (!*name)

@@ -458,6 +458,7 @@ public:
 	bool HasMethod(name_t aName);
 	IObject *GetMethod(name_t name);
 
+	bool CanOwnProps() { return (mFlags & CannotOwnProps) == 0; }
 	bool HasOwnProps() { return mFields.Length(); }
 	bool HasOwnProp(name_t aName)
 	{

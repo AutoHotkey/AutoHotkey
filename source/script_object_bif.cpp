@@ -54,7 +54,7 @@ BIF_DECL(BIF_ObjXXX)
 	aResultToken.InitInvokeRetVal();
 	
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
-	if (obj)
+	if (obj && obj->CanOwnProps())
 		obj->CallBuiltin(_f_callee_id, aResultToken, aParam + 1, aParamCount - 1);
 	else
 		_f_throw_type(_T("Object"), *aParam[0]);
