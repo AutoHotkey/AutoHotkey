@@ -105,6 +105,7 @@ FuncEntry g_BIF[] =
 	BIF1(Ord, 1, 1),
 	BIF1(Props, 1, 1),
 	BIF1(Random, 0, 2),
+	BIF1(Range, 0, 3),
 	BIFn(RegCreateKey, 0, 1, BIF_Reg),
 	BIFn(RegDelete, 0, 2, BIF_Reg),
 	BIFn(RegDeleteKey, 0, 1, BIF_Reg),
