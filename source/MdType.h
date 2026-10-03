@@ -53,7 +53,11 @@ enum class MdType : UINT8
 
 #define MdType_IsInt(t) ((t) <= MdType::LastIntType && (t) >= MdType::FirstIntType)
 #define MdType_IsNum(t) ((t) <= MdType::LastNumberType && (t) >= MdType::FirstNumberType)
+#ifdef _WIN64
 #define MdType_Is64bit(t) ((t) >= MdType::First64bitNumType && (t) <= MdType::Last64bitNumType)
+#else
+#define MdType_Is64bit(t) ((t) >= MdType::First64bitNumType && (t) <= MdType::Last64bitNumType && (t) != MdType::IntPtr)
+#endif
 #define MdType_IsMod(t) ((t) >= MdType::FirstModifier)
 
 #define MdType_IsOut(t) ((t) == MdType::Out) // Macro supports the future addition of other Out modifiers.
