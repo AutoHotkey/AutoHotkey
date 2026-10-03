@@ -449,7 +449,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if ((flags & IT_BITMASK) == IT_GET && !member)
 						err = ErrorPrototype::UnsetItem, msg = ERR_ITEM_UNSET;
 					else
-						err = ErrorPrototype::Unset, msg = _T("No value was returned.");
+						err = ErrorPrototype::Unset, msg = ERR_RETURNED_UNSET;
 					result_token.Error(msg, this_token.error_reporting_marker, err);
 					aResult = result_token.Result(); // FAIL to abort, OK if user or OnError requested continuation.
 					goto abort_if_result;

@@ -787,6 +787,8 @@ ResultType Object::GetProperty(ResultToken &aResultToken, int aFlags, name_t aNa
 			auto result = GetFieldValue(aResultToken, aFlags | flag, *field, aThisToken);
 			if (!aParamCount || result != OK)
 				return result;
+			if (aResultToken.symbol == SYM_MISSING) // Property getter returned unset.
+				return aResultToken.UnsetError(ERR_RETURNED_UNSET, aName);
 			return ApplyParams(aResultToken, aFlags, aParam, aParamCount);
 		}
 		else if (auto getter = field->prop->Getter())
@@ -924,6 +926,8 @@ ResultType Object::SetProperty(ResultToken &aResultToken, int aFlags, name_t aNa
 		auto result = GetFieldValue(aResultToken, (aFlags & ~IT_BITMASK) | IF_BYPASS___VALUE, *field, aThisToken);
 		if (result != OK)
 			return result;
+		if (aResultToken.symbol == SYM_MISSING) // Property getter returned unset.
+			return aResultToken.UnsetError(ERR_RETURNED_UNSET, aName);
 		return ApplyParams(aResultToken, aFlags, aParam, aParamCount);
 	}
 

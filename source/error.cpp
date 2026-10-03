@@ -907,6 +907,12 @@ ResultType ResultToken::Error(LPCTSTR aErrorText, ExprTokenType &aExtraInfo, Obj
 }
 
 __declspec(noinline)
+ResultType ResultToken::UnsetError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
+{
+	return Error(aErrorText, aExtraInfo, ErrorPrototype::Unset);
+}
+
+__declspec(noinline)
 ResultType ResultToken::MemoryError()
 {
 	return Error(ERR_OUTOFMEM, nullptr, ErrorPrototype::Memory);
