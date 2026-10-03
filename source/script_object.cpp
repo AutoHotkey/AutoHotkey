@@ -4232,6 +4232,12 @@ ObjectMember Object::sCArrayMembers[]
 };
 
 
+ObjectMember ScriptModule::sMembers[]
+{
+	Object_Method1(__Ref, 1, 1)
+};
+
+
 
 struct ClassDef
 {
@@ -4362,7 +4368,7 @@ void Object::CreateRootPrototypes()
 			}},
 			{_T("String"), &Object::sStringPrototype, {BIF_String, 2, 2}}
 		}},
-		{_T("Module"), &ScriptModule::sPrototype},
+		{_T("Module"), &ScriptModule::sPrototype, no_ctor, ScriptModule::sMembers},
 		{_T("PropRef"), &PropRef::sPrototype, {PropRef_Call, 3, 3}, PropRef::sMembers},
 		{_T("Struct"), &sStructPrototype, NewStruct, sStructMembers},
 		{_T("VarRef"), &sVarRefPrototype, no_ctor, VarRef::sMembers}

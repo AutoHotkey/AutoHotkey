@@ -70,8 +70,10 @@ public:
 
 	IObject_Type_Impl("Module");
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL) override;
+	void __Ref(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	Object *Base() override { return sPrototype; }
 	static Object *sPrototype;
+	static ObjectMember sMembers[];
 };
 
 typedef ScriptItemList<ScriptModule, 16> ScriptModuleList;

@@ -35,6 +35,17 @@ ResultType ScriptModule::Invoke(IObject_Invoke_PARAMS_DECL)
 }
 
 
+void ScriptModule::__Ref(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = TokenToString(*aParam[0]);
+	Var *var = FindImportableVar(name);
+	auto ref = var ? var->GetRef() : nullptr;
+	if (ref)
+		_o_return(ref);
+	_o_return_unset;
+}
+
+
 ScriptModule *Script::FindDirectiveModule(LPCTSTR aName, ScriptModule *aList)
 {
 	ScriptModule *mod;
