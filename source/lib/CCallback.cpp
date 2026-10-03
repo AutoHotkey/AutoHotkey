@@ -440,8 +440,12 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, ExprTokenT
 	if (at && !use_cdecl) // v2.1: Adjust for structs larger than 4 bytes passed by value.
 	{
 		for (int i = 0; i < actual_param_count; ++i)
+		{
 			if (at[i].proto)
 				param_slot_count += (((int)at[i].proto->LockStructSize() + 3) >> 2) - 1;
+			else if (MdType_Is64bit(at[i].type))
+				param_slot_count += 1;
+		}
 		if (at[actual_param_count].proto) // Return type is a struct.
 		{
 			int ret_size = (int)at[actual_param_count].proto->LockStructSize();
