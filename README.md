@@ -60,4 +60,4 @@ AutoHotkeyx.vcxproj includes the following Platforms:
   - **Win32**: for Windows 32-bit.
   - **x64**: for Windows x64.
 
-AutoHotkey supports Windows XP with or without service packs and Windows 2000 via an asm patch (win2kcompat.asm).  Support may be removed if maintaining it becomes non-trivial.  Older versions are not supported.
+AutoHotkey v2 no longer supports Windows 2000 or Windows XP. See [Changes from v1.1 to v2.0](https://www.autohotkey.com/docs/v2/v2-changes.htm#other) for details.
