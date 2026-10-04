@@ -913,14 +913,11 @@ BOOL FileSetTimeCallback(LPCTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallb
 {
 	HANDLE hFile;
 	// Open existing file.
-	// FILE_FLAG_NO_BUFFERING might improve performance because all we're doing is
-	// changing one of the file's attributes.  FILE_FLAG_BACKUP_SEMANTICS must be
-	// used, otherwise changing the time of a directory under NT and beyond will
-	// not succeed.  Win95 (not sure about Win98/Me) does not support this, but it
-	// should be harmless to specify it even if the OS is Win95:
-	hFile = CreateFile(aFilename, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE
+	// FILE_WRITE_ATTRIBUTES is sufficient for SetFileTime().
+	// FILE_FLAG_BACKUP_SEMANTICS must be used, otherwise changing the time of a directory will fail.
+	hFile = CreateFile(aFilename, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
 		, (LPSECURITY_ATTRIBUTES)NULL, OPEN_EXISTING
-		, FILE_FLAG_NO_BUFFERING | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+		, FILE_FLAG_BACKUP_SEMANTICS, NULL);
 	if (hFile == INVALID_HANDLE_VALUE)
 	{
 		g->LastError = GetLastError();
