@@ -1858,6 +1858,7 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 	global_struct &g = *::g; // Must be done AFTER the ++g above. Reduces code size and may improve performance.
 	global_clear_state(g);
 	g.Priority = aPriority;
+	g.ThreadId = ((__int64)(++g_script.mTotalThreadCount) << 16) | g_nThreads;
 
 	// If the current quasi-thread is paused, the thread we're about to launch will not be, so the tray icon
 	// needs to be checked unless the caller said it wasn't needed.  In any case, if the tray icon is already
