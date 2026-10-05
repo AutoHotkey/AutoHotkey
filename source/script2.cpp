@@ -15807,6 +15807,7 @@ BIF_DECL(BIF_StrGetPut)
 
 	LPVOID 	address;
 	int 	length = -1; // actual length
+	bool	length_is_max_size = false;
 	UINT 	encoding = UorA(CP_UTF16, CP_ACP); // native encoding
 
 	// Parameters are interpreted according to the following rules (highest to lowest precedence):
@@ -15845,6 +15846,8 @@ BIF_DECL(BIF_StrGetPut)
 				length = (int)TokenToInt64(**aParam);
 				if (length < -1 || !length)
 					return; // Invalid length; or caller of StrGet asked for 0 chars.
+				else
+					length_is_max_size = true; // Limit to this, but stop at the first null char.
 				++aParam; // Let encoding be the next param, if present.
 			}
 			else if ((*aParam)->symbol == SYM_MISSING)
@@ -15995,6 +15998,17 @@ BIF_DECL(BIF_StrGetPut)
 	}
 	else // StrGet
 	{
+		if (length_is_max_size) // Implies length != -1.
+		{
+			// Caller specified the maximum character count, not the exact length.
+			// If the length includes null characters, the conversion functions below
+			// would convert more than necessary and we'd still have to recalculate the
+			// length.  So find the exact length up front:
+			if (encoding == CP_UTF16)
+				length = (int)wcsnlen((LPWSTR)address, length);
+			else
+				length = (int)strnlen((LPSTR)address, length);
+		}
 		if (encoding != UorA(CP_UTF16, CP_ACP))
 		{
 			// Conversion is required.
