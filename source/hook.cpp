@@ -1384,6 +1384,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// words, pPrefixKey may be unrelated to the key-up hotkey if it is a standard modifier.
 	if (pPrefixKey && pPrefixKey->was_just_used != AS_PASSTHROUGH_PREFIX 
 		&& (pPrefixKey->as_modifiersLR && !aKeyUp
+			|| hotkey_id_temp >= Hotkey::sHotkeyCount // An AltTab action (any other out of bounds value should be impossible).
 			|| Hotkey::shk[hotkey_id_temp]->mModifierVK // Can't rely on found_hk since this_key.hotkey_to_fire_upon_release may have been used.
 			|| Hotkey::shk[hotkey_id_temp]->mModifierSC))
 		pPrefixKey->was_just_used = AS_PREFIX_FOR_HOTKEY;
