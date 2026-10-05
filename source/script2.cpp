@@ -2742,7 +2742,13 @@ MsgMonitorStruct *MsgMonitorList::AddInternal(UINT aMsg, bool aAppend)
 {
 	if (mCount == mCountMax)
 	{
-		int new_count = mCountMax ? mCountMax * mCountMax : 16;
+		// Fix for v2.0.29: Use mCountMax * 2 rather than mCountMax * mCountMax, increasing
+		// the effective limit from 1<<16 to 1<<30.  Neither limit is expected to be reached
+		// in a real script.  1<<30 would require 16GB memory just for the mMonitor array,
+		// and message handling would likely be impractically slow.
+		if (mCountMax > (1 << 29))
+			return NULL;
+		int new_count = mCountMax ? mCountMax * 2 : 16;
 		void *new_array = realloc(mMonitor, new_count * sizeof(MsgMonitorStruct));
 		if (!new_array)
 			return NULL;

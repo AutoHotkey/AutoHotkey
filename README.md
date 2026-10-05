@@ -19,14 +19,14 @@ AutoHotkey v1 is not being maintained, but support is provided by community memb
 
 ## How to Compile ##
 
-AutoHotkey is developed with [Microsoft Visual Studio Community 2022](https://www.visualstudio.com/products/visual-studio-community-vs), which is a free download from Microsoft.
+AutoHotkey is developed with [Microsoft Visual Studio Community 2026](https://www.visualstudio.com/products/visual-studio-community-vs), which is a free download from Microsoft.
 
   - Get the source code.
   - Open AutoHotkeyx.sln in Visual Studio.
   - Select the appropriate Build and Platform.
   - Build.
 
-The project is configured in a way that allows building with Visual Studio 2012 or later, but only the 2022 toolset is regularly tested. Some newer C++ language features are used and therefore a later version of the compiler might be required.
+The project is configured in a way that allows building with Visual Studio 2012 or later, but only the 2026 toolset is regularly tested. Some newer C++ language features are used and therefore a later version of the compiler might be required.
 
 
 ## Developing in VS Code ##
@@ -60,4 +60,6 @@ AutoHotkeyx.vcxproj includes the following Platforms:
   - **Win32**: for Windows 32-bit.
   - **x64**: for Windows x64.
 
-AutoHotkey supports Windows XP with or without service packs and Windows 2000 via an asm patch (win2kcompat.asm).  Support may be removed if maintaining it becomes non-trivial.  Older versions are not supported.
+AutoHotkey v2 should run on Windows 7 and later, but each release is tested only on Windows 11.
+
+Support for Windows XP was dropped by commit b1ac557a. It may be possible to build binaries for Windows XP by adjusting linker settings and using an appropriate compiler toolset, but some features may not work. The removed support included version checks affecting use of fonts packaged with later OS versions, owner-drawn menu icons, Sound APIs, and some other miscellaneous version checks for pre-Vista compatibility.
