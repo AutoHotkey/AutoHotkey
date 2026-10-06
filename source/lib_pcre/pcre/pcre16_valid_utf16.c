@@ -6,7 +6,7 @@
 and semantics are as close as possible to those of the Perl 5 language.
 
                        Written by Philip Hazel
-           Copyright (c) 1997-2012 University of Cambridge
+           Copyright (c) 1997-2013 University of Cambridge
 
 -----------------------------------------------------------------------------
 Redistribution and use in source and binary forms, with or without
@@ -69,7 +69,7 @@ PCRE_UTF16_ERR0  No error
 PCRE_UTF16_ERR1  Missing low surrogate at the end of the string
 PCRE_UTF16_ERR2  Invalid low surrogate
 PCRE_UTF16_ERR3  Isolated low surrogate
-PCRE_UTF16_ERR4  Not allowed character
+PCRE_UTF16_ERR4  Unused (was non-character)
 
 Arguments:
   string       points to the string
@@ -83,9 +83,9 @@ Returns:       = 0    if the string is a valid UTF-16 string
 int
 PRIV(valid_utf)(PCRE_PUCHAR string, int length, int *erroroffset)
 {
-#if defined(SUPPORT_UTF) && defined(SUPPORT_UTF_VALIDATION)
+#ifdef SUPPORT_UTF
 register PCRE_PUCHAR p;
-register pcre_uchar c;
+register pcre_uint32 c;
 
 if (length < 0)
   {
@@ -100,20 +100,10 @@ for (p = string; length-- > 0; p++)
   if ((c & 0xf800) != 0xd800)
     {
     /* Normal UTF-16 code point. Neither high nor low surrogate. */
-
-    /* This is probably a BOM from a different byte-order.
-    Regardless, the string is rejected. */
-    if (c == 0xfffe)
-      {
-      *erroroffset = p - string;
-      return PCRE_UTF16_ERR4;
-      }
     }
   else if ((c & 0x0400) == 0)
     {
-    /* High surrogate. */
-
-    /* Must be a followed by a low surrogate. */
+    /* High surrogate. Must be a followed by a low surrogate. */
     if (length == 0)
       {
       *erroroffset = p - string;
@@ -138,6 +128,7 @@ for (p = string; length-- > 0; p++)
 #else  /* SUPPORT_UTF */
 (void)(string);  /* Keep picky compilers happy */
 (void)(length);
+(void)(erroroffset);
 #endif /* SUPPORT_UTF */
 
 return PCRE_UTF16_ERR0;   /* This indicates success */
