@@ -565,6 +565,8 @@ enum DllArgTypes {
 	, DLL_ARG_STR  = UorA(DLL_ARG_WSTR, DLL_ARG_ASTR)
 	, DLL_ARG_xSTR = UorA(DLL_ARG_ASTR, DLL_ARG_WSTR) // To simplify some sections.
 };  // Some sections might rely on DLL_ARG_INVALID being 0.
+#define DLLARGTYPE_IS_NUMERIC(A) ((A) >= DLL_ARG_INT && (A) <= DLL_ARG_DOUBLE)
+#define DLLARGTYPE_IS_INTEGER(A) ((A) <= DLL_ARG_INT64 && (A) >= DLL_ARG_INT)
 
 
 // Note that currently this value must fit into a sc_type variable because that is how TextToKey()

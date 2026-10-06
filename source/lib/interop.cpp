@@ -27,9 +27,31 @@ struct NumGetParams
 	BOOL is_integer = TRUE, is_signed = FALSE;
 };
 
+bool Object::GetNumGetArgInfo(size_t &aSize, BOOL &aIsInt, BOOL &aIsSigned)
+{
+	auto &si = *GetStructInfo();
+	if (!DLLARGTYPE_IS_NUMERIC(si.dllcall_type))
+		return false;
+	aSize = si.size;
+	aIsInt = DLLARGTYPE_IS_INTEGER(si.dllcall_type);
+	aIsSigned = !si.is_unsigned;
+	return true;
+}
+
 void ConvertNumGetType(ExprTokenType &aToken, NumGetParams &op)
 {
 	LPTSTR type = TokenToString(aToken); // No need to pass aBuf since any numeric value would not be recognized anyway.
+	if (!*type)
+	{
+		auto cls = dynamic_cast<Object*>(TokenToObject(aToken));
+		if (!cls)
+			return;
+		auto proto = cls->ClassGetPrototype();
+		if (proto && proto->IsDerivedFrom(Object::sStructPrototype))
+			proto->GetNumGetArgInfo(op.num_size, op.is_integer, op.is_signed);
+		return; // Either it's valid or op.num_size == 0 will indicate the error.
+	}
+
 	if (ctoupper(*type) == 'U') // Unsigned.
 	{
 		++type; // Remove the first character from further consideration.
