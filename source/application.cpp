@@ -244,9 +244,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				&& GetWindowThreadProcessId(fore_window, NULL) == g_MainThreadID) // And it belongs to our main thread (the main thread is the only one that owns any windows).
 			{
 				do_special_msg_filter = false; // Set default.
-                if (g_nFileDialogs) // v1.0.44.12: Also do the special Peek/msg filter below for FileSelect because testing shows that frequently-running timers disrupt the ability to double-click.
-					do_special_msg_filter = IsWindowStandardDialog(fore_window);  // Due to checking g_nFileDialogs above, this means that this dialog is probably FileSelect rather than MsgBox/InputBox/DirSelect (even if this guess is wrong, it seems fairly inconsequential to filter the messages since other pump beneath us on the call-stack will handle them ok).
-				if (!do_special_msg_filter && (focused_control = GetFocus()))
+				// v2.1: No filtering is done for FileSelect dialogs because they haven't used ListView since Windows XP.
+				if (focused_control = GetFocus())
 				{
 					GetClassName(focused_control, wnd_class_name, _countof(wnd_class_name));
 					do_special_msg_filter = !_tcsicmp(wnd_class_name, _T("SysTreeView32")) // A TreeView owned by our thread has focus (includes DirSelect's TreeView).
@@ -257,7 +256,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// v1.0.48.03: Below now applies to SysListView32 because otherwise a timer that runs
 					// while the user is dragging a rectangle around a selection (Marquee) can cause the
 					// mouse button to appear to be stuck down down after the user releases it.
-					// v1.0.44.12: Below now applies to FileSelect dialogs too (see reason above).
 					// v1.0.44.11: Since one of our thread's TreeViews has focus (even in DirSelect), this
 					// section is a work-around for the fact that the TreeView's message pump (somewhere beneath
 					// us on the call stack) is apparently designed to process some mouse messages directly rather
