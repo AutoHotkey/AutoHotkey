@@ -1,0 +1,10 @@
+contact_links:
+  - name: "Help with a script"
+    url: "https://www.autohotkey.com/boards/viewforum.php?f=82"
+    about: "Get prompt help from volunteers at the autohotkey.com Ask for Help subforum."
+  - name: "Feature request"
+    url: "https://www.autohotkey.com/boards/viewforum.php?f=13"
+    about: "Request new or changed features at the autohotkey.com Wish List subforum."
+  - name: "Bug report"
+    url: "https://www.autohotkey.com/boards/viewforum.php?f=14"
+    about: "Report issues with documented functionality at the autohotkey.com Bug Reports subforum."
