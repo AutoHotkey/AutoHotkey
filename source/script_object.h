@@ -445,6 +445,8 @@ public:
 	static Object *CreateStructPtr(Object *aBase, UINT_PTR aPtr, UINT aFlags = NoCallDelete);
 	static void NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	static ResultType CreateStruct(ResultToken &aResultToken, Object *aBase, ExprTokenType *aParam[] = nullptr, int aParamCount = 0);
+	
+	static bool IsCArrayOf(IObject *aCandidate, Object *aPrototype);
 
 	static ResultType ApplyParams(ResultToken &aThisResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 

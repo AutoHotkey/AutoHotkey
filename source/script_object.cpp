@@ -1137,7 +1137,15 @@ ResultType Object::SetBoxedPointer(ResultToken &aResultToken, ExprTokenType &aVa
 			p = nullptr;
 	}
 	else
-		return aResultToken.TypeError(aPrototype->GetOwnPropString(_T("__Class")), aValue);
+	{
+		if (IsCArrayOf(v, aPrototype))
+		{
+			p = (Object*)v; // Struct.Array
+			np = p->DataPtr();
+		}
+		else
+			return aResultToken.TypeError(aPrototype->GetOwnPropString(_T("__Class")), aValue);
+	}
 	
 	aPtr = np;
 
@@ -1148,6 +1156,18 @@ ResultType Object::SetBoxedPointer(ResultToken &aResultToken, ExprTokenType &aVa
 		(*nest)->Release();
 	*nest = p;
 	return OK;
+}
+
+
+bool Object::IsCArrayOf(IObject *aCandidate, Object *aPrototype)
+{
+	auto &vsi = *aCandidate->Base()->GetStructInfo();
+	if (!vsi.item_count)
+		return false;
+	if (vsi.pointed_class)
+		return vsi.pointed_class->ClassGetPrototype() == aPrototype;
+	else
+		return vsi.native_type == aPrototype->GetStructInfo()->native_type;
 }
 
 

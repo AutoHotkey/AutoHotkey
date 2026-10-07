@@ -698,8 +698,8 @@ has_valid_return_type:
 	{
 		// Store each arg into a dyna_param struct, using its arg type to determine how.
 		DYNAPARM &this_dyna_param = dyna_param[arg_count];
-		Object *param_class = nullptr, *param_proto = nullptr;
-
+		Object *param_proto = nullptr;
+		
 		ExprTokenType &value_param = *aParam[i + 1];
 		IObject *this_param_obj = TokenToObject(value_param);
 		if (IObject *obj = TokenToObject(*aParam[i]))
@@ -707,13 +707,13 @@ has_valid_return_type:
 			this_dyna_param.type = DLL_ARG_INVALID;
 			if (obj->IsOfType(Object::sPrototype))
 			{
-				param_class = (Object*)obj;
-				param_proto = param_class->ClassGetPrototype();
+				param_proto = ((Object*)obj)->ClassGetPrototype();
 				if (param_proto && param_proto->IsDerivedFrom(Object::sStructPrototype))
 				{
 					Object *pointed_class;
 					if (param_proto->GetStructArgInfo(this_dyna_param, pointed_class))
 					{
+						// Pointer types must be handled early in case VarRef handling is also needed.
 						if (pointed_class && !(this_param_obj && this_param_obj->IsOfType(param_proto)))
 						{
 							// Permit unset to mean nullptr, but don't permit integer addresses, since that convenience would come
@@ -728,11 +728,15 @@ has_valid_return_type:
 								continue;
 							}
 							param_proto = pointed_class->ClassGetPrototype();
-							if (param_proto && param_proto->IsDerivedFrom(Object::sStructPrototype))
+							this_dyna_param.struct_size = -1; // In lieu of pass_by_address (which can't be used due to the union).
+							this_dyna_param.type = DLL_ARG_STRUCT;
+							if (Object::IsCArrayOf(this_param_obj, param_proto))
 							{
-								param_class = pointed_class;
-								this_dyna_param.struct_size = -1; // In lieu of pass_by_address (which can't be used due to the union).
-								this_dyna_param.type = DLL_ARG_STRUCT;
+								// No further type checking or conversion needed; pass the array base address.
+								this_dyna_param.struct_size = 0; // Zero the union.
+								this_dyna_param.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64);
+								this_dyna_param.value_uintptr = ((Object*)this_param_obj)->DataPtr();
+								continue;
 							}
 						}
 					}
