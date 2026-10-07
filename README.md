@@ -16,6 +16,10 @@ The [AutoHotkey Community forum](https://www.autohotkey.com/boards/) is the prim
 
 AutoHotkey v1 is not being maintained, but support is provided by community members.
 
+### GitHub Issues
+
+Please note that GitHub Issues was completely disabled for this repository from some time in 2017 up to October 2026 as the [community forum](https://www.autohotkey.com/boards/) has a larger group of volunteers actively answering requests, making it the preferred place to receive support. In contrast, responding to Issues falls primarily to the maintainer of the project (Lexikos).
+
 
 ## How to Compile ##
 
