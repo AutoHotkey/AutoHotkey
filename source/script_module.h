@@ -51,6 +51,7 @@ public:
 	WarnMode Warn_VarUnset = WARNMODE_ON;
 
 	bool IsFileModule() const { return mSelfFileIndex != ABSOLUTE_MAX_SOURCE_FILES; }
+	bool IsFileMain(FileIndexType aFile) const { return mSelfFileIndex == aFile || mDirectiveFileIndex == aFile; }
 
 	bool HasFileIndex(FileIndexType aFile);
 	ResultType AddFileIndex(FileIndexType aFile);

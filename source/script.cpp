@@ -3967,7 +3967,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 					{
 						if (set_bc_mode)
 						{
-							if (!mCurrentModule->mBackCompatModeWasSet && !g->CurrentFunc)
+							if (!mCurrentModule->mBackCompatModeWasSet && !g->CurrentFunc && mCurrentModule->IsFileMain(mCurrFileIndex))
 							{
 								mCurrentModule->mBackCompatModeWasSet = true;
 								mCurrentModule->mBackCompatMode = bc_mode;
