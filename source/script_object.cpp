@@ -2071,7 +2071,7 @@ void Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aPa
 
 void Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (GetNativeBase() != Object::sPrototype)
+	if (HasData() || GetNativeBase() != Object::sPrototype)
 		_o_throw(ERR_TYPE_MISMATCH, ErrorPrototype::Type); // Cannot construct an instance of this class using Object::Clone().
 	auto clone = new Object();
 	if (!CloneTo(*clone))
@@ -2081,6 +2081,8 @@ void Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 
 void Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
+	if (HasData())
+		_o_throw(ERR_TYPE_MISMATCH, ErrorPrototype::Type);
 	auto clone = new Map();
 	if (!CloneTo(*clone))
 		_o_throw_oom;
@@ -3161,6 +3163,8 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 	}
 
 	case M_Clone:
+		if (HasData())
+			_o_throw(ERR_TYPE_MISMATCH, ErrorPrototype::Type);
 		if (auto *arr = Clone())
 			_o_return(arr);
 		_o_throw_oom;
