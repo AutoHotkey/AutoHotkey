@@ -9,12 +9,12 @@ https://www.autohotkey.com/
 
 The [AutoHotkey Community forum](https://www.autohotkey.com/boards/) is the primary source of support for AutoHotkey.
 
-AutoHotkey v1 is not being maintained, but support is provided by community members.
-
 * **Scripts not working**: For assistance getting code AutoHotkey scripts to work the way you want, start a topic in the [Ask for Help (v2)](https://www.autohotkey.com/boards/viewforum.php?f=82) or [Ask for Help (v1)](https://www.autohotkey.com/boards/viewforum.php?f=76) subforum, depending on your AutoHotkey version.
 * **Bug reporting**: If in doubt about the nature of your issue, please post in [Ask for Help (v2)](https://www.autohotkey.com/boards/viewforum.php?f=82) for confirmation. Otherwise, bugs should be reported in the [Bug Reports](https://www.autohotkey.com/boards/viewforum.php?f=14) subforum.
 * **False positives**: If you notice any AutoHotkey files (downloaded from official sources) are being flagged as suspicious or a virus, they are likely false positives. Please refer to our page on how to resolve or report these [here](https://www.autohotkey.com/download/safe.htm).
 * **Other development topics**: For any other development related enquiries, please utilize the [AutoHotkey Development](https://www.autohotkey.com/boards/viewforum.php?f=37) subforum.
+
+AutoHotkey v1 is not being maintained, but support is provided by community members.
 
 
 ## How to Compile ##
