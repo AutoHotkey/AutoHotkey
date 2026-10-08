@@ -2189,6 +2189,7 @@ private:
 	int mClassObjectCount;
 	Object *mClassObject[MAX_NESTED_CLASSES]; // Class definition currently being parsed.
 	TCHAR mClassName[MAX_CLASS_NAME_LENGTH + 1]; // Only used during load-time.
+	LPTSTR mClassTypedPropSuffix = nullptr;
 	Property *mClassProperty;
 	LPTSTR mClassPropertyDef;
 
@@ -2199,7 +2200,8 @@ private:
 	int mCurrFileIndex;
 	LineNumberType mCombinedLineNumber; // In the case of a continuation section/line(s), this is always the top line.
 
-	bool mClassPropertyStatic;
+	bool mClassPropertyStatic, mClassPropertyEmpty;
+	bool mClassStructUnion = false;
 	char mClassStructPack[MAX_NESTED_CLASSES + 1] {0};
 
 	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, mTrayIconTip ? mTrayIconTip \

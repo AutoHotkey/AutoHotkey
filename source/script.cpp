@@ -2246,6 +2246,12 @@ process_completed_line:
 						mClassPropertyDef = NULL;
 					}
 				}
+				else if (mClassStructUnion)
+				{
+					mClassStructUnion = false;
+					free(mClassTypedPropSuffix);
+					mClassTypedPropSuffix = nullptr;
+				}
 				else
 				{
 					// End of class definition.
@@ -2376,11 +2382,26 @@ process_completed_line:
 					goto continue_main_loop;
 				}
 			}
-			return ScriptError(ERR_INVALID_LINE_IN_PROPERTY_DEF, buf);
+			if (mClassPropertyStatic || !mClassPropertyEmpty || mClassStructUnion
+				|| 0 != _tcsicmp(mClassPropertyDef, _T("union.Get()")))
+				return ScriptError(ERR_INVALID_LINE_IN_PROPERTY_DEF, buf);
+			// Reinterpret this as an anonymous union{}.
+			mClassStructUnion = true;
+			if (!(mClassProperty->Getter() || mClassProperty->Setter() || mClassProperty->Method()))
+				mClassObject[mClassObjectCount - 1]->ClassGetPrototype()->DeleteOwnProp(_T("union"));
+			mClassProperty = NULL;
+			free(mClassPropertyDef);
+			mClassPropertyDef = NULL;
 		}
 
 		if (mClassObjectCount && !g->CurrentFunc) // Inside a class definition (and not inside a method).
 		{
+			if (mClassStructUnion)
+			{
+				if (!DefineClassVars(buf, false))
+					return FAIL;
+				goto continue_main_loop;
+			}
 			LPTSTR id = buf;
 			bool is_static = false;
 			if (!_tcsnicmp(id, _T("Static"), 6) && IS_SPACE_OR_TAB(id[6]))
@@ -6336,6 +6357,7 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasB
 	}
 	mClassProperty = class_object->DefineProperty(aBuf);
 	mClassPropertyStatic = aStatic;
+	mClassPropertyEmpty = true;
 	if (!mClassProperty)
 		return ScriptError(ERR_OUTOFMEM);
 
@@ -6369,6 +6391,7 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd)
 		mClassProperty->NoParamGet = g->CurrentFunc->mParamCount == 1 && !g->CurrentFunc->mIsVariadic;
 		mClassProperty->NoEnumGet = g->CurrentFunc->mMinParams > 1;
 	}
+	mClassPropertyEmpty = false;
 	if (*aEnd && !AddLine(ACT_BLOCK_BEGIN)) // *aEnd is '{' or '='.
 		return FAIL;
 	if (*aEnd == '=') // => expr
@@ -6422,9 +6445,9 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			name_end = item_end;
 		}
 		item_end = omit_leading_whitespace(item_end);
+		LPTSTR type_name = nullptr, type_name_end = nullptr;
 		if (!item_name_has_dot)
 		{
-			LPTSTR type_name = nullptr, type_name_end = nullptr;
 			if (*item_end == ':' && item_end[1] != '=' && !aStatic)
 			{
 				// A type declaration could consist of any expression that returns
@@ -6478,11 +6501,20 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 					//    the current point in the script.
 					auto type_end_char = *type_name_end;
 					*type_name_end = '\0';
-					_sntprintf(type_buf, _countof(type_buf), _T("DefineProp(this.Prototype,'%s',{Type:%s,Pack:%i})")
-						, item, type_name, mClassStructPack[mClassObjectCount]);
+					_sntprintf(type_buf, _countof(type_buf), _T("DefineProp(this.Prototype,'%s',{Type:%s,Pack:%i%s})")
+						, item, type_name, mClassStructPack[mClassObjectCount]
+						, mClassTypedPropSuffix ? mClassTypedPropSuffix : _T(""));
 					if (!DefineClassVarInit(type_buf, true, class_object, ACT_EXPRESSION))
 						return FAIL;
 					*type_name_end = type_end_char;
+					if (mClassStructUnion && !mClassTypedPropSuffix)
+					{
+						size_t size = item_end - item + 11;
+						mClassTypedPropSuffix = tmalloc(size);
+						if (!mClassTypedPropSuffix)
+							return ScriptError(ERR_OUTOFMEM);
+						_sntprintf(mClassTypedPropSuffix, size, _T(",Offset:\"%s\""), item);
+					}
 				}
 				// Store the unset marker in prototype.%item% to allow duplicate declarations to be detected:
 				if (!prototype->SetOwnProp(item, unset_token))
@@ -6490,6 +6522,9 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 				*name_end = orig_char; // Undo termination.
 			}
 		}
+
+		if (mClassStructUnion && !type_name)
+			return ScriptError(ERR_INVALID_CLASS_VAR, item);
 						
 		// This section is very similar to the one in ParseAndAddLine() which deals with
 		// variable declarations, so maybe maintain them together:
