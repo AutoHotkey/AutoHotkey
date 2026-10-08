@@ -378,14 +378,13 @@ bool Object::GetStructArgInfo(DYNAPARM &aType, Object *&aPointedClass)
 		aType.type = (DllArgTypes)si.dllcall_type;
 		aType.is_unsigned = si.is_unsigned;
 		aType.passed_by_address = si.pointed_class != nullptr;
-		aPointedClass = nullptr;
 	}
 	else
 	{
 		aType.type = DLL_ARG_STRUCT;
 		aType.struct_size = si.item_count ? -1 : (int)si.size;
-		aPointedClass = si.pointed_class;
 	}
+	aPointedClass = si.pointed_class;
 	return true;
 }
 
@@ -710,34 +709,48 @@ has_valid_return_type:
 				param_proto = ((Object*)obj)->ClassGetPrototype();
 				if (param_proto && param_proto->IsDerivedFrom(Object::sStructPrototype))
 				{
-					Object *pointed_class;
-					if (param_proto->GetStructArgInfo(this_dyna_param, pointed_class))
+					Object *pointed_class = nullptr;
+					param_proto->GetStructArgInfo(this_dyna_param, pointed_class);
+					// Pointer types must be handled early in case VarRef handling is also needed.
+					if (pointed_class)
 					{
-						// Pointer types must be handled early in case VarRef handling is also needed.
-						if (pointed_class && !(this_param_obj && this_param_obj->IsOfType(param_proto)))
+						// Permit unset to mean nullptr, but don't permit integer addresses, since that convenience would come
+						// at the cost of consistency and flexibility.  XX.Ptr,YY should act like the built-in "*" suffix:
+						// convert YY to XX and then pass it by address.  Some XX could take integers; e.g. DECIMAL/VARIANT.
+						// Also, just like the "*" suffix, XX.Ptr should permit the same input values as XX.
+						if (value_param.symbol == SYM_MISSING)
 						{
-							// Permit unset to mean nullptr, but don't permit integer addresses, since that convenience would come
-							// at the cost of consistency and flexibility.  XX.Ptr,YY should act like the built-in "*" suffix:
-							// convert YY to XX and then pass it by address.  Some XX could take integers; e.g. DECIMAL/VARIANT.
-							// Also, just like the "*" suffix, XX.Ptr should permit the same input values as XX.
-							if (value_param.symbol == SYM_MISSING)
-							{
-								this_dyna_param.struct_size = 0; // Zero the union.
-								this_dyna_param.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64);
-								this_dyna_param.value_uintptr = 0;
-								continue;
-							}
-							param_proto = pointed_class->ClassGetPrototype();
+							this_dyna_param.struct_size = 0; // Zero the union.
+							this_dyna_param.type = DLLARGTYPE_INTPTR;
+							this_dyna_param.value_uintptr = 0;
+							continue;
+						}
+						if (this_param_obj && this_param_obj->IsOfType(param_proto))
+						{
+							// This section is necessary for handling of X.Ptr where X is a numeric class,
+							// but it also handles other struct classes more efficiently as a bonus.
+							// Avoid a second type check later since we know exactly what to pass already.
+							this_dyna_param.struct_size = 0; // Zero the union.
+							this_dyna_param.type = DLLARGTYPE_INTPTR;
+							this_dyna_param.value_uintptr = *(UINT_PTR*)((Object*)this_param_obj)->DataPtr();
+							continue;
+						}
+						auto pointed_proto = pointed_class->ClassGetPrototype();
+						if (Object::IsCArrayOf(this_param_obj, pointed_proto)
+							|| this_dyna_param.type != DLL_ARG_STRUCT && this_param_obj && this_param_obj->IsOfType(pointed_proto))
+						{
+							// No further type checking or conversion needed; pass the array base address.
+							this_dyna_param.struct_size = 0; // Zero the union.
+							this_dyna_param.type = DLLARGTYPE_INTPTR;
+							this_dyna_param.value_uintptr = ((Object*)this_param_obj)->DataPtr();
+							continue;
+						}
+						if (this_dyna_param.type == DLL_ARG_STRUCT)
+						{
+							// Since the caller didn't pass a Ptr struct of the appropriate type, we'll
+							// construct an instance of the base element type to attempt conversion.
 							this_dyna_param.struct_size = -1; // In lieu of pass_by_address (which can't be used due to the union).
-							this_dyna_param.type = DLL_ARG_STRUCT;
-							if (Object::IsCArrayOf(this_param_obj, param_proto))
-							{
-								// No further type checking or conversion needed; pass the array base address.
-								this_dyna_param.struct_size = 0; // Zero the union.
-								this_dyna_param.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64);
-								this_dyna_param.value_uintptr = ((Object*)this_param_obj)->DataPtr();
-								continue;
-							}
+							param_proto = pointed_proto;
 						}
 					}
 				}

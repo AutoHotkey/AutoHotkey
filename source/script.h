@@ -567,6 +567,7 @@ enum DllArgTypes {
 };  // Some sections might rely on DLL_ARG_INVALID being 0.
 #define DLLARGTYPE_IS_NUMERIC(A) ((A) >= DLL_ARG_INT && (A) <= DLL_ARG_DOUBLE)
 #define DLLARGTYPE_IS_INTEGER(A) ((A) <= DLL_ARG_INT64 && (A) >= DLL_ARG_INT)
+#define DLLARGTYPE_INTPTR (Exp32or64(DLL_ARG_INT, DLL_ARG_INT64)) // Macro to be clear it's not a unique enum value.
 
 
 // Note that currently this value must fit into a sc_type variable because that is how TextToKey()

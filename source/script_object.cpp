@@ -1161,6 +1161,8 @@ ResultType Object::SetBoxedPointer(ResultToken &aResultToken, ExprTokenType &aVa
 
 bool Object::IsCArrayOf(IObject *aCandidate, Object *aPrototype)
 {
+	if (!aCandidate)
+		return false;
 	auto &vsi = *aCandidate->Base()->GetStructInfo();
 	if (!vsi.item_count)
 		return false;
