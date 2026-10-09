@@ -727,6 +727,7 @@ public:
 	enum : index_t
 	{
 		BadIndex = UINT_MAX, // Always >= mLength.
+		BadIndexType = UINT_MAX - 1,
 		MaxIndex = INT_MAX // This would need 32GB RAM just for mItem, assuming 16 bytes per element.  Not exceeding INT_MAX might avoid some issues.
 	};
 

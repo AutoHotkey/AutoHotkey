@@ -3099,14 +3099,16 @@ ObjectMember Array::sMembers[] =
 
 void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
+	index_t index;
 	switch (aID)
 	{
 	case P___Item:
 	case M_Get:
 	{
-		auto index = ParamToZeroIndex(*aParam[IS_INVOKE_SET ? 1 : 0]);
+		auto &index_param = *aParam[IS_INVOKE_SET ? 1 : 0];
+		index = ParamToZeroIndex(index_param);
 		if (index >= mLength)
-			_o_throw(ERR_INVALID_INDEX, *aParam[IS_INVOKE_SET ? 1 : 0], ErrorPrototype::Index);
+			_o_throw(ERR_INVALID_INDEX, index_param, index == BadIndexType ? ErrorPrototype::Type : ErrorPrototype::Index);
 		auto &item = mItem[index];
 		if (IS_INVOKE_SET)
 		{
@@ -3150,12 +3152,11 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 	case M_InsertAt:
 	case M_Push:
 	{
-		index_t index;
 		if (aID == M_InsertAt)
 		{
 			index = ParamToZeroIndex(*aParam[0]);
 			if (index > mLength || index + (index_t)aParamCount > MaxIndex) // The second condition is very unlikely.
-				_o_throw_param(0);
+				break;
 			aParam++;
 			aParamCount--;
 		}
@@ -3169,12 +3170,11 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 	case M_RemoveAt:
 	case M_Pop:
 	{
-		index_t index;
 		if (aID == M_RemoveAt)
 		{
 			index = ParamToZeroIndex(*aParam[0]);
 			if (index >= mLength)
-				_o_throw_param(0);
+				break;
 		}
 		else
 		{
@@ -3206,15 +3206,17 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 	
 	case M_Has:
 	{
-		auto index = ParamToZeroIndex(*aParam[0]);
+		index = ParamToZeroIndex(*aParam[0]);
+		if (index == BadIndexType)
+			break;
 		_o_return(index >= 0 && index < mLength && mItem[index].symbol != SYM_MISSING);
 	}
 
 	case M_Delete:
 	{
-		auto index = ParamToZeroIndex(*aParam[0]);
+		index = ParamToZeroIndex(*aParam[0]);
 		if (index >= mLength)
-			_o_throw_param(0);
+			break;
 		mItem[index].ReturnMove(aResultToken);
 		mItem[index].AssignMissing();
 		_o_return_retval;
@@ -3231,12 +3233,24 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 		_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 0)
 			, static_cast<IndexEnumerator::Callback>(&Array::GetEnumItem)));
 	}
+
+	if (index == BadIndexType)
+		_o_throw_param(0, _T("Integer"));
+	else
+		_o_throw_param(0);
 }
 
 Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 {
-	if (!TokenIsNumeric(aParam))
-		return BadIndex;
+	switch (TokenIsNumeric(aParam))
+	{
+	case PURE_FLOAT:
+		if (!g_script.BackCompatMode())
+			return BadIndexType;
+		break;
+	case PURE_NOT_NUMERIC:
+		return g_script.BackCompatMode() ? BadIndex : BadIndexType;
+	}
 	auto index = TokenToInt64(aParam);
 	if (index <= 0) // Let -1 be the last item and 0 be the first unused index.
 		index += mLength + 1;
