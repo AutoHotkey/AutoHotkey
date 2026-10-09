@@ -231,7 +231,7 @@ Map *Map::Create()
 	return map;
 }
 
-ResultType Map::SetItems(ExprTokenType *aParam[], int aParamCount)
+ResultType Map::SetItems(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	ASSERT(!(aParamCount & 1)); // Caller should verify and throw.
 
@@ -255,10 +255,26 @@ ResultType Map::SetItems(ExprTokenType *aParam[], int aParamCount)
 		if (mCapacity == mCount && !HasItem(*aParam[i]))
 			SetInternalCapacity(max_capacity_required);
 
-		if (!SetItem(*aParam[i], *aParam[i + 1]))
-			return FAIL; // Out of memory.
+		if (!SetItem(aResultToken, *aParam[i], *aParam[i + 1]))
+			return FAIL;
 	}
 
+	return OK;
+}
+
+ResultType Map::ValidateKey(ResultToken &aResultToken, ExprTokenType &aKey)
+{
+	if (TokenIsPureNumeric(aKey) == PURE_FLOAT && !g_script.BackCompatMode())
+		return aResultToken.TypeError(_T("Integer"), aKey);
+	return OK;
+}
+
+ResultType Map::SetItem(ResultToken &aResultToken, ExprTokenType &aKey, ExprTokenType &aValue)
+{
+	if (!ValidateKey(aResultToken, aKey))
+		return FAIL;
+	if (!SetItem(aKey, aValue))
+		return aResultToken.MemoryError();
 	return OK;
 }
 
@@ -1324,6 +1340,8 @@ void Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *
 {
 	if (!IS_INVOKE_SET) // Get or call.
 	{
+		if (!ValidateKey(aResultToken, *aParam[0]))
+			return;
 		if (!GetItem(aResultToken, *aParam[0]))
 		{
 			if (ParamIndexIsOmitted(1))
@@ -1348,8 +1366,7 @@ void Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *
 	{
 		if (aParam[0]->symbol == SYM_MISSING)
 			return Delete(aResultToken, aID, aFlags, aParam + 1, 1);
-		if (!SetItem(*aParam[1], *aParam[0]))
-			_o_throw_oom;
+		SetItem(aResultToken, *aParam[1], *aParam[0]);
 	}
 }
 
@@ -1358,8 +1375,8 @@ void Map::Set(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aPa
 {
 	if (aParamCount & 1)
 		_o_throw(ERR_PARAM_COUNT_INVALID);
-	if (!SetItems(aParam, aParamCount))
-		_o_throw_oom;
+	if (!SetItems(aResultToken, aParam, aParamCount))
+		return;
 	AddRef();
 	_o_return(this);
 }
@@ -1840,7 +1857,7 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	ap->Release();
 
 	// Cache it.
-	if (!map->SetItem(key, ExprTokenType(ac)))
+	if (!map->SetItem(key, ac))
 	{
 		ac->Release();
 		return (void)aResultToken.MemoryError();
@@ -1895,6 +1912,9 @@ void Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *
 	index_t pos;
 	SymbolType key_type;
 	Key key;
+
+	if (!ValidateKey(aResultToken, *aParam[0]))
+		return;
 
 	if (item = FindItem(*aParam[0], _f_number_buf, key_type, key, pos))
 		pos = index_t(item - mItem); // else min_pos was already set by FindItem.
@@ -2076,6 +2096,8 @@ void Object::HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 
 void Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
+	if (!ValidateKey(aResultToken, *aParam[0]))
+		return;
 	SymbolType key_type;
 	Key key;
 	index_t insert_pos;

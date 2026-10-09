@@ -887,22 +887,14 @@ public:
 		return item->Assign(aValue);
 	}
 
-	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
-	{
-		return SetItem(ExprTokenType(aKey), aValue);
-	}
-
-	bool SetItem(LPTSTR aKey, __int64 aValue)
+	bool SetItem(ExprTokenType &aKey, IObject *aValue)
 	{
 		return SetItem(aKey, ExprTokenType(aValue));
 	}
 
-	bool SetItem(LPTSTR aKey, IObject *aValue)
-	{
-		return SetItem(aKey, ExprTokenType(aValue));
-	}
-
-	ResultType SetItems(ExprTokenType *aParam[], int aParamCount);
+	ResultType ValidateKey(ResultToken &aResultToken, ExprTokenType &aKey);
+	ResultType SetItem(ResultToken &aResultToken, ExprTokenType &aKey, ExprTokenType &aValue);
+	ResultType SetItems(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	// Methods callable by script.
 	void __Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
