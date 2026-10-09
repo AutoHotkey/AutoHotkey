@@ -2137,7 +2137,7 @@ Property *Object::DefineProperty(name_t aName, bool aEnumerable)
 	return field->prop;
 }
 
-TypedProperty *Object::DefineTypedProperty(name_t aName)
+TypedProperty *Object::DefineTypedProperty(name_t aName, bool aEnumerable)
 {
 	ASSERT((mFlags & (ClassPrototype | StructInfoInitialized)) == (ClassPrototype | StructInfoInitialized));
 	index_t insert_pos;
@@ -2150,6 +2150,7 @@ TypedProperty *Object::DefineTypedProperty(name_t aName)
 	// Add it to the new field.
 	field->symbol = SYM_TYPED_FIELD;
 	field->tprop = tprop;
+	field->enumerable = aEnumerable;
 	// Add it to the Prototype's linked list of struct fields.
 	auto &si = *(StructInfo*)(this + 1);
 	if (si.first_field) // Check first_field and not last_field, which may belong to a superclass.
@@ -2162,7 +2163,7 @@ TypedProperty *Object::DefineTypedProperty(name_t aName)
 	return tprop;
 }
 
-FResult Object::DefineTypedProperty(name_t aName, Object *aClass, size_t aPack, size_t aOffset)
+FResult Object::DefineTypedProperty(name_t aName, Object *aClass, size_t aPack, size_t aOffset, bool aEnumerable)
 {
 	size_t psize = 0, palign = 0;
 	MdType native_type = MdType::Void;
@@ -2188,7 +2189,7 @@ FResult Object::DefineTypedProperty(name_t aName, Object *aClass, size_t aPack, 
 		: GetStructInfo(false);
 	if (!si)
 		return FR_E_FAILED;
-	auto tprop = DefineTypedProperty(aName);
+	auto tprop = DefineTypedProperty(aName, aEnumerable);
 	if (!tprop)
 		return FR_E_OUTOFMEM;
 	tprop->type = native_type;
@@ -2353,11 +2354,11 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	auto &getter = v[1], &setter = v[4], &method = v[0];
 	auto &tclass = v[TypeIndex], &tpack = v[3], &toffset = v[2];
 
+	UINT mask = 0;
 	PropType kind = PropType::None;
 	auto desc = dynamic_cast<Object *>(ParamIndexToObject(1));
 	if (desc)
 	{
-		UINT mask = 0;
 		for (int i = 0; i < _countof(sDescProps); ++i)
 			if (desc->GetOwnProp(v[i], sDescProps[i]) && (!((1 << i) & RequireObjectMask) || v[i].symbol == SYM_OBJECT))
 				mask |= (1 << i);
@@ -2372,7 +2373,10 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	}
 	if (kind == PropType::None) // Not a valid combination of descriptor properties.
 		return (void)aResultToken.ParamError(1 + aID, aParam[1]);
-	
+
+	ExprTokenType et;
+	bool enumerable = !desc->GetOwnProp(et, _T("Enumerable")) || TokenToBOOL(et);
+
 	if (kind == PropType::Typed)
 	{
 		Object *pclass = dynamic_cast<Object*>(TokenToObject(tclass));
@@ -2393,7 +2397,7 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 			if (offset == -1)
 				_o_throw_value(aID ? ERR_PARAM3_INVALID : ERR_PARAM2_INVALID);
 		}
-		switch (DefineTypedProperty(name, pclass, pack, offset))
+		switch (DefineTypedProperty(name, pclass, pack, offset, enumerable))
 		{
 		case OK:
 			AddRef();
@@ -2408,12 +2412,12 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	}
 	else if (kind == PropType::Value)
 	{
-		if (!SetOwnProp(name, v[ValueIndex]))
+		if (!SetOwnProp(name, v[ValueIndex], enumerable))
 			_o_throw_oom;
 		AddRef();
 		_o_return(this);
 	}
-	auto prop = DefineProperty(name);
+	auto prop = DefineProperty(name, enumerable);
 	if (!prop)
 		_o_throw_oom;
 	if (getter.symbol == SYM_OBJECT)

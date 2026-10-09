@@ -565,8 +565,8 @@ public:
 	}
 	
 	Property *DefineProperty(name_t aName, bool aEnumerable = true);
-	TypedProperty *DefineTypedProperty(name_t aName);
-	FResult DefineTypedProperty(name_t aName, Object *aClass, size_t aPack, size_t aOffset);
+	TypedProperty *DefineTypedProperty(name_t aName, bool aEnumerable = true);
+	FResult DefineTypedProperty(name_t aName, Object *aClass, size_t aPack, size_t aOffset, bool aEnumerable = true);
 	bool DefineMethod(name_t aName, IObject *aFunc);
 	void DefineClass(name_t aName, Object *aClass, bool aIsStructPtrClass = false);
 	
