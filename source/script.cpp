@@ -9564,12 +9564,13 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		
 		case SYM_MAYBE:
 		{
-			if (stack[stack_count - 1]->symbol == SYM_OPAREN && this_infix->symbol == SYM_CPAREN // (...?)
-				&& !((this_infix[1].symbol == SYM_DOT || this_infix[1].symbol == SYM_FUNC) && (this_infix[1].callsite->flags & EIF_STACK_MEMBER))) // not a.%b?% or a.%b?%()
-				//&& *stack[stack_count - 1]->marker != g_DerefChar) // This would exclude %a?%, which we don't want to exclude.
+			if (stack[stack_count - 1]->symbol == SYM_OPAREN && this_infix->symbol == SYM_CPAREN) // (...?)
 			{
 				++this_infix; // Discard CPAREN
 				--stack_count; // Discard OPAREN
+				if ((this_infix->symbol == SYM_DOT || this_infix->symbol == SYM_FUNC || this_infix->symbol == SYM_OBRACKET)
+					&& (this_infix->callsite->flags & EIF_STACK_MEMBER)) // a.%b?%, a.%b?%() or a.%b?%[]
+					bcmap[this_postfix - infix] += 1; // Need to pop the dot's "this" object.
 				// Push MAYBE back onto the stack, below any operators to the left which are at
 				// the new nesting level.  It will be popped again at the next CPAREN or at the
 				// end of the unset chain.
@@ -9703,8 +9704,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 						return LineError(_T("This statement's parameters cannot be unset."), FAIL, this_postfix->error_reporting_marker);
 				}
 			}
-			else if (  !((infix_symbol == SYM_FUNC || infix_symbol == SYM_DOT || infix_symbol == SYM_OBRACKET)
-						&& (inf->callsite->flags & EIF_STACK_MEMBER))  ) // not x.%a?%() or x.%a?% or x.%a?%[]
+			else
 				return LineError(_T("This operator's left operand must not be unset."), FAIL, infix_symbol == SYM_DYNAMIC ? inf->marker : inf->error_reporting_marker);
 			if (  !(stack_symbol == SYM_FUNC
 				|| IS_OPAREN_LIKE(stack_symbol) || stack_symbol == SYM_BEGIN
