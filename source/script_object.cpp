@@ -224,18 +224,10 @@ T *NewObject(size_t aSuffixSize)
 // Map::SetItems - Add or set items given an array of key/value pairs.
 //
 
-Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
+Map *Map::Create()
 {
-	ASSERT(!(aParamCount & 1));
-
 	Map *map = new Map();
 	map->SetBase(Map::sPrototype);
-	if (aParamCount && !map->SetItems(aParam, aParamCount))
-	{
-		// Out of memory.
-		map->Release();
-		return NULL;
-	}
 	return map;
 }
 

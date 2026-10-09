@@ -847,7 +847,7 @@ class Map : public Object
 
 public:
 	Map() {}
-	static Map *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
+	static Map *Create();
 
 	bool HasItem(ExprTokenType &aKey)
 	{
