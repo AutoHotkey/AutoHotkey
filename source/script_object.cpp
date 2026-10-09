@@ -2340,28 +2340,55 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	auto name = ParamIndexToString(0, _f_number_buf);
 	if (!*name)
 		_o_throw_param(0 + aID);
-	ExprTokenType getter, setter, method, value;
-	getter.symbol = SYM_INVALID;
-	setter.symbol = SYM_INVALID;
-	method.symbol = SYM_INVALID;
-	value.symbol = SYM_INVALID;
+
+	static const LPTSTR sDescProps[]{ _T("Call"), _T("Get"), _T("Offset"), _T("Pack"), _T("Set"), _T("Type"), _T("Value") };
+	const auto ValueIndex = 6;
+	const auto TypeIndex = 5;
+	const auto ValueValidMask = (1 << ValueIndex);
+	const auto DynamicValidMask  = 0b0010011;
+	const auto TypedOptionalMask = 0b0001100;
+	const auto RequireObjectMask = 0b0110011;
+
+	ExprTokenType v[_countof(sDescProps)];
+	auto &getter = v[1], &setter = v[4], &method = v[0];
+	auto &tclass = v[TypeIndex], &tpack = v[3], &toffset = v[2];
+
+	PropType kind = PropType::None;
 	auto desc = dynamic_cast<Object *>(ParamIndexToObject(1));
-	if (desc && desc->GetOwnProp(value, _T("Type"))) // TODO: make this properly mutually exclusive with the others
+	if (desc)
 	{
-		Object *pclass = dynamic_cast<Object*>(TokenToObject(value));
-		size_t pack = desc->GetOwnProp(value, _T("Pack")) ? (size_t)TokenToInt64(value) : 0;
+		UINT mask = 0;
+		for (int i = 0; i < _countof(sDescProps); ++i)
+			if (desc->GetOwnProp(v[i], sDescProps[i]) && (!((1 << i) & RequireObjectMask) || v[i].symbol == SYM_OBJECT))
+				mask |= (1 << i);
+			else
+				v[i].symbol = SYM_INVALID;
+		if (mask == ValueValidMask)
+			kind = PropType::Value;
+		else if ((mask & ~TypedOptionalMask) == (1 << TypeIndex))
+			kind = PropType::Typed;
+		else if (mask && (mask & ~DynamicValidMask) == 0)
+			kind = PropType::Dynamic;
+	}
+	if (kind == PropType::None) // Not a valid combination of descriptor properties.
+		return (void)aResultToken.ParamError(1 + aID, aParam[1]);
+	
+	if (kind == PropType::Typed)
+	{
+		Object *pclass = dynamic_cast<Object*>(TokenToObject(tclass));
+		size_t pack = tpack.symbol != SYM_INVALID ? (size_t)TokenToInt64(tpack) : 0;
 		size_t offset = -1;
-		if (desc->GetOwnProp(value, _T("Offset")))
+		if (toffset.symbol != SYM_INVALID)
 		{
-			if (value.symbol == SYM_STRING)
+			if (toffset.symbol == SYM_STRING)
 			{
-				auto f = FindField(value.marker);
+				auto f = FindField(toffset.marker);
 				if (f && f->symbol == SYM_TYPED_FIELD)
 					offset = f->tprop->data_offset;
 			}
-			else if (value.symbol == SYM_INTEGER && value.value_int64 >= 0)
+			else if (toffset.symbol == SYM_INTEGER && toffset.value_int64 >= 0)
 			{
-				offset = (size_t)value.value_int64;
+				offset = (size_t)toffset.value_int64;
 			}
 			if (offset == -1)
 				_o_throw_value(aID ? ERR_PARAM3_INVALID : ERR_PARAM2_INVALID);
@@ -2379,18 +2406,9 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 			_o_throw(_T("Cannot add typed property."));
 		}
 	}
-	if (!desc // Must be an Object.
-		|| desc->GetOwnProp(getter, _T("Get")) && getter.symbol != SYM_OBJECT  // If defined, must be an object.
-		|| desc->GetOwnProp(setter, _T("Set")) && setter.symbol != SYM_OBJECT
-		|| desc->GetOwnProp(method, _T("Call")) && method.symbol != SYM_OBJECT
-		|| desc->GetOwnProp(value, _T("Value")) && (getter.symbol != SYM_INVALID || setter.symbol != SYM_INVALID || method.symbol != SYM_INVALID)
-		// To help prevent errors, throw if none of the above properties were present.  This also serves to
-		// reserve some cases for possible future use, such as passing a function object to imply {get:...}.
-		|| getter.symbol == SYM_INVALID && setter.symbol == SYM_INVALID && method.symbol == SYM_INVALID && value.symbol == SYM_INVALID)
-		_o_throw_param(1 + aID);
-	if (value.symbol != SYM_INVALID) // Above already verified that neither Get nor Set was present.
+	else if (kind == PropType::Value)
 	{
-		if (!SetOwnProp(name, value))
+		if (!SetOwnProp(name, v[ValueIndex]))
 			_o_throw_oom;
 		AddRef();
 		_o_return(this);
