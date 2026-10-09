@@ -102,7 +102,7 @@ ResultType Script::ParseModuleDirective(LPCTSTR aName)
 ResultType Script::ParseImportDirective(LPTSTR aBuf)
 {
 	bool is_export = false;
-	if (!_tcsnicmp(aBuf, _T("Export"), 6) && IS_SPACE_OR_TAB(aBuf[6]))
+	if (!g->CurrentFunc && !_tcsnicmp(aBuf, _T("Export"), 6) && IS_SPACE_OR_TAB(aBuf[6]))
 	{
 		auto cp = omit_leading_whitespace(aBuf + 7);
 		if ( !(*cp == '{' || !_tcsnicmp(cp, _T("as"), 2) && IS_SPACE_OR_TAB(cp[2])) )
