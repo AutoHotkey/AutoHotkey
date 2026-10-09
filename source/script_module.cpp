@@ -41,7 +41,12 @@ void ScriptModule::__Ref(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	Var *var = FindImportableVar(name);
 	auto ref = var ? var->GetRef() : nullptr;
 	if (ref)
+	{
+		// GetRef() returns an uncounted reference (kept alive by var->mObject),
+		// but a method result is owned by the caller, which releases it.
+		ref->AddRef();
 		_o_return(ref);
+	}
 	_o_return_unset;
 }
 
