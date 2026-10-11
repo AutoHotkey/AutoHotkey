@@ -4,13 +4,11 @@ OnError (e, *) => ExitApp(e.Line)
 
 ; Files to include in the installer
 FileCopy "..\license.txt", "content", 1
-FileCopy "..\bin\AutoHotkey32.exe", "content", 1
-FileCopy "..\bin\AutoHotkey64.exe", "content", 1
 FileCopy "..\help\AutoHotkey.chm", "content", 1
-
-; Base file of the installer itself
-; (AutoHotkey32.exe with custom version info)
-FileCopy "..\bin\AutoHotkey_setup.exe", ".", 1
+if EnvGet("CI") = "" || EnvGet("HAVE_SIGNPATH") != "true" {
+    FileCopy "..\bin\AutoHotkey32.exe", "content", 1
+    FileCopy "..\bin\AutoHotkey64.exe", "content", 1
+}
 
 SetWorkingDir "content"
 

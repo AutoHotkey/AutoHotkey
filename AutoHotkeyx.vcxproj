@@ -152,6 +152,7 @@
   </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(AhkBuildVariant)'=='Installer'">
 	<TargetName>AutoHotkey_setup</TargetName>
+	<OutDir>packaging</OutDir>
   </PropertyGroup>
   <!-- AutoHotkey.dll -->
   <ItemDefinitionGroup Condition="$(ConfigDll)">
@@ -436,6 +437,9 @@
         <PreprocessorDefinitions>RAW_AHK_VERSION="$(RawAhkVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       </ClCompile>
     </ItemGroup>
+  </Target>
+  <Target Name="GitHubSetAhkVersion" Condition="'$(GITHUB_ENV)'!=''" DependsOnTargets="SetAhkVersion">
+	<WriteLinesToFile File="$(GITHUB_ENV)" Lines="AHK_VERSION=$(RawAhkVersion)"/>
   </Target>
   <Target Name="ForceBuildForSetAhkVersion" Condition="Exists('@(AhkVersionInput)')" BeforeTargets="PrepareForBuild" Inputs="@(AhkVersionInput)" Outputs="@(AhkVersionOutput)">
     <!-- This is a separate target because SetAhkVersion must execute unconditionally. -->

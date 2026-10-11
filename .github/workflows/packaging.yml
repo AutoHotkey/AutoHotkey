@@ -9,6 +9,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      HAVE_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
 
     steps:
     - uses: actions/checkout@v7
@@ -25,6 +27,31 @@ jobs:
         msbuild AutoHotkeyx.sln /m /p:Configuration=Release /p:Platform=Win32
         msbuild AutoHotkeyx.sln /m /p:Configuration=Release /p:Platform=Win32 /p:AhkBuildVariant=Installer
         msbuild AutoHotkeyx.sln /m /p:Configuration=Release /p:Platform=x64
+        msbuild AutoHotkeyx.vcxproj /t:GitHubSetAhkVersion
+    
+    - name: Upload binaries for signing
+      if: ${{ env.HAVE_SIGNPATH }}
+      id: upload-unsigned-base
+      uses: actions/upload-artifact@v7
+      with:
+        name: unsigned.zip
+        path: bin\AutoHotkey*.exe
+        overwrite: true
+
+    - name: Submit signing request 1
+      if: ${{ env.HAVE_SIGNPATH }}
+      uses: signpath/github-action-submit-signing-request@v3
+      with:
+        api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
+        organization-id: e7595040-74b9-4f72-b9aa-f58d938fabd8
+        project-slug: AutoHotkey
+        signing-policy-slug: test-signing
+        github-artifact-id: '${{ steps.upload-unsigned-base.outputs.artifact-id }}'
+        artifact-configuration-slug: AutoHotkey.exe
+        wait-for-completion: true
+        output-artifact-directory: packaging/content
+        parameters: |
+          version: "${{ env.AHK_VERSION }}"
 
     - name: Build help file
       timeout-minutes: 5
@@ -36,12 +63,37 @@ jobs:
     
     - uses: actions/upload-artifact@v7
       with:
-        name: AutoHotkey_setup.exe
-        path: packaging\AutoHotkey_setup.exe
+        name: AutoHotkey.zip
+        path: |
+          packaging/content/*
+          !packaging/content/UX/tools/
         overwrite: true
 
-    - uses: actions/upload-artifact@v7
+    - id: upload-unsigned-setup
+      uses: actions/upload-artifact@v7
       with:
-        name: AutoHotkey.zip
-        path: packaging\content\*
+        name: unsigned-setup.exe
+        path: packaging/AutoHotkey_setup.exe
+        overwrite: true
+    
+    - name: Submit signing request 2
+      uses: signpath/github-action-submit-signing-request@v3
+      if: ${{ env.HAVE_SIGNPATH }}
+      with:
+        api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
+        organization-id: e7595040-74b9-4f72-b9aa-f58d938fabd8
+        project-slug: AutoHotkey
+        signing-policy-slug: test-signing
+        github-artifact-id: '${{ steps.upload-unsigned-setup.outputs.artifact-id }}'
+        artifact-configuration-slug: setup.exe
+        wait-for-completion: true
+        output-artifact-directory: packaging/signed
+        parameters: |
+          version: "${{ env.AHK_VERSION }}"
+
+    - uses: actions/upload-artifact@v7
+      if: ${{ env.HAVE_SIGNPATH }}
+      with:
+        name: AutoHotkey_setup.exe
+        path: packaging/signed/AutoHotkey_setup.exe
         overwrite: true
