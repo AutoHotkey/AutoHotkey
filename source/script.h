@@ -2168,8 +2168,8 @@ private:
 #endif
 	FuncList mFuncs;
 
-	ScriptModule mBuiltinModule { _T("AHK") };
-	ScriptModule mDefaultModule { _T("__Main") };
+	ScriptModule mBuiltinModule { _T("AHK"), false };
+	ScriptModule mDefaultModule { _T("__Main"), true };
 	ScriptModule *mCurrentModule = &mBuiltinModule;
 	ScriptModule *mLastModule = &mDefaultModule;
 	
@@ -2355,15 +2355,17 @@ public:
 	UserFunc* CreateHotFunc();
 	ResultType DefineFunc(LPTSTR aBuf, bool aStatic = false, FuncDefType aIsInExpression = FuncDefNormal);
 #ifndef AUTOHOTKEYSC
-	struct FuncLibrary
-	{
-		LPTSTR path;
-		size_t length;
-	};
-	void InitFuncLibraries(FuncLibrary aLibs[]);
-	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
-	LPTSTR FindLibraryFile(LPTSTR aName, size_t aNameLength, bool aIsModule = false);
-	LPCWSTR InitModuleSearchPath();
+	const LPCTSTR AhkLibPathEnvVar = _T("AhkLibPath");
+	const LPCTSTR DefaultIncludePathPrefix = _T("Lib;%A_ScriptDir%\\Lib;");
+	const LPCTSTR DefaultIncludePathSuffix = _T("%A_MyDocuments%\\AutoHotkey\\Lib;%A_AhkPath%\\..\\Lib");
+	const LPCTSTR DefaultImportPathPrefix = _T(".;%A_ScriptDir%;");
+	const LPCTSTR DefaultImportPathSuffix = DefaultIncludePathSuffix;
+	LPTSTR mSearchPath = nullptr;
+	enum SearchPathForType { SearchPathForNone, SearchPathForImport, SearchPathForInclude } mSearchPathFor;
+	FileIndexType mSearchPathFileIndex;
+	LPTSTR FindLibraryFile(LPTSTR aName);
+	LPCTSTR GetSearchPath(SearchPathForType aFor);
+	ResultType FindIncludeFileIndex(LPCTSTR aName, LPCWSTR aSearchPath, FileIndexType &aFileIndex, FileIndexType aLocalFileIndex, bool aModule);
 	ResultType FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex, FileIndexType aLocalFileIndex);
 #endif
 	IObject *GetBuiltinObject(LPCTSTR aName);
@@ -2406,6 +2408,7 @@ public:
 	VarList *GlobalVars() { return &CurrentModule()->mVars; }
 
 	bool &BackCompatMode() { return g->CurrentFunc ? g->CurrentFunc->mBackCompatMode : mCurrentModule->mBackCompatMode; }
+	bool LoadTimeBackCompatMode() { return mBackCompatMode; }
 	
 	ScriptModule *CurrentModule() { return g->CurrentFunc ? g->CurrentFunc->mModule : mCurrentModule; }
 	ScriptModule *FindDirectiveModule(LPCTSTR aName, ScriptModule *aList);
@@ -2413,7 +2416,7 @@ public:
 	ResultType ParseImportDirective(LPTSTR aBuf);
 	ResultType CloseCurrentModule();
 	void ReopenModule(ScriptModule *aMod);
-	ScriptModule *CreateModule(LPCTSTR aName);
+	ScriptModule *CreateModule(LPCTSTR aName, bool aIsFileModule);
 	ResultType ResolveImports(ScriptModule *aTerminator = nullptr);
 	void ResolveIndirectImports();
 	ResultType ResolveImports(ScriptImport &aImport, ScriptModule *aDirectiveList);

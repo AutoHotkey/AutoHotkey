@@ -73,12 +73,12 @@ ResultType Script::ParseModuleDirective(LPCTSTR aName)
 		if (!Var::ValidateName(aName, DISPLAY_MODULE_ERROR))
 			return FAIL;
 
-		mod = CreateModule(SimpleHeap::Alloc(aName));
+		mod = CreateModule(SimpleHeap::Alloc(aName), false);
 		mod->mDirectiveFileIndex = mCurrFileIndex;
 		mod->mDirectiveLineNumber = mCombinedLineNumber;
 		auto outer = mLastModule;
 		while (!outer->IsFileModule()) outer = outer->mPrev;
-		mod->mOuterFileIndex = outer->mSelfFileIndex;
+		mod->mFileIndex = outer->mFileIndex;
 		mod->mBackCompatMode = outer->mBackCompatMode; // Mode for startup code.  Set default based on __Init module.
 		mBackCompatMode = mod->mBackCompatMode; // Mode for function definitions to inherit.
 
@@ -361,22 +361,23 @@ ResultType Script::ResolveImports(ScriptImport &imp, ScriptModule *aDirectiveLis
 		// Search by file index, which corresponds to the file's full path.
 		for (auto m = mLastModule; m; m = m->mPrev)
 		{
-			if (m->mSelfFileIndex == file_index)
+			if (m->mFileIndex != file_index)
+				continue;
+			if (!new_last)
+				new_last = m;
+			if (m->IsFileModule())
 			{
-				if (!new_last) // A file with no #modules
-					new_last = m; // should still resolve :__Init.
 				imp.mod = m;
 				break;
 			}
-			if (!new_last && m->mOuterFileIndex == file_index)
-				new_last = m;
 		}
 		if (!imp.mod)
 		{
 			auto path = Line::sSourceFile[file_index];
 			auto cur_mod = mCurrentModule;
-			imp.mod = mCurrentModule = CreateModule(imp.mod_name);
-			imp.mod->mSelfFileIndex = file_index;
+			imp.mod = mCurrentModule = CreateModule(imp.mod_name, true);
+			imp.mod->mFileIndex = file_index;
+			imp.mod->mIsFileModule = true;
 			if (!LoadIncludedFile(path, false, false))
 				return FAIL;
 			new_last = mLastModule;
@@ -487,9 +488,9 @@ void Script::ReopenModule(ScriptModule *aMod)
 }
 
 
-ScriptModule *Script::CreateModule(LPCTSTR aName)
+ScriptModule *Script::CreateModule(LPCTSTR aName, bool aIsFileModule)
 {
-	auto mod = new ScriptModule(aName);
+	auto mod = new ScriptModule(aName, aIsFileModule);
 	mod->mPrev = mLastModule;
 	mLastModule = mod;
 	return mod;
@@ -532,44 +533,78 @@ IObject *ScriptModule::FindGlobalObject(LPCTSTR aName)
 }
 
 
-LPCWSTR Script::InitModuleSearchPath()
+LPCTSTR Script::GetSearchPath(SearchPathForType aFor)
 {
-	SetCurrentDirectory(mFileDir);
-
-	// The size of this array sets the total limit for the entire list of directories, resolved to full paths.
+	if (mSearchPath && mSearchPathFor == aFor && mSearchPathFileIndex == mCurrentModule->mFileIndex)
+		return mSearchPath;
+	
+	// The size of this buffer sets the total limit for the entire list of directories, resolved to full paths.
 	// This is enough for extreme cases, up to the total limit for all environment variables (32767 chars).
-	TCHAR buf[MAX_WIDE_PATH], var_buf[MAX_WIDE_PATH];
-	LPTSTR d, cp = buf;
-	LPCTSTR path_spec;
+	constexpr DWORD BufferSize = MAX_WIDE_PATH;
+	if (!mSearchPath)
+		mSearchPath = tmalloc(BufferSize);
+	mSearchPathFor = aFor;
+	mSearchPathFileIndex = mCurrentModule->mFileIndex;
+	
+	TCHAR *buf = mSearchPath, path_spec[MAX_WIDE_PATH];
+	LPTSTR d, cp, last_dir = nullptr;
 	DWORD len, space;
 
-	if (GetEnvironmentVariable(L"AhkImportPath", var_buf, _countof(var_buf)))
-		path_spec = var_buf;
-	else
-		path_spec = _T(".;%A_MyDocuments%\\AutoHotkey;%A_AhkPath%\\..");
+	LPCTSTR default_prefix = DefaultImportPathPrefix
+		  , default_suffix = DefaultImportPathSuffix;
+	if (aFor == SearchPathForInclude)
+	{
+		default_prefix = DefaultIncludePathPrefix;
+		default_suffix = DefaultIncludePathSuffix;
+	}
+	// Combine forced initial directories (prefix) with env var or default list (suffix).
+	_tcscpy(path_spec, default_prefix);
+	cp = _tcschr(path_spec, '\0');
+	space = _countof(path_spec) - (DWORD)(cp - path_spec);
+	len = GetEnvironmentVariable(AhkLibPathEnvVar, cp, space);
+	if (!len)
+		_tcscpy(cp, default_suffix);
+	else if (len >= space)
+		len = *cp = 0; // Too large; content at cp is undefined.
 
-	// Ensure a consistent result if A_LineFile is used, since this is only
-	// done once for the lifetime of the program, not once for each Import.
-	mCurrFileIndex = 0;
+	// Make paths relative to the current module's directory.
+	LPCTSTR module_dir = mFileDir;
+	auto module_file = Line::sSourceFile[mCurrentModule->mFileIndex];
+	d = _tcsrchr(module_file, '\\');
+	if (d && d - module_file < BufferSize)
+	{
+		tmemcpy(buf, module_file, d - module_file + 1);
+		buf[d - module_file + 1] = '\0';
+		module_dir = buf;
+	}
+	SetCurrentDirectory(module_dir);
+
+	// Ensure a consistent result if A_LineFile is used.
+	mCurrFileIndex = mSearchPathFileIndex;
 	mCombinedLineNumber = 0;
 
 	LPTSTR deref_path;
 	if (!DerefInclude(deref_path, path_spec))
 		return _T("");
 
+	cp = buf;
 	for (auto p = deref_path; *p; p = d)
 	{
 		for (d = p; *d && *d != ';'; ++d);
 		if (*d)
 			*d++ = '\0'; // Terminate within deref_path.
 		if (!*p)
-			continue;
-		if (cp - buf >= _countof(buf)) // Due to rarity, ignore any items that won't fit.
-			break;
-		space = (DWORD)(_countof(buf) - (cp - buf));
+			continue; // Ignore empty items.
+		ASSERT(BufferSize >= (DWORD)(cp - buf));
+		space = BufferSize - (DWORD)(cp - buf);
 		len = GetFullPathName(p, space, cp, nullptr);
-		if (!len || len >= space)
-			continue; // Ignore this item.
+		if (!len || len + 1 >= space)
+			break; // Ignore this and any remaining items.
+		// Discard repeats to optimize common cases where the current module
+		// is in the same directory as the main script and/or EXE.
+		if (last_dir && !_tcsicmp(last_dir, cp))
+			continue;
+		last_dir = cp;
 		// Ignore nonexistent directories so each Import won't do unnecessary checks.
 		DWORD attr = GetFileAttributes(cp);
 		if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY))
@@ -578,24 +613,32 @@ LPCWSTR Script::InitModuleSearchPath()
 	}
 	if (cp == buf) // No items; could happen in the case of a malformed env var.
 		*cp++ = '\0'; // Ensure double-null termination.
+	*cp++ = '\0';
 	
 	free(deref_path);
-	return SimpleHeap::Alloc(buf, cp - buf);
+	return buf;
 }
 
 
 ResultType Script::FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex, FileIndexType aLocalFileIndex)
 {
+	return FindIncludeFileIndex(aName, GetSearchPath(SearchPathForImport), aFileIndex, aLocalFileIndex, true);
+}
+
+
+ResultType Script::FindIncludeFileIndex(LPCTSTR aName, LPCWSTR aSearchPath, FileIndexType &aFileIndex, FileIndexType aLocalFileIndex, bool aModule)
+{
 	if (!*aName)
 	{
-		aFileIndex = mCurrentModule->IsFileModule() ? mCurrentModule->mSelfFileIndex : mCurrentModule->mOuterFileIndex;
-		return aFileIndex != ABSOLUTE_MAX_SOURCE_FILES ? OK : CONDITION_FALSE; // Check aFileIndex in case of #Module AHK.
+		if (!aModule || mCurrentModule->mIsBuiltinModule)
+			return CONDITION_FALSE;
+		aFileIndex = mCurrentModule->mFileIndex;
+		return OK;
 	}
 
 	if (*aName == '*') // *Resource name or stdin.
 		return SourceFileIndex(aName, aFileIndex);
 
-	static auto search_path = InitModuleSearchPath();
 	const auto suffix = EXT_AUTOHOTKEY;
 	const auto suffix_length = _countof(EXT_AUTOHOTKEY) - 1;
 	const auto dir_suffix = _T("\\__Init") EXT_AUTOHOTKEY;
@@ -603,10 +646,12 @@ ResultType Script::FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex,
 
 	TCHAR buf[T_MAX_PATH];
 
-	// Always search the directory of the current file first.
-	LPCTSTR dir = search_path;
+	bool compat = !aModule && LoadTimeBackCompatMode();
+
+	// Search the directory of the current file first (excluding #Include in v2.0 mode).
+	LPCTSTR dir = aSearchPath;
 	auto line_file = Line::sSourceFile[aLocalFileIndex];
-	if (*line_file != '*')
+	if (*line_file != '*' && !compat)
 	{
 		auto p = _tcsrchr(line_file, '\\');
 		if (p && p - line_file < _countof(buf))
@@ -624,7 +669,7 @@ ResultType Script::FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex,
 	for (LPCTSTR next_dir; *dir; dir = next_dir)
 	{
 		if (dir == buf)
-			next_dir = search_path;
+			next_dir = aSearchPath;
 		else
 			next_dir = dir + _tcslen(dir) + 1;
 
@@ -633,12 +678,16 @@ ResultType Script::FindModuleFileIndex(LPCTSTR aName, FileIndexType &aFileIndex,
 
 		tmemcpy(buf, aName, name_length + 1);
 
-		// Try exact aName first.
-		DWORD attr = GetFileAttributes(buf);
-		auto p = buf + name_length;
-		if ((attr & FILE_ATTRIBUTE_DIRECTORY) && attr != INVALID_FILE_ATTRIBUTES)
+		DWORD attr = INVALID_FILE_ATTRIBUTES;
+		if (!compat)
 		{
-			// Try aName\__module.ahk.
+			// Try exact aName first.
+			attr = GetFileAttributes(buf);
+		}
+		auto p = buf + name_length;
+		if ((attr & FILE_ATTRIBUTE_DIRECTORY) && attr != INVALID_FILE_ATTRIBUTES && aModule)
+		{
+			// Try aName\__Init.ahk.
 			tmemcpy(p, dir_suffix, dir_suffix_length + 1);
 			attr = GetFileAttributes(buf);
 		}

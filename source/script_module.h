@@ -36,10 +36,10 @@ public:
 	UnresolvedBaseClass *mUnresolvedBaseClass = nullptr;
 	FileIndexType *mFiles = nullptr, mFilesCount = 0, mFilesCountMax = 0;
 	LineNumberType mDirectiveLineNumber = 0;
-	FileIndexType mSelfFileIndex = ABSOLUTE_MAX_SOURCE_FILES;
-	FileIndexType mOuterFileIndex = ABSOLUTE_MAX_SOURCE_FILES;
+	FileIndexType mFileIndex = 0;
 	FileIndexType mDirectiveFileIndex = ABSOLUTE_MAX_SOURCE_FILES;
 	bool mExecuted = false;
+	bool mIsFileModule = false;
 	bool mIsBuiltinModule = false;
 	bool mHasWildcardExports = false;
 	bool mBackCompatMode = true; // Compatibility mode for module startup code.  true = requires v2.0, false = requires v2.1
@@ -50,8 +50,8 @@ public:
 	WarnMode Warn_Unreachable = WARNMODE_ON;
 	WarnMode Warn_VarUnset = WARNMODE_ON;
 
-	bool IsFileModule() const { return mSelfFileIndex != ABSOLUTE_MAX_SOURCE_FILES; }
-	bool IsFileMain(FileIndexType aFile) const { return mSelfFileIndex == aFile || mDirectiveFileIndex == aFile; }
+	bool IsFileModule() const { return mIsFileModule; }
+	bool IsFileMain(FileIndexType aFile) const { return mIsFileModule ? mFileIndex == aFile : mDirectiveFileIndex == aFile; }
 
 	bool HasFileIndex(FileIndexType aFile);
 	ResultType AddFileIndex(FileIndexType aFile);
@@ -62,7 +62,7 @@ public:
 	Var *AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, ScriptImport &aImp);
 
 	ScriptModule() {}
-	ScriptModule(LPCTSTR aName) : mName(aName) {}
+	ScriptModule(LPCTSTR aName, bool aIsFileModule) : mName(aName), mIsFileModule(aIsFileModule) {}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}

@@ -588,7 +588,6 @@ ResultType Script::Init(LPTSTR aScriptFilename, IObject *aArgs)
 	// Up to this point, mCurrentModule == &mBuiltinModule for initialization of built-ins.
 	// From this point, declarations should add names to a script module, not mBuiltinModule.
 	mCurrentModule = &mDefaultModule;
-	mDefaultModule.mSelfFileIndex = 0;
 
 	if (aArgs) // Caller-provided command-line args.
 	{
@@ -3590,7 +3589,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				// Save the working directory; see the similar line below for details.
 				LPTSTR prev_dir = GetWorkingDir();
 				// Attempt to find the script file in a Lib folder:
-				auto path = FindLibraryFile(parameter, parameter_end - parameter);
+				auto path = FindLibraryFile(parameter);
 				// Attempt to include the file if found:
 				bool error_was_shown = path && !LoadIncludedFile(path, false, ignore_load_failure);
 				// Restore the working directory.
@@ -6738,98 +6737,30 @@ bool Script::ResolveBaseClass(LPCTSTR aClassName, bool aStruct, Object *&aClass,
 
 #ifndef AUTOHOTKEYSC
 
-#define FUNC_LIB_EXT EXT_AUTOHOTKEY
-#define FUNC_LIB_EXT_LENGTH (_countof(FUNC_LIB_EXT) - 1)
-#define FUNC_LOCAL_LIB _T("\\Lib\\") // Needs leading and trailing backslash.
-#define FUNC_LOCAL_LIB_LENGTH (_countof(FUNC_LOCAL_LIB) - 1)
-#define FUNC_USER_LIB _T("\\AutoHotkey\\Lib\\") // Needs leading and trailing backslash.
-#define FUNC_USER_LIB_LENGTH (_countof(FUNC_USER_LIB) - 1)
-#define FUNC_STD_LIB _T("\\Lib\\") // Needs leading and trailing backslash.
-#define FUNC_STD_LIB_LENGTH (_countof(FUNC_STD_LIB) - 1)
-
-#define FUNC_LIB_COUNT 3
-
-void Script::InitFuncLibraries(FuncLibrary aLib[])
+LPTSTR Script::FindLibraryFile(LPTSTR aFuncName)
 {
-	// Local lib in script's directory.
-	InitFuncLibrary(aLib[0], mFileDir, FUNC_LOCAL_LIB);
-
-	// User lib in Documents folder.
-	PWSTR docs_dir = GetDocumentsFolder();
-	InitFuncLibrary(aLib[1], docs_dir, FUNC_USER_LIB);
-	CoTaskMemFree(docs_dir);
-
-	// Std lib in AutoHotkey directory.
-	InitFuncLibrary(aLib[2], mOurEXEDir, FUNC_STD_LIB);
-}
-
-void Script::InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix)
-{
-	TCHAR buf[T_MAX_PATH + 1]; // +1 to ensure truncated paths are filtered out due to being too long for GetFileAttributes().  It would probably have to be intentional due to MAX_PATH limits elsewhere, but this +1 costs nothing.
-	int length = sntprintf(buf, _countof(buf), _T("%s%s"), aPathBase, aPathSuffix);
-	DWORD attr = GetFileAttributes(buf); // Seems to accept directories that have a trailing backslash, which is good because it simplifies the code.
-	if (attr == 0xFFFFFFFF || !(attr & FILE_ATTRIBUTE_DIRECTORY)) // Directory doesn't exist or it's a file vs. directory. Relies on short-circuit boolean order.
+	auto search_path = GetSearchPath(SearchPathForInclude);
+	
+	FileIndexType file_index;
+	switch (FindIncludeFileIndex(aFuncName, search_path, file_index, mCurrFileIndex, false))
 	{
-		aLib.path = _T("");
-		return;
+	case OK: return Line::sSourceFile[file_index];
+	case FAIL: return nullptr;
 	}
-	// Allow room for appending each candidate file/function name.  This could be exactly
-	// MAX_PATH on ANSI builds since no path longer than that would work, but doing it this
-	// way simplifies length checks later (and Unicode builds support much longer paths).
-	size_t buf_size = length + MAX_VAR_NAME_LENGTH + FUNC_LIB_EXT_LENGTH + 1;
-	aLib.path = SimpleHeap::Alloc<TCHAR>(buf_size);
-	tmemcpy(aLib.path, buf, length + 1);
-	aLib.length = length;
-}
 
-LPTSTR Script::FindLibraryFile(LPTSTR aFuncName, size_t aFuncNameLength, bool aIsModule)
-// If aFuncNameLength is 0, the entire length of aFuncName is used.
-// Returns the path; valid only until the next call to this function.
-{
-	int i;
-	DWORD attr;
-
-	static FuncLibrary sLib[FUNC_LIB_COUNT] = {0};
-
-	if (!sLib[0].path) // Allocate & discover paths only upon first use because many scripts won't use anything from the library. This saves a bit of memory and performance.
-		InitFuncLibraries(sLib);
-	// Above must ensure that all sLib[].path elements are non-NULL (but they can be "" to indicate "no library").
-
-	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
-		aFuncNameLength = _tcslen(aFuncName);
-	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // Too long to fit in the allowed space, and also too long to be a valid function name.
+	if (!LoadTimeBackCompatMode())
 		return nullptr;
 
-	TCHAR *dest;
-	LPTSTR naked_filename = aFuncName;               // Set up for the first iteration.
-	size_t naked_filename_length = aFuncNameLength; //
-
-		for (i = 0; i < FUNC_LIB_COUNT; ++i)
-		{
-			if (!*sLib[i].path) // Library is marked disabled, so skip it.
-				continue;
-
-			dest = (LPTSTR) tmemcpy(sLib[i].path + sLib[i].length, naked_filename, naked_filename_length); // Append the filename to the library path.
-			_tcscpy(dest + naked_filename_length, FUNC_LIB_EXT); // Append the file extension.
-
-			attr = GetFileAttributes(sLib[i].path); // Testing confirms that GetFileAttributes() doesn't support wildcards; which is good because we want filenames containing question marks to be "not found" rather than being treated as a match-pattern.
-			if (attr == 0xFFFFFFFF || (attr & FILE_ATTRIBUTE_DIRECTORY)) // File doesn't exist or it's a directory.
-				continue;
-
-			// Since above didn't "continue", a file exists whose name matches that of the requested library.
-			return sLib[i].path; // Only valid until the next call to this function.
-		} // for() each library directory.
-
-	if (aIsModule)
+	// Since we're in v2.0 mode, search for A.ahk if this is something like #Include <A_B>.
+	auto cp = _tcsrchr(aFuncName, '_');
+	if (!cp)
 		return nullptr;
 
-	// The legacy behaviour for #Include <A_B> is that all Libs are searched for A_B.ahk before
-	// searching for A.ahk, which means that A_B.ahk takes precedence over A.ahk even if A.ahk
-	// is defined in the local Lib and A_B.ahk is not.
-	for (i = 0; i < (int)aFuncNameLength; ++i)
-		if (aFuncName[i] == '_')
-			return FindLibraryFile(aFuncName, i);
-	return nullptr;
+	// Caller provides a modifiable buffer, so may as well take advantage.
+	*cp = '\0';
+	auto r = FindLibraryFile(aFuncName);
+	*cp = '_';
+	return r;
 }
 
 #endif
