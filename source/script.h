@@ -2255,6 +2255,8 @@ private:
 	bool IsLabelTarget(Line *aLine);
 	Label *CurrentFirstLabel() { return g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mCurrentModule->mFirstLabel; }
 
+	void FreePreparseBuffers(); // Free temporary buffers which aren't needed during execution.
+
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.
 	Object *mNewRuntimeException = nullptr; // Lets Error__New detect that it's being called by CreateRuntimeException.

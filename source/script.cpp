@@ -470,6 +470,14 @@ Script::~Script() // Destructor.
 
 
 
+void Script::FreePreparseBuffers()
+{
+	free(mSearchPath); // This is essentially just a cache, and isn't needed during execution.
+	mSearchPath = nullptr;
+}
+
+
+
 ResultType Script::Init(LPTSTR aScriptFilename, IObject *aArgs)
 // Returns OK or FAIL.
 // Caller has provided an empty string for aScriptFilename if this is a compiled script.
@@ -1487,6 +1495,8 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 
 	if (!PreparseCommands())
 		return LOADING_FAILED; // Error was already displayed by the above calls.
+
+	FreePreparseBuffers();
 	
 #ifndef AUTOHOTKEYSC
 	if (mValidateThenExit)
