@@ -604,11 +604,11 @@ LPCTSTR Script::GetSearchPath(SearchPathForType aFor)
 		// is in the same directory as the main script and/or EXE.
 		if (last_dir && !_tcsicmp(last_dir, cp))
 			continue;
-		last_dir = cp;
 		// Ignore nonexistent directories so each Import won't do unnecessary checks.
 		DWORD attr = GetFileAttributes(cp);
 		if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY))
 			continue; // Ignore this item.
+		last_dir = cp; // Only after confirming the item is kept.
 		cp += len + 1; // Write the next item after the null terminator.
 	}
 	if (cp == buf) // No items; could happen in the case of a malformed env var.
