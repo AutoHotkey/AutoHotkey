@@ -265,6 +265,8 @@ Var *ScriptModule::AddNewImportVar(LPTSTR aVarName, Var *aAliasFor, ScriptImport
 	int at;
 	auto &vars = aImp.scope ? aImp.scope->mStaticVars : mVars;
 	auto var = vars.Find(aVarName, &at);
+	if (!var && aImp.scope) // Check for conflicting local declarations.
+		var = aImp.scope->mVars.Find(aVarName);
 	if (var)
 	{
 		// mVars should contain only declared or exported variables at this point.
