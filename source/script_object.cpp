@@ -2256,7 +2256,7 @@ Object::StructInfo *Object::GetStructInfo(bool aLock)
 		// Even if this ends up being locked below as an exact copy of base,
 		// initialize it to reduce the need for recursive calls at runtime.
 		auto &si = *(StructInfo*)(this + 1);
-		si.create = bsi.create;
+		si.create = (mFlags & NativeClassPrototype) ? nullptr : bsi.create;
 		si.object_size = bsi.object_size;
 		si.size = bsi.size;
 		si.align = bsi.align;
