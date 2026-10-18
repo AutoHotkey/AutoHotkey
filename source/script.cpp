@@ -90,6 +90,7 @@ FuncEntry g_BIF[] =
 	BIF1(NumPut, 3, NA),
 	BIFn(ObjAddRef, 1, 1, BIF_ObjAddRefRelease),
 	BIF1(ObjBindMethod, 1, NA),
+	BIFi(ObjCreateWithDataPtr, 2, 2, StructClass_At, true),
 	BIFn(ObjFromPtr, 1, 1, BIF_ObjPtr),
 	BIFn(ObjFromPtrAddRef, 1, 1, BIF_ObjPtr),
 	BIFn(ObjGetBase, 1, 1, BIF_Base),

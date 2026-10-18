@@ -442,7 +442,7 @@ public:
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 	static Object *CreateStruct(Object *aBase, UINT_PTR aPtr = NULL, UINT aFlags = 0);
 	static Object *CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr) { return CreateStruct(aBase, aPtr, NoCallDelete); }
-	static Object *CreateStructPtr(Object *aBase, UINT_PTR aPtr, UINT aFlags = NoCallDelete);
+	static Object *CreateStructPtr(Object *aBase, UINT_PTR aPtr, bool aCallDelete = false);
 	static void NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	static ResultType CreateStruct(ResultToken &aResultToken, Object *aBase, ExprTokenType *aParam[] = nullptr, int aParamCount = 0);
 	
@@ -594,6 +594,8 @@ public:
 			mBase->Release();
 		mBase = aNewBase;
 	}
+
+	bool CanConstruct() { return GetStructInfo(true)->create != nullptr; }
 
 	bool IsClassPrototype() { return mFlags & ClassPrototype; }
 	bool IsNativeClassPrototype() { return mFlags & NativeClassPrototype; }
