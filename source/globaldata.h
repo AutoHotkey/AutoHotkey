@@ -91,6 +91,8 @@ extern int g_nLayersNeedingTimer;
 extern int g_nThreads;
 extern int g_nPausedThreads;
 extern int g_MaxHistoryKeys;
+extern bool g_ShowMouseKeyHistory;
+extern bool g_ShowKeyboardKeyHistory;
 extern DWORD g_InputTimeoutAt;
 
 extern UCHAR g_MaxThreadsPerHotkey;

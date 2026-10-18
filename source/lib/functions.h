@@ -159,7 +159,7 @@ md_func_v(InstallMouseHook, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 
 md_func_x(IsLabel, IsLabel, Bool32, (In, String, Name))
 
-md_func(KeyHistory, (In_Opt, Int32, MaxEvents))
+md_func(KeyHistory, (In_Opt, Int32, MaxEvents), (In_Opt, Bool32, ShowMouse), (In_Opt, Bool32, ShowKeyboard))
 
 md_func(KeyWait, (In, String, KeyName), (In_Opt, String, Options), (Ret, Bool32, RetVal))
 
