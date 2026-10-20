@@ -853,6 +853,8 @@ ResultType Object::CallProperty(ResultToken &aResultToken, int aFlags, name_t aN
 	auto result = GetMethodValue(method_token, aFlags, aName, aThisToken);
 	if (result != INVOKE_NOT_HANDLED)
 	{
+		if (method_token.symbol == SYM_MISSING) // Property getter returned unset.
+			return aResultToken.UnsetError(ERR_RETURNED_UNSET, aName);
 		if (result == OK)
 			result = CallAsMethod(method_token, aResultToken, aThisToken, aParam, aParamCount);
 		method_token.Free();
