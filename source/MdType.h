@@ -28,6 +28,7 @@ enum class MdType : UINT8
 	FResult,
 	//NzIntWin32, // BOOL result where FALSE means failure and GetLastError() is applicable.
 	Struct, // Currently only for CallbackCreate.
+	Array, // Currently only for CallbackCreate.
 	Params,
 #ifdef ENABLE_MD_BITS
 	BitsBase	= 99, // For encoding a small literal value to insert into the parameter list.

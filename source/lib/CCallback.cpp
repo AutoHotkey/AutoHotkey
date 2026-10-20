@@ -159,7 +159,7 @@ UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used b
 			UINT_PTR *next_param = params;
 			
 			auto &ret = arg_type[cb.actual_param_count];
-			if (ret.type == MdType::Struct)
+			if (ret.proto)
 				ret_size = (int)ret.proto->StructSize();
 			if (ret_size < 3 || ret_size == 4 || ret_size == 8)
 				ret_ptr = &number_to_return;
@@ -172,20 +172,23 @@ UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used b
 
 			for (; param_count < cb.actual_param_count; ++param_count, ++next_param)
 			{
-				if (arg_type[param_count].type == MdType::Struct)
+				if (arg_type[param_count].proto)
 				{
 					FuncResult &result_token = *(new (_alloca(sizeof(FuncResult))) FuncResult);
 					param[param_count] = &result_token;
 					// Create a struct Object as a by-value copy of the parameter, to avoid aliasing
 					// stack memory if the script retains a reference after the function returns.
+					// Array types decay to a pointer, so no copying in that case.
+					bool arr = arg_type[param_count].type == MdType::Array;
 #ifdef WIN32_PLATFORM
-					auto p = (UINT_PTR)next_param;
+					auto p = arr ? *next_param : (UINT_PTR)next_param;
 #else
-					auto ss = arg_type[param_count].proto->StructSize();
+					auto ss = arr ? 9 : arg_type[param_count].proto->StructSize();
 					// For struct parameters of sizes other than those below, x64 passes them by address.
 					auto p = (ss < 3 || ss == 4 || ss == 8) ? (UINT_PTR)next_param : *next_param;
 #endif
-					auto obj = Object::CreateStructCopyNoDelete(arg_type[param_count].proto, p);
+					auto obj = arr ? Object::CreateStructPtr(arg_type[param_count].proto, p)
+						: Object::CreateStructCopyNoDelete(arg_type[param_count].proto, p);
 					if (!obj)
 					{
 						aborted = true;
@@ -250,7 +253,7 @@ UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used b
 		{
 			auto &ret = arg_type[cb.actual_param_count];
 			ret_type = ret.type;
-			if (ret_type == MdType::Struct)
+			if (ret.proto)
 			{
 				Object *obj;
 				auto result_obj = TokenToObject(result_token);
@@ -295,7 +298,7 @@ UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used b
 
 	if (arg_type)
 		while (--param_count >= 0)
-			if (arg_type[param_count].type == MdType::Struct)
+			if (arg_type[param_count].proto)
 				((FuncResult *)param[param_count])->Free();
 	
 	if (cb.flags & CBF_CREATE_NEW_THREAD)
@@ -413,13 +416,9 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, ExprTokenT
 				auto proto = cls->ClassGetPrototype();
 				if (proto && proto->IsDerivedFrom(Object::sStructPrototype))
 				{
-					at[i].type = proto->GetStructMdType();
-					if (at[i].type == MdType::Void)
-					{
-						at[i].type = MdType::Struct;
-						at[i].proto = (Object*)proto;
-					}
-					continue;
+					if (proto->GetStructCallbackArgInfo(at[i].type, at[i].proto))
+						if (!(at[i].type == MdType::Array && i + 1 == param_types->Length())) // Array type is invalid for return.
+							continue;
 				}
 			}
 			else if (v.symbol == SYM_STRING && !_tcsicmp(v.marker, _T("Void")))

@@ -581,7 +581,7 @@ public:
 
 	bool GetStructArgInfo(DYNAPARM &aType, Object *&aPointedClass);
 	bool GetNumGetArgInfo(size_t &aSize, BOOL &aIsInt, BOOL &aIsSigned);
-	MdType GetStructMdType();
+	bool GetStructCallbackArgInfo(MdType &aType, Object *&aStructProto);
 
 	bool CanSetBase(); // Can Base be changed for this Object?
 	bool CanSetBase(Object *aNewBase); // Is aNewBase a valid Base for this Object?

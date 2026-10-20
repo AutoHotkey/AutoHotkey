@@ -2301,12 +2301,18 @@ UINT_PTR Object::StructSize()
 	return ((StructInfo*)(this + 1))->size;
 }
 
-MdType Object::GetStructMdType()
+bool Object::GetStructCallbackArgInfo(MdType &aType, Object *&aStructProto)
 {
 	if (!(mFlags & StructInfoInitialized))
-		return MdType::Void;
+		return false;
 	auto &si = *(StructInfo*)(this + 1);
-	return si.item_count == 0 ? si.native_type : MdType::Void;
+	if (si.item_count != 0)
+		aType = MdType::Array, aStructProto = this;
+	else if (si.native_type == MdType::Void)
+		aType = MdType::Struct, aStructProto = this;
+	else
+		aType = si.native_type, aStructProto = nullptr;
+	return true;
 }
 
 ResultType FillPropertyFlags(IObject *aObj, bool aSetter, Property &aProp, ResultToken &aResultToken)
