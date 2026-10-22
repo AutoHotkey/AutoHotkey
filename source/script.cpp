@@ -9474,6 +9474,11 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 							break;
 						}
 					}
+					if (last_postfix.symbol == SYM_FUNC)
+					{
+						last_postfix.callsite->flags |= last_postfix.callsite->param_count ? EIF_UNSET_RETURN : (EIF_UNSET_RETURN | EIF_UNSET_PROP);
+						break;
+					}
 					if (last_postfix.symbol != SYM_MISSING)
 						return LineError(_T("IsSet requires a variable or unset expression."), FAIL, this_postfix->error_reporting_marker);
 				}
