@@ -1417,6 +1417,8 @@ bool Object::DefineMethod(name_t aName, IObject *aFunc)
 	if (auto prop = DefineProperty(aName))
 	{
 		prop->SetMethod(aFunc);
+		if (!prop->Getter())
+			prop->NoParamGet = true;
 		return true;
 	}
 	return false;
