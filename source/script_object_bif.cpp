@@ -290,7 +290,7 @@ BIF_DECL(StructClass_At)
 	bool is_objcreate = _f_callee_id;
 	auto class_ = ParamIndexToObject(0);
 	auto proto = class_ && class_->IsOfType(Object::sPrototype) ? ((Object*)class_)->ClassGetPrototype() : nullptr;
-	if (!proto || !(is_objcreate ? proto->CanConstruct() : proto->IsDerivedFrom(Object::sStructPrototype)))
+	if (!proto || !proto->CanConstruct())
 		_f_throw(_T("Invalid class"));
 	auto ptr = (UINT_PTR)ParamIndexToInt64(1);
 	if (ptr < 65536 && (ptr || !is_objcreate) && proto->StructSize())
