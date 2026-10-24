@@ -1188,6 +1188,25 @@ bool Object::IsCArrayOf(IObject *aCandidate, Object *aPrototype)
 }
 
 
+void Object::StructNew(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (!aParamCount)
+		return;
+	auto &si = *mBase->GetStructInfo();
+	int i;
+	TypedProperty *tp;
+	for (i = 0, tp = si.last_field; tp; tp = tp->prev_field, ++i);
+	// Require aParamCount == field count to try to future-proof and limit risk.
+	// For instance, X(Y) intended as a "typecast" won't implicitly assign to a
+	// permissive field of type Struct.Ptr unless that's the only field.
+	if (i != aParamCount)
+		_o_throw(ERR_PARAM_COUNT_INVALID);
+	for (tp = si.last_field; tp; tp = tp->prev_field)
+		if (!SetTypedValue(aResultToken, 0, *tp, *aParam[--i]))
+			return;
+}
+
+
 void Object::StructGet(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
@@ -4306,6 +4325,7 @@ ObjectMember PropRef::sMembers[]
 
 ObjectMember Object::sStructMembers[]
 {
+	Object_Method_(__New, 0, MAXP_VARIADIC, StructNew, IT_CALL),
 	Object_Method1(__Ref, 1, 1),
 	Object_Member(Ptr, StructGet, M_Struct_Ptr, IT_GET),
 	Object_Member(Size, StructGet, M_Struct_Size, IT_GET)
