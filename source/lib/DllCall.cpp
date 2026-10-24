@@ -755,6 +755,11 @@ has_valid_return_type:
 							param_proto = pointed_proto;
 						}
 					}
+					else if (this_param_obj && this_dyna_param.type != DLL_ARG_STRUCT)
+					{
+						this_dyna_param.type = DLL_ARG_STRUCT;
+						this_dyna_param.struct_size = (int)param_proto->StructSize();
+					}
 				}
 			}
 		}
