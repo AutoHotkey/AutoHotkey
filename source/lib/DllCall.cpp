@@ -294,7 +294,7 @@ void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aExcep
 
 
 
-void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
+void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam, bool &aIsPtr)
 // Helper function for DllCall().  Updates aDynaParam's type and other attributes.
 {
 	LPTSTR type_string = aBuf;
@@ -354,7 +354,7 @@ void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
 			return;
 		}
 		break;
-	case 'p': if (!_tcsicmp(buf, _T("Ptr")))	{ aDynaParam.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64); return; } break;
+	case 'p': if (!_tcsicmp(buf, _T("Ptr")))	{ aDynaParam.type = Exp32or64(DLL_ARG_INT, DLL_ARG_INT64); aIsPtr = true; return; } break;
 	case 's': if (!_tcsicmp(buf, _T("Str"))
 				&& !aDynaParam.is_unsigned)		{ aDynaParam.type = DLL_ARG_STR; return; }
 			  if (!_tcsicmp(buf, _T("Short")))	{ aDynaParam.type = DLL_ARG_SHORT; return; } break;
@@ -648,7 +648,8 @@ BIF_DECL(BIF_DllCall)
 		}
 		else
 		{
-			ConvertDllArgType(return_type_string, return_attrib);
+			bool _;
+			ConvertDllArgType(return_type_string, return_attrib, _);
 			if (return_attrib.type == DLL_ARG_INVALID && !_tcsicmp(return_type_string, _T("Void")))
 				return_attrib.type = DLL_ARG_VOID;
 		}
@@ -698,7 +699,8 @@ has_valid_return_type:
 		// Store each arg into a dyna_param struct, using its arg type to determine how.
 		DYNAPARM &this_dyna_param = dyna_param[arg_count];
 		Object *param_proto = nullptr;
-		
+		bool arg_type_is_ptr = false;
+
 		ExprTokenType &value_param = *aParam[i + 1];
 		IObject *this_param_obj = TokenToObject(value_param);
 		if (IObject *obj = TokenToObject(*aParam[i]))
@@ -759,7 +761,7 @@ has_valid_return_type:
 		else
 		{
 			arg_type_string = TokenToString(*aParam[i]); // aBuf not needed since floating-point and "" are equally invalid.
-			ConvertDllArgType(arg_type_string, this_dyna_param);
+			ConvertDllArgType(arg_type_string, this_dyna_param, arg_type_is_ptr);
 		}
 		if (this_dyna_param.type == DLL_ARG_INVALID)
 			_f_throw_value(ERR_INVALID_ARG_TYPE);
@@ -775,7 +777,7 @@ has_valid_return_type:
 				aParam[i + 1]->SetVarRef(varref);
 				this_param_obj = varref->ToObject();
 			}
-			else if (this_dyna_param.type == Exp32or64(DLL_ARG_INT, DLL_ARG_INT64) && ctoupper(*arg_type_string) == 'P')
+			else if (arg_type_is_ptr)
 			{
 				// Support Buffer.Ptr, but only for "Ptr" type.  All other types are reserved for possible
 				// future use, which might be general like obj.ToValue(), or might be specific to DllCall
