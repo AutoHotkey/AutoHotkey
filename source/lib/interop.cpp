@@ -23,8 +23,8 @@ GNU General Public License for more details.
 struct NumGetParams
 {
 	size_t target, right_side_bound;
-	size_t num_size = sizeof(DWORD_PTR);
-	BOOL is_integer = TRUE, is_signed = FALSE;
+	size_t num_size = 0;
+	BOOL is_integer, is_signed;
 };
 
 bool Object::GetNumGetArgInfo(size_t &aSize, BOOL &aIsInt, BOOL &aIsSigned)
@@ -76,8 +76,6 @@ void ConvertNumGetType(ExprTokenType &aToken, NumGetParams &op)
 
 	case 'D': op.num_size = 8, op.is_integer = FALSE; break; // Double.
 	case 'F': op.num_size = 4, op.is_integer = FALSE; break; // Float.
-
-	default: op.num_size = 0; break;
 	}
 }
 
