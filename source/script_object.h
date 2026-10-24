@@ -416,7 +416,7 @@ protected:
 
 	Object *GetThisForTypedValue(ResultToken &aResultToken, int aFlags, name_t aName, ExprTokenType &aThisToken);
 	ResultType GetTypedValue(ResultToken &aResultToken, int aFlags, TypedProperty &aProp);
-	ResultType SetTypedValue(ResultToken &aResultToken, int aFlags, name_t aName, TypedProperty &aProp, ExprTokenType &aValue);
+	ResultType SetTypedValue(ResultToken &aResultToken, int aFlags, TypedProperty &aProp, ExprTokenType &aValue);
 	ResultType GetBoxedPointer(ResultToken &aResultToken, UINT_PTR aPtr, Object *aPrototype, size_t aNestOffset);
 	ResultType SetBoxedPointer(ResultToken &aResultToken, ExprTokenType &aValue, UINT_PTR &aPtr, Object *aPrototype, size_t aNestOffset, Object *aPointerClass);
 

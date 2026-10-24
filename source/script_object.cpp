@@ -949,7 +949,7 @@ ResultType Object::SetProperty(ResultToken &aResultToken, int aFlags, name_t aNa
 	if (field && field->symbol == SYM_TYPED_FIELD)
 	{
 		auto that = GetThisForTypedValue(aResultToken, aFlags, aName, aThisToken);
-		return that ? that->SetTypedValue(aResultToken, aFlags, aName, *field->tprop, **aParam) : FAIL;
+		return that ? that->SetTypedValue(aResultToken, aFlags, *field->tprop, **aParam) : FAIL;
 	}
 	
 	if (field && field->symbol == SYM_DYNAMIC || (aFlags & (IF_SUBSTITUTE_THIS | IF_SUPER)))
@@ -1094,7 +1094,7 @@ ResultType Object::GetBoxedPointer(ResultToken &aResultToken, UINT_PTR aPtr, Obj
 }
 
 
-ResultType Object::SetTypedValue(ResultToken &aResultToken, int aFlags, name_t aName, TypedProperty &aProp, ExprTokenType &aValue)
+ResultType Object::SetTypedValue(ResultToken &aResultToken, int aFlags, TypedProperty &aProp, ExprTokenType &aValue)
 {
 	auto ptr = DataPtr() + aProp.data_offset;
 	if (aProp.class_object)
@@ -1232,7 +1232,7 @@ void Object::CArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	if (IS_INVOKE_GET)
 		GetTypedValue(aResultToken, 0, tp);
 	else
-		SetTypedValue(aResultToken, 0, _T("__Item"), tp, *aParam[0]);
+		SetTypedValue(aResultToken, 0, tp, *aParam[0]);
 	tp.class_object = nullptr;
 }
 
