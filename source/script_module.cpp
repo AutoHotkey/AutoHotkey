@@ -329,7 +329,7 @@ void Script::ResolveIndirectImports()
 		{
 			ASSERT(!var->IsAlias() && !var->IsDirectConstant());
 			auto alias = mCurrentModule->FindImportedVar(var->mName);
-			ASSERT(alias == var);
+			ASSERT(!alias || alias == var); // If null, a VarUnset warning will be issued later.
 		}
 	}
 }
