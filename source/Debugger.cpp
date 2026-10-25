@@ -175,7 +175,7 @@ void Debugger::SetBreakpointForLineGroup(Line *line, Breakpoint *bp)
 			fl->mBreakpoint = bp;
 		// After the script loads, a function's parameter default initializers precede mJumpToLine.
 		for (fl = fl->mPrevLine
-			; fl->mLineNumber == line_no && fl->mFileIndex == file_no && fl->mActionType == ACT_EXPRESSION
+			; fl && fl->mLineNumber == line_no && fl->mFileIndex == file_no && fl->mActionType == ACT_EXPRESSION
 			; fl = fl->mPrevLine)
 			fl->mBreakpoint = bp;
 	}
