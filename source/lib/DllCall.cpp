@@ -800,8 +800,11 @@ has_valid_return_type:
 			{
 				// Allow unset to mean nullptr for more flexibility with "Str", "int*", etc.
 				// Pass 0, not the address of a variable containing 0, distinct from "str*",&v:=unset.
+				// Make it a plain pointer-sized integer: on Win32 an "Int64*" or "Double*" must occupy one slot,
+				// and an "AStr" must not be counted among the translated strings (pStr/nxStr) it never allocated.
+				this_dyna_param.struct_size = 0; // Clears passed_by_address, is_unsigned and is_hresult.
+				this_dyna_param.type = DLLARGTYPE_INTPTR;
 				this_dyna_param.ptr = nullptr;
-				this_dyna_param.passed_by_address = false;
 				continue;
 			}
 			_f_throw(ERR_PARAM_REQUIRED);

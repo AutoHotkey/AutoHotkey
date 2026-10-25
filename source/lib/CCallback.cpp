@@ -205,8 +205,9 @@ UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used b
 					else
 						result_token.SetValue(obj);
 #ifdef WIN32_PLATFORM
-					// Adjust for structs larger than 4 bytes passed by value.
-					next_param += (((int)arg_type[param_count].proto->StructSize() + 3) >> 2) - 1;
+					// Adjust for structs larger than 4 bytes passed by value (an array decayed to a pointer takes one slot).
+					if (!arr)
+						next_param += (((int)arg_type[param_count].proto->StructSize() + 3) >> 2) - 1;
 #endif
 				}
 				else
@@ -444,7 +445,7 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, ExprTokenT
 	{
 		for (int i = 0; i < actual_param_count; ++i)
 		{
-			if (at[i].proto)
+			if (at[i].proto && at[i].type != MdType::Array) // An array decays to a pointer: one slot.
 				param_slot_count += (((int)at[i].proto->StructSize() + 3) >> 2) - 1;
 			else if (MdType_Is64bit(at[i].type))
 				param_slot_count += 1;

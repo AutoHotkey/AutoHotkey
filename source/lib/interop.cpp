@@ -44,6 +44,7 @@ bool Object::GetNumGetArgInfo(size_t &aSize, BOOL &aIsInt, BOOL &aIsSigned)
 
 void ConvertNumGetType(ExprTokenType &aToken, NumGetParams &op)
 {
+	op.num_size = 0; // NumPut reuses op across type/value pairs, so a failed conversion must not inherit the previous size.
 	LPTSTR type = TokenToString(aToken); // No need to pass aBuf since any numeric value would not be recognized anyway.
 	if (!*type)
 	{
