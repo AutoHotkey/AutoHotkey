@@ -795,7 +795,17 @@ has_valid_return_type:
 		}
 		ExprTokenType &this_param = *aParam[i + 1]; // Take a new reference since it might have been updated above.
 		if (this_param.symbol == SYM_MISSING && this_dyna_param.type != DLL_ARG_STRUCT) // Permit struct classes with __value to handle unset.
+		{
+			if (this_dyna_param.passed_by_address || this_dyna_param.type == DLL_ARG_WSTR || this_dyna_param.type == DLL_ARG_ASTR)
+			{
+				// Allow unset to mean nullptr for more flexibility with "Str", "int*", etc.
+				// Pass 0, not the address of a variable containing 0, distinct from "str*",&v:=unset.
+				this_dyna_param.ptr = nullptr;
+				this_dyna_param.passed_by_address = false;
+				continue;
+			}
 			_f_throw(ERR_PARAM_REQUIRED);
+		}
 
 		switch (this_dyna_param.type)
 		{
