@@ -120,7 +120,7 @@ struct ObjectMemberListType
 
 
 // Helper for predefined classes
-typedef Object* (*NewObjectProc)(size_t);
+typedef Object* (*NewObjectProc)(void*);
 struct ClassFactoryDef
 {
 	void *call;
@@ -134,7 +134,7 @@ struct ClassFactoryDef
 	// Object size is inferred from the return type of the parameter,
 	// so the return type must be the exact type this factory constructs.
 	template<class T>
-	ClassFactoryDef(T* (*New)(size_t)) : call(New), object_size(sizeof(T)), min_params(1), max_params(1), is_variadic(true), is_bif(false) {}
+	ClassFactoryDef(T* (*New)(void*)) : call(New), object_size(sizeof(T)), min_params(1), max_params(1), is_variadic(true), is_bif(false) {}
 };
 
 
@@ -339,7 +339,7 @@ protected:
 
 	struct StructInfo
 	{
-		NewObjectProc create;
+		NewObjectProc ctor;
 		size_t size;
 		size_t align;
 		size_t nested_object_size;
@@ -595,7 +595,7 @@ public:
 		mBase = aNewBase;
 	}
 
-	bool CanConstruct() { return GetStructInfo(true)->create != nullptr; }
+	bool CanConstruct() { return GetStructInfo(true)->ctor != nullptr; }
 
 	bool IsClassPrototype() { return mFlags & ClassPrototype; }
 	bool IsNativeClassPrototype() { return mFlags & NativeClassPrototype; }

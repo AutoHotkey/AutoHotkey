@@ -1998,9 +1998,9 @@ public:
 		return p;
 	}
 
-	static UserMenu *NewMenuBar(size_t aSuffixSize)
+	static UserMenu *NewMenuBar(void *p)
 	{
-		return new (aSuffixSize) UserMenu(MENU_TYPE_BAR);
+		return ::new (p) UserMenu(MENU_TYPE_BAR);
 	}
 
 	UserMenu(MenuTypeType aMenuType = MENU_TYPE_POPUP);

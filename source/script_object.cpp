@@ -170,13 +170,14 @@ Object *Object::CreateStruct(Object *aBase, UINT_PTR aPtr, UINT aFlags)
 Object *Object::CreateStructPtr(Object *aBase, UINT_PTR aPtr, bool aCallDelete)
 {
 	auto &si = *aBase->GetStructInfo(true);
-	Object *obj = si.create(si.nested_object_size + sizeof(void*));
+	void *p = operator new(si.object_size, si.nested_object_size + sizeof(void*));
+	Object *obj = si.ctor(p);
 	obj->mFlags |= DataIsSuffixPtr;
 	if (obj->IsOfType(Object::sStructPrototype))
 		obj->mFlags |= CannotOwnProps;
 	if (!aCallDelete)
 		obj->mFlags |= NoCallDelete;
-	void *data = obj + 1;
+	void *data = (char*)obj + si.object_size;
 	if (si.nested_object_size)
 	{
 		ZeroMemory(data, si.nested_object_size);
@@ -202,11 +203,12 @@ void Object::NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	// with a Prototype own property which is any Object (not just a Prototype).
 	Object *proto = cls && cls->IsOfType(Object::sPrototype) ? ((Object*)cls)->ClassGetPrototypeBackwardCompatible() : nullptr;
 	auto si = proto ? proto->GetStructInfo(true) : nullptr;
-	if (!si || si->create != nsi->create)
+	if (!si || si->ctor != nsi->ctor)
 		_f_throw_value(ERR_INVALID_BASE);
 
 	auto suffix = si->nested_object_size + si->size;
-	auto obj = si->create(suffix);
+	void *p = operator new(si->object_size, suffix);
+	auto obj = si->ctor(p);
 	if (suffix)
 	{
 		auto ptr = (UINT_PTR)obj + si->object_size;
@@ -218,9 +220,9 @@ void Object::NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int
 }
 
 template<class T>
-T *NewObject(size_t aSuffixSize)
+T *NewObject(void *at)
 {
-	return new (aSuffixSize) T();
+	return ::new (at) T();
 }
 
 
@@ -1747,7 +1749,7 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 		else
 		{
 			auto &si = *(StructInfo*)(aPrototype + 1);
-			si.create = (NewObjectProc)aFactory.call;
+			si.ctor = (NewObjectProc)aFactory.call;
 			si.object_size = aFactory.object_size;
 			ctor->mData = aPrototype;
 			ctor->mBIF = NewInstance;
@@ -1825,7 +1827,7 @@ Object *Object::CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi)
 	si->pointed_class = sc;
 	if (sc)
 		sc->AddRef();
-	si->create = NewObject<Object>;
+	si->ctor = NewObject<Object>;
 	si->object_size = sizeof(Object);
 	if (spsi->dllcall_type && !spsi->pointed_class)
 	{
@@ -1894,7 +1896,7 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	ASSERT(ac->mRefCount == 1); // Only the reference to be returned below is counted.
 	sc->AddRef();
 
-	si->create = NewObject<Object>;
+	si->ctor = NewObject<Object>;
 	si->object_size = sizeof(Object);
 	if (!spsi->item_count)
 		si->native_type = spsi->native_type;
@@ -2286,7 +2288,7 @@ Object::StructInfo *Object::GetStructInfo(bool aLock)
 		// Even if this ends up being locked below as an exact copy of base,
 		// initialize it to reduce the need for recursive calls at runtime.
 		auto &si = *(StructInfo*)(this + 1);
-		si.create = (mFlags & NativeClassPrototype) ? nullptr : bsi.create;
+		si.ctor = (mFlags & NativeClassPrototype) ? nullptr : bsi.ctor;
 		si.object_size = bsi.object_size;
 		si.size = bsi.size;
 		si.align = bsi.align;
@@ -4418,7 +4420,7 @@ void Object::CreateRootPrototypes()
 		si.nested_object_size = sizeof(Object*); // Pointer to Prototype.
 		si.pointed_class = sClass; // Must be non-zero for ~Object().
 		si.object_size = sizeof(Object); // For Class() without parameters.
-		si.create = NewObject<Object>;
+		si.ctor = NewObject<Object>;
 	}
 
 	ObjectCtor no_ctor = nullptr;
@@ -4514,12 +4516,12 @@ void Object::CreateRootPrototypes()
 		psi.pointed_class = sStructClass; // This is not a counted reference.
 		psi.nested_object_size = sizeof(Object*);
 		psi.object_size = sizeof(Object);
-		psi.create = NewObject<Object>;
+		psi.ctor = NewObject<Object>;
 		auto &ssi = *(StructInfo*)(sStructPrototype + 1);
 		ssi.align = 1;
 		ssi.pointer_class = sPtrClass;
 		ssi.object_size = sizeof(Object);
-		ssi.create = NewObject<Object>;
+		ssi.ctor = NewObject<Object>;
 		++sPtrClass->mRefCount; // For correctness, though it should never be released.
 		sStructPrototype->mFlags |= StructInfoInitialized | StructInfoLocked;
 	}
@@ -4538,7 +4540,7 @@ void Object::CreateRootPrototypes()
 		auto p = CreatePrototype(type_names[i], sStructPrototype);
 		auto si = (StructInfo*)(p + 1);
 		p->mFlags |= StructInfoInitialized | StructInfoLocked;
-		si->create = NewObject<Object>;
+		si->ctor = NewObject<Object>;
 		si->object_size = sizeof(Object);
 		si->native_type = type_codes[i];
 		si->dllcall_type = type_dllcall[i];
