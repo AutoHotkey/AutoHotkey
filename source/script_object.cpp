@@ -146,51 +146,49 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 	return obj;
 }
 
-Object *Object::CreateStruct(Object *aBase, UINT_PTR aPtr, UINT aFlags)
+Object *Object::Create(Object *aBase, StructInfo &si, UINT aFlags)
 {
-	auto &si = *aBase->GetStructInfo(true);
-	Object *obj = new (si.nested_object_size + si.size) Object(aFlags | CannotOwnProps | DataIsSuffix);
-	void *data = obj + 1;
-	if (si.nested_object_size)
-	{
-		ZeroMemory(data, si.nested_object_size);
-		data = (char*)data + si.nested_object_size;
-	}
-	if (si.size)
-	{
-		if (aPtr)
-			memcpy(data, (void*)aPtr, si.size);
-		else
-			ZeroMemory(data, si.size);
-	}
+	return Create(aBase, si, aFlags, si.nested_object_size + si.size);
+}
+
+Object *Object::Create(Object *aBase, StructInfo &si, UINT aFlags, size_t suffix)
+{
+	void *p = operator new(si.object_size, suffix);
+	auto obj = si.ctor(p);
+	if (suffix)
+		ZeroMemory((char*)obj + si.object_size, suffix);
+	else
+		aFlags &= ~(DataIsSuffix | DataIsSuffixPtr);
+	obj->mFlags |= aFlags;
 	obj->SetBase(aBase);
 	return obj;
 }
 
 Object *Object::CreateStructPtr(Object *aBase, UINT_PTR aPtr, bool aCallDelete)
 {
-	auto &si = *aBase->GetStructInfo(true);
-	void *p = operator new(si.object_size, si.nested_object_size + sizeof(void*));
-	Object *obj = si.ctor(p);
-	obj->mFlags |= DataIsSuffixPtr;
-	if (obj->IsOfType(Object::sStructPrototype))
-		obj->mFlags |= CannotOwnProps;
+	UINT flags = DataIsSuffixPtr;
+	if (!aCallDelete || aBase == Object::sStructPrototype || aBase->IsDerivedFrom(Object::sStructPrototype))
+		flags |= CannotOwnProps;
 	if (!aCallDelete)
-		obj->mFlags |= NoCallDelete;
-	void *data = (char*)obj + si.object_size;
-	if (si.nested_object_size)
-	{
-		ZeroMemory(data, si.nested_object_size);
-		data = (char*)data + si.nested_object_size;
-	}
-	*(UINT_PTR*)data = aPtr;
-	obj->SetBase(aBase);
+		flags |= NoCallDelete;
+	auto &si = *aBase->GetStructInfo(true);
+	auto obj = Create(aBase, si, flags, si.nested_object_size + sizeof(void*));
+	*si.DataSuffix<UINT_PTR>(obj) = aPtr;
+	return obj;
+}
+
+Object *Object::CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr)
+{
+	auto &si = *aBase->GetStructInfo(true);
+	auto obj = Create(aBase, si, DataIsSuffix | CannotOwnProps | NoCallDelete);
+	memcpy(si.DataSuffix(obj), (void*)aPtr, si.size);
 	return obj;
 }
 
 ResultType Object::CreateStruct(ResultToken &aResultToken, Object *aBase, ExprTokenType *aParam[], int aParamCount)
 {
-	auto obj = CreateStruct(aBase);
+	auto &si = *aBase->GetStructInfo(true);
+	auto obj = Create(aBase, si, DataIsSuffix | CannotOwnProps);
 	return obj->Initialize(aResultToken, aParam, aParamCount);
 }
 
@@ -206,16 +204,7 @@ void Object::NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	if (!si || si->ctor != nsi->ctor)
 		_f_throw_value(ERR_INVALID_BASE);
 
-	auto suffix = si->nested_object_size + si->size;
-	void *p = operator new(si->object_size, suffix);
-	auto obj = si->ctor(p);
-	if (suffix)
-	{
-		auto ptr = (UINT_PTR)obj + si->object_size;
-		ZeroMemory((void*)ptr, suffix);
-		obj->mFlags |= DataIsSuffix;
-	}
-	obj->SetBase(proto);
+	auto obj = Create(proto, *si);
 	obj->Initialize(aResultToken, aParam + 1, aParamCount - 1);
 }
 

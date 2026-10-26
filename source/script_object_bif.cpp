@@ -343,7 +343,7 @@ UINT_PTR Object::DataPtr()
 	if (mFlags & (DataIsSuffix | DataIsSuffixPtr))
 	{
 		auto si = mBase->GetStructInfo();
-		ptr = (UINT_PTR)this + si->object_size + si->nested_object_size;
+		ptr = (UINT_PTR)si->DataSuffix(this);
 	}
 	if (mFlags & DataIsSuffixPtr)
 		ptr = *(UINT_PTR*)ptr;

@@ -355,6 +355,8 @@ protected:
 
 		bool IsPointerType() { return pointed_class && !item_count; }
 		size_t SizeWhenNested() { return IsPointerType() ? sizeof(Object*) : object_size + nested_object_size + sizeof(void*); }
+		template<typename T = void>
+		T *DataSuffix(void *a) { return (T*)((char*)a + object_size + nested_object_size); }
 	};
 
 	ResultType GetEnumProp(UINT &aIndex, Var *aName, Var *aVal, int aVarCount);
@@ -429,6 +431,9 @@ protected:
 	ResultType NestedNew(ResultToken &aResultToken, UINT_PTR aPtr, Object *aBase);
 	ResultType NestedSparseInit(ResultToken& aResultToken, TypedProperty& aProp, UINT_PTR aPtr);
 	ResultType CArrayNew(ResultToken &aResultToken, StructInfo *si);
+
+	static Object *Create(Object *aBase, StructInfo &si, UINT aFlags = DataIsSuffix);
+	static Object *Create(Object *aBase, StructInfo &si, UINT aFlags, size_t suffix);
 	
 public:
 
@@ -440,11 +445,10 @@ public:
 	Object() { mFlags = 0; }
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
-	static Object *CreateStruct(Object *aBase, UINT_PTR aPtr = NULL, UINT aFlags = 0);
-	static Object *CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr) { return CreateStruct(aBase, aPtr, NoCallDelete); }
 	static Object *CreateStructPtr(Object *aBase, UINT_PTR aPtr, bool aCallDelete = false);
-	static void NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	static Object *CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr);
 	static ResultType CreateStruct(ResultToken &aResultToken, Object *aBase, ExprTokenType *aParam[] = nullptr, int aParamCount = 0);
+	static void NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	
 	static bool IsCArrayOf(IObject *aCandidate, Object *aPrototype);
 
