@@ -215,29 +215,43 @@ void DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aExcep
 #endif // WIN32_PLATFORM
 #ifdef _WIN64
 
-	int params_left = aParamCount, i = 0, r = 0;
-	DWORD_PTR regArgs[4];
+	int int_reg = 0, fp_reg = 0;
+	DWORD_PTR regArgs[17] = {};
 	DWORD_PTR* stackArgs = NULL;
 	size_t stackArgsSize = 0;
 
 	if (!register_return)
 	{
-		// Return value isn't passed through registers, memory copy
-		// is performed instead. Pass the pointer as hidden arg.
-		regArgs[r++] = (DWORD_PTR)aRet;
+		// ARM64 passes the address of an indirect return value in x8.
+		regArgs[16] = (DWORD_PTR)aRet;
 	}
-	// The first four parameters are passed in x64 through registers... like ARM :D
-	for (; r < 4 && params_left; --params_left)
-		regArgs[r++] = DynaParamToElement(aParam[i++]);
-
-	// Copy the remaining parameters
-	if(params_left)
+	// Windows ARM64 allocates integer and floating-point arguments independently.
+	// Arguments which do not fit in their respective register bank are placed on the stack.
+	for (int i = 0; i < aParamCount; ++i)
 	{
-		stackArgsSize = params_left * 8;
-		stackArgs = (DWORD_PTR*) _alloca(stackArgsSize);
-
-		for(int i = 0; i < params_left; i ++)
-			stackArgs[i] = DynaParamToElement(aParam[i+4]);
+		DYNAPARM &param = aParam[i];
+		bool is_float = !param.passed_by_address && (param.type == DLL_ARG_FLOAT || param.type == DLL_ARG_DOUBLE);
+		int &reg = is_float ? fp_reg : int_reg;
+		if (reg < 8)
+			regArgs[(is_float ? 8 : 0) + reg++] = DynaParamToElement(param);
+		else
+			stackArgsSize += sizeof(DWORD_PTR);
+	}
+	if (stackArgsSize)
+	{
+		stackArgs = (DWORD_PTR*)_alloca(stackArgsSize);
+		size_t stack_index = 0;
+		int_reg = fp_reg = 0;
+		for (int i = 0; i < aParamCount; ++i)
+		{
+			DYNAPARM &param = aParam[i];
+			bool is_float = !param.passed_by_address && (param.type == DLL_ARG_FLOAT || param.type == DLL_ARG_DOUBLE);
+			int &reg = is_float ? fp_reg : int_reg;
+			if (reg < 8)
+				++reg;
+			else
+				stackArgs[stack_index++] = DynaParamToElement(param);
+		}
 	}
 
 	// Call the function.
