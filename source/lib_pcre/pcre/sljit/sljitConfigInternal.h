@@ -108,6 +108,8 @@
 
 #if defined(_M_X64) || defined(__x86_64__)
 #define SLJIT_CONFIG_X86_64 1
+#elif defined(_M_ARM64)
+#define SLJIT_CONFIG_UNSUPPORTED 1
 #elif defined(_ARM_)
 #define SLJIT_CONFIG_ARM_V5 1
 #else
