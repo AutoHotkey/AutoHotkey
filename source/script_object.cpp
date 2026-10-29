@@ -1828,6 +1828,7 @@ Object *Object::CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi)
 		si->dllcall_type = spsi->dllcall_type;
 		si->is_unsigned = spsi->is_unsigned;
 	}
+	si->is_ptr_class = true;
 	ptr_pro->Release();
 	_freea(buf);
 
@@ -2594,7 +2595,7 @@ ResultType Object::NestedNew(ResultToken &aResultToken, UINT_PTR aPtr, Object *a
 {
 	ASSERT(aBase->IsClassPrototype());
 	auto si = (StructInfo*)(aBase + 1);
-	if (si->nested_object_size < sizeof(Object)) // Definitely no constructible properties defined by aBase.
+	if (!si->last_field) // Definitely no constructible properties defined by aBase.
 		return OK;
 
 	ResultType result = OK;

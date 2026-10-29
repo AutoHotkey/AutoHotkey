@@ -352,8 +352,9 @@ protected:
 		MdType native_type;
 		UCHAR dllcall_type;
 		bool is_unsigned;
+		bool is_ptr_class;
 
-		bool IsPointerType() { return pointed_class && !item_count; }
+		bool IsPointerType() { return is_ptr_class; }
 		size_t SizeWhenNested() { return IsPointerType() ? sizeof(Object*) : object_size + nested_object_size + sizeof(void*); }
 		template<typename T = void>
 		T *DataSuffix(void *a) { return (T*)((char*)a + object_size + nested_object_size); }
