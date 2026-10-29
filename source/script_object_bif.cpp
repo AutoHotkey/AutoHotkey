@@ -292,10 +292,19 @@ BIF_DECL(StructClass_At)
 	auto proto = class_ && class_->IsOfType(Object::sPrototype) ? ((Object*)class_)->ClassGetPrototype() : nullptr;
 	if (!proto || !proto->CanConstruct())
 		_f_throw(_T("Invalid class"));
-	auto ptr = (UINT_PTR)ParamIndexToInt64(1);
+	UINT_PTR ptr;
+	auto buf = dynamic_cast<Object*>(ParamIndexToObject(1));
+	if (!buf)
+		ptr = (UINT_PTR)ParamIndexToInt64(1);
+	else
+		if (!GetObjectPtrProperty(buf, _T("Ptr"), ptr, aResultToken))
+			return;
 	if (ptr < 65536 && (ptr || !is_objcreate) && proto->StructSize())
 		return (void)aResultToken.ParamError(0 + int(is_objcreate), aParam[1]);
-	_f_return(Object::CreateStructPtr(proto, ptr, is_objcreate));
+	auto s = Object::CreateStructPtr(proto, ptr, is_objcreate);
+	if (buf)
+		s->KeepAlive(buf);
+	_f_return(s);
 }
 
 

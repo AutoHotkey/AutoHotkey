@@ -376,7 +376,8 @@ protected:
 		StructInfoLocked		=  0x80,
 		NoCallDelete			= 0x100,
 		CannotOwnProps			= 0x200,
-		LastObjectFlag			= 0x200
+		OuterIsSeparate			= 0x400,
+		LastObjectFlag			= 0x400
 	};
 
 	Object *CloneTo(Object &aTo);
@@ -457,6 +458,14 @@ public:
 	ResultType Initialize(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallInitNew(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallNew(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, ExprTokenType &aThisToken);
+
+	void KeepAlive(Object *aObject)
+	{
+		ASSERT(!mOuter);
+		mOuter = aObject;
+		aObject->AddRef();
+		mFlags |= OuterIsSeparate;
+	}
 
 	class PropEnum;
 

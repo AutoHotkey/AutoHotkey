@@ -517,7 +517,7 @@ ResultType Array::ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax
 
 bool Object::Delete()
 {
-	if (mOuter)
+	if (mOuter && !(mFlags & OuterIsSeparate))
 	{
 		// The current object (inner) and mOuter refer to each other.  The circular dependency
 		// is handled by counting inner's reference to outer only while there are external refs
@@ -700,6 +700,8 @@ Object::~Object()
 			}
 		}
 	}
+	if (mFlags & OuterIsSeparate)
+		mOuter->Release();
 	if (mBase)
 		mBase->Release();
 }
