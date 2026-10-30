@@ -299,8 +299,10 @@ BIF_DECL(StructClass_At)
 	else
 		if (!GetObjectPtrProperty(buf, _T("Ptr"), ptr, aResultToken))
 			return;
-	if (ptr < 65536 && (ptr || !is_objcreate) && proto->StructSize())
-		return (void)aResultToken.ParamError(0 + int(is_objcreate), aParam[1]);
+	// Allow invalid addresses even if typed properties exist, for cases like
+	// IDI_INFORMATION := UInt16.at(32516)  ; PWSTR -> WCHAR* -> UInt16.Ptr
+	//if (ptr < 65536 && (ptr || !is_objcreate) && proto->StructSize())
+	//	return (void)aResultToken.ParamError(0 + int(is_objcreate), aParam[1]);
 	auto s = Object::CreateStructPtr(proto, ptr, is_objcreate);
 	if (buf)
 		s->KeepAlive(buf);

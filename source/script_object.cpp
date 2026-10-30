@@ -1022,7 +1022,14 @@ Object *Object::GetThisForTypedValue(ResultToken &aResultToken, int aFlags, name
 
 ResultType Object::GetTypedValue(ResultToken &aResultToken, int aFlags, TypedProperty &aProp)
 {
-	auto ptr = DataPtr() + aProp.data_offset;
+	auto ptr = DataPtr();
+	// Rule out some invalid addresses which are commonly seen in (for example)
+	// PWSTR values used with LoadIcon/LoadResource/MessageBoxIndirect.  If we
+	// don't do this, a DBGp client can cause crashes by invoking properties.
+	if (ptr < 65536)
+		return aResultToken.Error(_T("Invalid pointer"));
+	ptr += aProp.data_offset;
+
 	if (aProp.class_object) // Struct type.
 	{
 		if (aProp.pointed_proto) // Pointer type.
@@ -1089,7 +1096,11 @@ ResultType Object::GetBoxedPointer(ResultToken &aResultToken, UINT_PTR aPtr, Obj
 
 ResultType Object::SetTypedValue(ResultToken &aResultToken, int aFlags, TypedProperty &aProp, ExprTokenType &aValue)
 {
-	auto ptr = DataPtr() + aProp.data_offset;
+	auto ptr = DataPtr();
+	if (ptr < 65536) // See GetTypedValue for comments.
+		return aResultToken.Error(_T("Invalid pointer"));
+	ptr += aProp.data_offset;
+
 	if (aProp.class_object)
 	{
 		if (aProp.pointed_proto) // Pointer type.
