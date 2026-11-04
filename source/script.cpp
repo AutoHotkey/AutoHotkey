@@ -1076,10 +1076,13 @@ ResultType Script::ExecuteModule(ScriptModule *aModule)
 {
 	if (!aModule->mFirstLine || aModule->mExecuted)
 		return OK;
+	auto current_func = g->CurrentFunc; // Can be non-null when called by SelfInitialize().
+	g->CurrentFunc = nullptr;
 	aModule->mExecuted = true; // Set first to block recursion in cases where imp->mod imports aModule.
 	auto prev = std::exchange(mCurrentModule, aModule);
 	auto result = aModule->mFirstLine->ExecUntil(UNTIL_RETURN);
 	mCurrentModule = prev;
+	g->CurrentFunc = current_func;
 	return result;
 }
 
