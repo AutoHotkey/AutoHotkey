@@ -12140,9 +12140,19 @@ ResultType Line::PerformAssign()
 		//		x := 1.0
 		//		x := "quoted literal string"
 		//		x := normal_var  ; but not VAR_VIRTUAL or VAR_CONSTANT
-		if (mArg[1].postfix->symbol == SYM_VAR && mArg[1].postfix->var->IsUninitialized()
-			&& mArg[1].postfix->var_usage == VARREF_READ)
-			return g_script.VarUnsetError(mArg[1].postfix->var); // !is_expression implies VAR_NORMAL, so InitializeConstant() isn't needed here.
+		//		x := (y?)  ; var_usage == VARREF_READ_MAYBE
+		if (mArg[1].postfix->symbol == SYM_VAR && mArg[1].postfix->var->IsUninitialized())
+		{
+			auto var = mArg[1].postfix->var;
+			if (var->CanSelfInitialize()) // Imported variable.
+			{
+				auto result = var->SelfInitialize();
+				if (result != OK)
+					return result;
+			}
+			if (var->IsUninitialized() && mArg[1].postfix->var_usage == VARREF_READ)
+				return g_script.VarUnsetError(var);
+		}
 		Var *output_var = VAR(mArg[0]);
 		return output_var->Assign(*mArg[1].postfix);
 	}
