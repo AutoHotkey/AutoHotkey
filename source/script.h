@@ -1488,6 +1488,7 @@ public:
 
 
 class ScriptModule;
+struct ScriptImport;
 class UserFunc : public Func
 {
 public:
@@ -1498,6 +1499,7 @@ public:
 	Label *mFirstLabel = nullptr, *mLastLabel = nullptr; // Linked list of private labels.
 	UserFunc *mOuterFunc = nullptr; // Func which contains this func (usually nullptr).
 	ScriptModule *mModule = nullptr; // Module in which this function was defined.
+	ScriptImport *mImports = nullptr; // Linked list of local import directives.
 	VarList mVars {}; // Sorted list of non-static local variables.
 	VarList mStaticVars {}; // Sorted list of static variables.
 	Var **mDownVar = nullptr, **mUpVar = nullptr;

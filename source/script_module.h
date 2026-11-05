@@ -5,14 +5,13 @@ struct ScriptImport
 {
 	LPTSTR names = nullptr, mod_path = nullptr, mod_name = nullptr, var_name = nullptr;
 	ScriptModule *mod = nullptr;
-	ScriptImport *next = nullptr;
+	ScriptImport *next = nullptr; // Linked list of all imports in definition order.
+	ScriptImport *prev = nullptr; // Linked list of all imports in this or an outer scope, in reverse definition order.
 	UserFunc *scope = nullptr;
 	LineNumberType line_number = 0;
 	FileIndexType file_index = 0;
 	bool wildcard = false;
 	bool is_export = false;
-
-	bool IsInScope();
 
 	ScriptImport() {}
 	ScriptImport(ScriptModule *aMod) : mod(aMod), names(_T("*")), wildcard(true) {}
@@ -30,7 +29,7 @@ public:
 	LPCTSTR mName = nullptr;
 	Line *mFirstLine = nullptr, *mLastLine = nullptr;
 	Label *mFirstLabel = nullptr, *mLastLabel = nullptr;
-	ScriptImport *mImports = nullptr;
+	ScriptImport *mFirstImport = nullptr, *mLastParsedImport = nullptr, *mLastGlobalImport = nullptr;
 	ScriptModule *mPrev = nullptr;
 	VarList mVars;
 	UnresolvedBaseClass *mUnresolvedBaseClass = nullptr;
