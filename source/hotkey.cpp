@@ -1278,15 +1278,15 @@ FResult Hotkey::Dynamic(LPCTSTR aHotkeyName, LPCTSTR aOptions, IObject *aCallbac
 	}
 	
 	if (on_off == HOTKEY_ID_TOGGLE)
-		on_off = (variant ? variant->mEnabled : hk->mParentEnabled) ? HOTKEY_ID_OFF : HOTKEY_ID_ON;
+		on_off = (hk->mHookAction ? hk->mParentEnabled : variant->mEnabled) ? HOTKEY_ID_OFF : HOTKEY_ID_ON;
 	if (on_off == HOTKEY_ID_ON)
 	{
-		if (variant ? hk->Enable(*variant) : hk->EnableParent())
+		if (hk->mHookAction ? hk->EnableParent() : hk->Enable(*variant))
 			update_all_hotkeys = true; // Do it this way so that any previous "true" value isn't lost.
 	}
 	else if (on_off == HOTKEY_ID_OFF)
 	{
-		if (variant ? hk->Disable(*variant) : hk->DisableParent())
+		if (hk->mHookAction ? hk->DisableParent() : hk->Disable(*variant))
 			update_all_hotkeys = true; // Do it this way so that any previous "true" value isn't lost.
 		if (variant_was_just_created) // This variant (and possibly its parent hotkey) was just created above.
 			update_all_hotkeys = false; // Override the "true" that was set (either right above *or* anywhere earlier) because this new hotkey/variant won't affect other hotkeys.
