@@ -333,11 +333,14 @@ FResult Object::SetDataPtr(UINT_PTR aPtr)
 }
 
 
-bif_impl FResult ObjGetDataPtr(IObject *aObj, UINT_PTR &aPtr)
+bif_impl FResult ObjGetDataPtr(IObject *aObj, ResultToken &aPtr)
 {
-	if (!aObj->IsOfType(Object::sPrototype))
-		return FR_E_ARG(0);
-	return ((Object*)aObj)->GetDataPtr(aPtr);
+	UINT_PTR ptr;
+	if (aObj->IsOfType(Object::sPrototype) && ((Object*)aObj)->GetDataPtr(ptr) == OK)
+		aPtr.Return(ptr);
+	else
+		aPtr.Unset();
+	return OK;
 }
 
 FResult Object::GetDataPtr(UINT_PTR &aPtr)

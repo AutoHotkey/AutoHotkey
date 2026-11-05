@@ -203,7 +203,7 @@ md_func(MouseMove,
 
 md_func(MsgBox, (In_Opt, String, Text), (In_Opt, String, Title), (In_Opt, String, Options), (Ret, String, RetVal))
 
-md_func(ObjGetDataPtr, (In, Object, Obj), (Ret, UIntPtr, Ptr))
+md_func(ObjGetDataPtr, (In, Object, Obj), (Ret, Variant, Ptr))
 md_func(ObjGetDataSize, (In, Object, Obj), (Ret, UIntPtr, Size))
 md_func(ObjSetDataPtr, (In, Object, Obj), (In, UIntPtr, Ptr))
 
