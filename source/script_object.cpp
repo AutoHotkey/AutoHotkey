@@ -1585,9 +1585,6 @@ bool Object::CanSetBase()
 
 bool Object::CanSetBase(Object *aBase)
 {
-	if ((mFlags & (ClassPrototype | StructInfoInitialized)) == ClassPrototype
-		&& aBase && (aBase->mFlags & ClassPrototype))
-		return true; // Uninitialized Prototype can be rebased onto any Prototype.
 	if (aBase && aBase->GetStructInfo()->size)
 		return false;
 	auto new_native_base = (!aBase || aBase->IsNativeClassPrototype())
