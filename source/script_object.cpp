@@ -2331,9 +2331,13 @@ UINT_PTR Object::StructSize()
 
 bool Object::GetStructCallbackArgInfo(MdType &aType, Object *&aStructProto)
 {
-	if (!(mFlags & StructInfoInitialized))
+	ASSERT(mFlags & ClassPrototype);
+	// StructInfo may not be initialized yet if this is a subclass.
+	// StructInfo may not be locked yet if the class hasn't been instantiated.
+	// This takes care of finalizing the structure.
+	auto &si = *GetStructInfo(true);
+	if (!si.size) // Invalid or empty struct (which cannot be a parameter).
 		return false;
-	auto &si = *(StructInfo*)(this + 1);
 	if (si.item_count != 0)
 		aType = MdType::Array, aStructProto = this;
 	else if (si.native_type == MdType::Void)
