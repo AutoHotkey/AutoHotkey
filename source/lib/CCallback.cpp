@@ -445,13 +445,13 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, ExprTokenT
 		for (int i = 0; i < actual_param_count; ++i)
 		{
 			if (at[i].proto)
-				param_slot_count += (((int)at[i].proto->LockStructSize() + 3) >> 2) - 1;
+				param_slot_count += (((int)at[i].proto->StructSize() + 3) >> 2) - 1;
 			else if (MdType_Is64bit(at[i].type))
 				param_slot_count += 1;
 		}
 		if (at[actual_param_count].proto) // Return type is a struct.
 		{
-			int ret_size = (int)at[actual_param_count].proto->LockStructSize();
+			int ret_size = (int)at[actual_param_count].proto->StructSize();
 			if (!(ret_size < 3 || ret_size == 4 || ret_size == 8)) // Not returned by register.
 				++param_slot_count;
 		}

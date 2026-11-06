@@ -210,6 +210,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_ENCODING _T("Invalid Encoding.")
 #define ERR_INVALID_USAGE _T("Invalid usage.")
 #define ERR_INVALID_BASE _T("Invalid base.")
+#define ERR_INVALID_STRUCT _T("Invalid struct.")
 #define ERR_INTERNAL_CALL _T("An internal function call failed.") // Win32 function failed.  Eventually an error message should be generated based on GetLastError().
 #define ERR_FAILED _T("Failed") // A function failed to achieve its primary purpose for unspecified reason.  Equivalent to v1 throwing 1 (ErrorLevel).
 #define ERR_LOAD_ICON _T("Can't load icon.")
@@ -2204,7 +2205,7 @@ private:
 
 	bool mClassPropertyStatic, mClassPropertyEmpty;
 	bool mClassStructUnion = false;
-	char mClassStructPack[MAX_NESTED_CLASSES + 1] {0};
+	UCHAR mClassStructPack[MAX_NESTED_CLASSES + 1] {0};
 
 	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, mTrayIconTip ? mTrayIconTip \
 		: mFileName, _countof(mNIC.szTip));

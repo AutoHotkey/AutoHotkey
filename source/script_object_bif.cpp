@@ -304,6 +304,8 @@ BIF_DECL(StructClass_At)
 	//if (ptr < 65536 && (ptr || !is_objcreate) && proto->StructSize())
 	//	return (void)aResultToken.ParamError(0 + int(is_objcreate), aParam[1]);
 	auto s = Object::CreateStructPtr(proto, ptr, is_objcreate);
+	if (!s)
+		_f_throw(ERR_INVALID_STRUCT, ErrorPrototype::Type);
 	if (buf)
 		s->KeepAlive(buf);
 	_f_return(s);
@@ -369,6 +371,6 @@ bif_impl FResult ObjGetDataSize(IObject *aObj, UINT_PTR &aRetVal)
 {
 	if (!aObj->IsOfType(Object::sPrototype))
 		return FR_E_ARG(0);
-	aRetVal = ((Object*)aObj)->StructSize();
+	aRetVal = ((Object*)aObj)->LockStructSize();
 	return OK;
 }

@@ -370,7 +370,7 @@ void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam, bool &aIsPtr)
 
 bool Object::GetStructArgInfo(DYNAPARM &aType, Object *&aPointedClass)
 {
-	auto &si = *GetStructInfo(true);
+	auto &si = *CloseStructInfo();
 	if (!si.size)
 		return false;
 	if (si.dllcall_type)

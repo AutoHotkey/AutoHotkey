@@ -171,7 +171,9 @@ Object *Object::CreateStructPtr(Object *aBase, UINT_PTR aPtr, bool aCallDelete)
 		flags |= CannotOwnProps;
 	if (!aCallDelete)
 		flags |= NoCallDelete;
-	auto &si = *aBase->GetStructInfo(true);
+	auto &si = *aBase->CloseStructInfo();
+	if (si.kind == StructKind::Invalid)
+		return nullptr;
 	auto obj = Create(aBase, si, flags, si.nested_object_size + sizeof(void*));
 	*si.DataSuffix<UINT_PTR>(obj) = aPtr;
 	return obj;
@@ -179,7 +181,9 @@ Object *Object::CreateStructPtr(Object *aBase, UINT_PTR aPtr, bool aCallDelete)
 
 Object *Object::CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr)
 {
-	auto &si = *aBase->GetStructInfo(true);
+	auto &si = *aBase->CloseStructInfo();
+	if (si.kind == StructKind::Invalid)
+		return nullptr;
 	auto obj = Create(aBase, si, DataIsSuffix | CannotOwnProps | NoCallDelete);
 	memcpy(si.DataSuffix(obj), (void*)aPtr, si.size);
 	return obj;
@@ -187,7 +191,9 @@ Object *Object::CreateStructCopyNoDelete(Object *aBase, UINT_PTR aPtr)
 
 ResultType Object::CreateStruct(ResultToken &aResultToken, Object *aBase, ExprTokenType *aParam[], int aParamCount)
 {
-	auto &si = *aBase->GetStructInfo(true);
+	auto &si = *aBase->CloseStructInfo();
+	if (si.kind == StructKind::Invalid)
+		return aResultToken.Error(ERR_INVALID_STRUCT, ErrorPrototype::Type);
 	auto obj = Create(aBase, si, DataIsSuffix | CannotOwnProps);
 	return obj->Initialize(aResultToken, aParam, aParamCount);
 }
@@ -200,8 +206,8 @@ void Object::NewInstance(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	// For backward-compatibility, this must permit any Object (not just a Class)
 	// with a Prototype own property which is any Object (not just a Prototype).
 	Object *proto = cls && cls->IsOfType(Object::sPrototype) ? ((Object*)cls)->ClassGetPrototypeBackwardCompatible() : nullptr;
-	auto si = proto ? proto->GetStructInfo(true) : nullptr;
-	if (!si || si->ctor != nsi->ctor)
+	auto si = proto ? proto->CloseStructInfo() : nullptr;
+	if (!si || si->ctor != nsi->ctor || si->kind == StructKind::Invalid)
 		_f_throw_value(ERR_INVALID_BASE);
 
 	auto obj = Create(proto, *si);
@@ -1227,6 +1233,7 @@ void Object::StructGet(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 void Object::CArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto si = mBase->GetStructInfo();
+	ASSERT(si->kind == StructKind::Array);
 	
 	auto index = ParamIndexToInt64(aParamCount - 1);
 	index += index < 0 ? si->item_count : -1;
@@ -1241,7 +1248,8 @@ void Object::CArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	if (item_class)
 		if (auto proto = item_class->ClassGetPrototype())
 		{
-			item_si = proto->GetStructInfo(true);
+			ASSERT(proto->mFlags & StructInfoClosed);
+			item_si = proto->GetStructInfo();
 			if (item_si->pointed_class && !item_si->item_count)
 				pointed_proto = item_si->pointed_class->ClassGetPrototype();
 		}
@@ -1251,7 +1259,7 @@ void Object::CArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	ASSERT(si->size == item_size * si->item_count);
 	// TODO: cache some of the above information in si->first_field ?
 
-	TypedProperty tp{ si->native_type, item_class, pointed_proto, (size_t)index * item_size, si->object_size + (size_t)index * nested_size };
+	TypedProperty tp{ si->native_type,0,0, item_class, pointed_proto, (size_t)index * item_size, si->object_size + (size_t)index * nested_size };
 	if (IS_INVOKE_GET)
 		GetTypedValue(aResultToken, 0, tp);
 	else
@@ -1567,16 +1575,15 @@ Object *Object::ClassGetPrototypeBackwardCompatible()
 
 bool Object::CanSetBase()
 {
-	switch (mFlags & (StructInfoInitialized | StructInfoLocked | DataIsSuffix | DataIsSuffixPtr))
+	switch (mFlags & (StructInfoClosed | DataIsSuffix | DataIsSuffixPtr))
 	{
 	case 0:
 		return true;
-	case StructInfoInitialized | StructInfoLocked:
+	case StructInfoClosed:
 		// Prototypes with no typed properties allow Base assignment for backward-compatibility.
 		// Since it's locked, size == 0 is only possible if an instance was created or this is a
 		// built-in Prototype which has been locked for whatever reason.
 		return ((StructInfo*)(this + 1))->size == 0;
-	case StructInfoInitialized: // StructInfo was already initialized from the current Base (and since it's not locked, size != 0 is implied).
 	default: // this is an instance with typed properties.
 		return false;
 	}
@@ -1755,7 +1762,7 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 			si.object_size = aFactory.object_size;
 			ctor->mData = aPrototype;
 			ctor->mBIF = NewInstance;
-			aPrototype->mFlags |= StructInfoInitialized | StructInfoLocked;
+			aPrototype->mFlags |= StructInfoClosed;
 		}
 		ctor->mMinParams = aFactory.min_params; // Usually 1, the class object.
 		ctor->mParamCount = aFactory.max_params;
@@ -1822,7 +1829,7 @@ Object *Object::CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi)
 	auto ptr_cls = CreateClass(ptr_pro, bpc);
 	ptr_cls->mOuter = sc;
 	spsi->pointer_class = ptr_cls;
-	ptr_pro->mFlags |= StructInfoInitialized | StructInfoLocked;
+	ptr_pro->mFlags |= StructInfoClosed;
 	auto si = (StructInfo*)(ptr_pro + 1);
 	si->align = si->size = sizeof(void*);
 	si->nested_object_size = sizeof(Object*);
@@ -1836,7 +1843,7 @@ Object *Object::CreatePtrClass(Object *sc, Object *sp, StructInfo *spsi)
 		si->dllcall_type = spsi->dllcall_type;
 		si->is_unsigned = spsi->is_unsigned;
 	}
-	si->is_ptr_class = true;
+	si->kind = StructKind::Ptr;
 	ptr_pro->Release();
 	_freea(buf);
 
@@ -1860,7 +1867,7 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	auto sc_ = TokenToObject(aOfClass);
 	auto sc = sc_->IsOfType(Object::sPrototype) ? (Object*)sc_ : nullptr;
 	auto sp = sc ? sc->ClassGetPrototype() : nullptr;
-	auto spsi = sp ? sp->GetStructInfo(true) : nullptr;
+	auto spsi = sp ? sp->CloseStructInfo() : nullptr;
 	Map *map = spsi ? spsi->array_class_map : nullptr;
 	ExprTokenType key = (__int64)aCount;
 	if (!map)
@@ -1885,7 +1892,7 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	auto ap = CreatePrototype(class_name, Object::sCArrayPrototype);
 	auto ac = CreateClass(ap, Object::sCArrayClass);
 	auto si = (StructInfo*)(ap + 1);
-	ap->mFlags |= StructInfoInitialized | StructInfoLocked;
+	ap->mFlags |= StructInfoClosed;
 	ap->Release();
 
 	// Cache it.
@@ -1899,6 +1906,7 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	ASSERT(ac->mRefCount == 1); // Only the reference to be returned below is counted.
 	sc->AddRef();
 
+	si->kind = StructKind::Array;
 	si->ctor = NewObject<Object>;
 	si->object_size = sizeof(Object);
 	if (!spsi->item_count)
@@ -2188,7 +2196,7 @@ Property *Object::DefineProperty(name_t aName, bool aEnumerable)
 
 TypedProperty *Object::DefineTypedProperty(name_t aName, bool aEnumerable)
 {
-	ASSERT((mFlags & (ClassPrototype | StructInfoInitialized)) == (ClassPrototype | StructInfoInitialized));
+	ASSERT((mFlags & (ClassPrototype | StructInfoClosed)) == ClassPrototype);
 	index_t insert_pos;
 	auto field = FindField(aName, insert_pos);
 	if (field)
@@ -2202,7 +2210,7 @@ TypedProperty *Object::DefineTypedProperty(name_t aName, bool aEnumerable)
 	field->enumerable = aEnumerable;
 	// Add it to the Prototype's linked list of struct fields.
 	auto &si = *(StructInfo*)(this + 1);
-	if (si.first_field) // Check first_field and not last_field, which may belong to a superclass.
+	if (si.first_field)
 		si.last_field->next_field = tprop;
 	else
 		si.first_field = tprop;
@@ -2212,59 +2220,37 @@ TypedProperty *Object::DefineTypedProperty(name_t aName, bool aEnumerable)
 	return tprop;
 }
 
-FResult Object::DefineTypedProperty(name_t aName, Object *aClass, size_t aPack, size_t aOffset, bool aEnumerable)
+FResult Object::DefineTypedProperty(name_t aName, Object *aClass, UCHAR aPack, ExprTokenType &aOffset, bool aEnumerable)
 {
-	size_t psize = 0, palign = 0;
-	MdType native_type = MdType::Void;
-	StructInfo *psi = nullptr;
-	if (aClass)
-	{
-		auto proto = aClass->ClassGetPrototype();
-		if (proto && proto->IsDerivedFrom(Object::sStructPrototype))
-		{
-			psi = proto->GetStructInfo(true);
-			if (psi->native_type != MdType::Void && !psi->item_count)
-			{
-				aClass = nullptr;
-				native_type = psi->native_type;
-			}
-			psize = psi->size;
-			palign = psi->align;
-		}
-	}
-	if (!psize)
+	auto proto = aClass->ClassGetPrototype();
+	if (  !(proto && proto->IsDerivedFrom(Object::sStructPrototype))  )
 		return FR_E_ARGS;
-	auto si = (mFlags & (StructInfoLocked | ClassPrototype)) != ClassPrototype ? nullptr
-		: GetStructInfo(false);
-	if (!si)
+	size_t offset = -1;
+	if (aOffset.symbol != SYM_INVALID)
+	{
+		if (aOffset.symbol == SYM_STRING)
+		{
+			auto f = FindField(aOffset.marker);
+			if (f && f->symbol == SYM_TYPED_FIELD)
+				offset = (size_t)(void*)f->tprop;
+		}
+		else if (aOffset.symbol == SYM_INTEGER && aOffset.value_int64 >= 0)
+		{
+			offset = (size_t)aOffset.value_int64;
+		}
+		if (offset == -1)
+			return FR_E_ARGS;
+	}
+	if ((mFlags & (StructInfoClosed | ClassPrototype)) != ClassPrototype)
 		return FR_E_FAILED;
 	auto tprop = DefineTypedProperty(aName, aEnumerable);
 	if (!tprop)
 		return FR_E_OUTOFMEM;
-	tprop->type = native_type;
-	tprop->pointed_proto = nullptr;
-	if (tprop->class_object = aClass)
-	{
-		aClass->AddRef();
-		tprop->object_offset = si->object_size + si->nested_object_size;
-		si->nested_object_size += psi->SizeWhenNested();
-		if (psi->IsPointerType())
-		{
-			tprop->pointed_proto = psi->pointed_class->ClassGetPrototype();
-			tprop->pointed_proto->AddRef();
-		}
-	}
-	if (aPack && palign > aPack)
-		palign = aPack;
-	if (palign > si->align)
-		si->align = palign;
-	ASSERT(palign && ((palign & (palign - 1)) == 0)); // Must be a power of 2.
-	if (aOffset == -1)
-		aOffset = (si->size + palign - 1) & ~(palign - 1);
-	tprop->data_offset = aOffset;
-	aOffset += psize;
-	if (si->size < aOffset)
-		si->size = aOffset; // size may be unaligned until the struct definition is closed (if palign < si-align).
+	aClass->AddRef();
+	tprop->class_object = aClass;
+	tprop->data_offset = offset;
+	tprop->offset_by_tp = aOffset.symbol == SYM_STRING;
+	tprop->pack = aPack;
 	return OK;
 }
 
@@ -2273,58 +2259,99 @@ Object::StructInfo *Object::GetStructInfo()
 	// Callers use this simple version when it's known that the StructInfo
 	// was already initialized and locked; e.g. because the caller is an
 	// instance of the struct.
-	if (!(mFlags & StructInfoInitialized))
+	if (!(mFlags & StructInfoClosed))
 		return mBase->GetStructInfo();
 	return (StructInfo*)(this + 1);
 }
 
-Object::StructInfo *Object::GetStructInfo(bool aLock)
+Object::StructInfo *Object::CloseStructInfo()
 {
-	if (!(mFlags & StructInfoInitialized))
-	{
-		// Lock base definition, and either return it for caller or initialize ours.
-		auto &bsi = *mBase->GetStructInfo(true);
+	if (mFlags & StructInfoClosed)
+		return (StructInfo*)(this + 1);
 
-		if (!(mFlags & ClassPrototype)) // Only Prototypes can have StructInfo.
-			return &bsi;
+	// Lock base definition, and either return it for caller or initialize ours.
+	auto &bsi = *mBase->CloseStructInfo();
 
-		// Even if this ends up being locked below as an exact copy of base,
-		// initialize it to reduce the need for recursive calls at runtime.
-		auto &si = *(StructInfo*)(this + 1);
-		si.ctor = (mFlags & NativeClassPrototype) ? nullptr : bsi.ctor;
-		si.object_size = bsi.object_size;
-		si.size = bsi.size;
-		si.align = bsi.align;
-		si.nested_object_size = bsi.nested_object_size;
-		si.item_count = bsi.item_count;
-		si.last_field = bsi.last_field; // With prev_field, this forms a reversed list of all fields, including inherited fields.
-		si.pointed_class = bsi.pointed_class;
-		// The following were already zero-initialized:
-		//si.first_field = nullptr; // This lists fields defined *directly* within this Prototype.
-		//si.pointer_class = nullptr; // Each subclass should get its own (dynamically).
-		//si.array_class_map = nullptr; // Each subclass must create its own map.
-		//si.native_type = MdType::Void; // Revert to a normal struct if extending a numeric type.
-		//si.dllcall_type = DLL_ARG_INVALID; // As above.
-		mFlags |= StructInfoInitialized;
-		if (aLock)
-			mFlags |= StructInfoLocked;
-	}
-	else if (aLock && !(mFlags & StructInfoLocked))
+	if (!(mFlags & ClassPrototype)) // Only Prototypes can have StructInfo.
+		return &bsi;
+	mFlags |= StructInfoClosed;
+
+	// Even if this ends up being an exact copy of base, initialize it to reduce
+	// the need for recursion of calls to GetStructInfo() and CloseStructInfo().
+	auto &si = *(StructInfo*)(this + 1);
+	si.ctor = (mFlags & NativeClassPrototype) ? nullptr : bsi.ctor;
+	si.object_size = bsi.object_size;
+	si.align = bsi.align;
+	si.nested_object_size = bsi.nested_object_size;
+	si.item_count = bsi.item_count;
+	// si.first_field and next_field form a list of own field definitions.
+	// si.last_field and prev_field form a reversed list of all field definitions (own and inherited).
+	if (si.first_field)
+		si.first_field->prev_field = bsi.last_field;
+	else
+		si.last_field = bsi.last_field;
+	si.pointed_class = bsi.pointed_class;
+	// Inherit struct kind, but revert Ptr to Struct to support __new/__delete/__value.
+	si.kind = bsi.kind == StructKind::Ptr ? StructKind::Struct : bsi.kind;
+	// The following were already zero-initialized:
+	//si.pointer_class = nullptr; // Each subclass should get its own (dynamically).
+	//si.array_class_map = nullptr; // Each subclass must create its own map.
+	//si.native_type = MdType::Void; // Revert to a normal struct if extending a numeric type.
+	//si.dllcall_type = DLL_ARG_INVALID; // As above.
+	
+	size_t offset = bsi.size, struct_size = offset;
+	for (auto tprop = si.first_field; tprop; tprop = tprop->next_field)
 	{
-		// Lock to prevent more fields from being added, such as when another struct's
-		// layout depends on the size of this one (could be a derived class or one which
-		// uses this class as a property or element type).
-		mFlags |= StructInfoLocked;
-		// Apply the struct's final alignment requirement to its size.
-		auto &si = *(StructInfo*)(this + 1);
-		si.size = (si.size + si.align - 1) & ~(si.align - 1);
+		auto proto = tprop->class_object->ClassGetPrototype();
+		auto &psi = *proto->CloseStructInfo();
+		if (!psi.IsValidPropertyType())
+		{
+			si.kind = StructKind::Invalid;
+			struct_size = 0;
+			break;
+		}
+		if (psi.kind == StructKind::Number)
+		{
+			tprop->class_object->Release();
+			tprop->class_object = nullptr;
+			tprop->type = psi.native_type;
+		}
+		tprop->pointed_proto = nullptr;
+		if (tprop->class_object)
+		{
+			tprop->object_offset = si.object_size + si.nested_object_size;
+			si.nested_object_size += psi.SizeWhenNested();
+			if (psi.IsPointerType())
+			{
+				tprop->pointed_proto = psi.pointed_class->ClassGetPrototype();
+				tprop->pointed_proto->AddRef();
+			}
+		}
+		auto align = psi.align;
+		if (tprop->pack && align > tprop->pack)
+			align = tprop->pack;
+		if (align > si.align)
+			si.align = align;
+		ASSERT(align && ((align & (align - 1)) == 0)); // Must be a power of 2.
+		if (tprop->offset_by_tp)
+		{
+			tprop->data_offset = tprop->data_offset_tp->data_offset;
+			tprop->offset_by_tp = false;
+		}
+		else if (tprop->data_offset == -1)
+			tprop->data_offset = (offset + align - 1) & ~(align - 1);
+		offset = tprop->data_offset + psi.size;
+		if (struct_size < offset) // Check each iteration in case of a subsequent explicit offset.
+			struct_size = offset;
 	}
+	// Store the struct's final size, adjusted for alignment.
+	si.size = (struct_size + si.align - 1) & ~(si.align - 1);
 	return (StructInfo*)(this + 1);
 }
 
 UINT_PTR Object::StructSize()
 {
-	if (!(mFlags & StructInfoInitialized))
+	if (!(mFlags & StructInfoClosed))
 		return mBase->StructSize();
 	return ((StructInfo*)(this + 1))->size;
 }
@@ -2335,7 +2362,7 @@ bool Object::GetStructCallbackArgInfo(MdType &aType, Object *&aStructProto)
 	// StructInfo may not be initialized yet if this is a subclass.
 	// StructInfo may not be locked yet if the class hasn't been instantiated.
 	// This takes care of finalizing the structure.
-	auto &si = *GetStructInfo(true);
+	auto &si = *CloseStructInfo();
 	if (!si.size) // Invalid or empty struct (which cannot be a parameter).
 		return false;
 	if (si.item_count != 0)
@@ -2393,6 +2420,15 @@ ResultType FillPropertyFlags(IObject *aObj, bool aSetter, Property &aProp, Resul
 	return OK;
 }
 
+bool Object::IsValidStructPack(__int64 n)
+{
+	switch (n)
+	{
+	case 0: case 1: case 2: case 4: case 8: return true;
+	default: return false;
+	}
+}
+
 void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!CanOwnProps())
@@ -2425,13 +2461,14 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 				v[i].symbol = SYM_INVALID;
 		if (mask == ValueValidMask)
 			kind = PropType::Value;
-		else if ((mask & ~TypedOptionalMask) == (1 << TypeIndex))
+		else if ((mask & ~TypedOptionalMask) == (1 << TypeIndex)
+			&& (tpack.symbol == SYM_INVALID || tpack.symbol == SYM_INTEGER && IsValidStructPack(tpack.value_int64)))
 			kind = PropType::Typed;
 		else if (mask && (mask & ~DynamicValidMask) == 0)
 			kind = PropType::Dynamic;
 	}
 	if (kind == PropType::None) // Not a valid combination of descriptor properties.
-		return (void)aResultToken.ParamError(1 + aID, aParam[1]);
+		_o_throw_value(aID ? ERR_PARAM3_INVALID : ERR_PARAM2_INVALID);
 
 	ExprTokenType et;
 	bool enumerable = !desc->GetOwnProp(et, _T("Enumerable")) || TokenToBOOL(et);
@@ -2439,24 +2476,8 @@ void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	if (kind == PropType::Typed)
 	{
 		Object *pclass = dynamic_cast<Object*>(TokenToObject(tclass));
-		size_t pack = tpack.symbol != SYM_INVALID ? (size_t)TokenToInt64(tpack) : 0;
-		size_t offset = -1;
-		if (toffset.symbol != SYM_INVALID)
-		{
-			if (toffset.symbol == SYM_STRING)
-			{
-				auto f = FindField(toffset.marker);
-				if (f && f->symbol == SYM_TYPED_FIELD)
-					offset = f->tprop->data_offset;
-			}
-			else if (toffset.symbol == SYM_INTEGER && toffset.value_int64 >= 0)
-			{
-				offset = (size_t)toffset.value_int64;
-			}
-			if (offset == -1)
-				_o_throw_value(aID ? ERR_PARAM3_INVALID : ERR_PARAM2_INVALID);
-		}
-		switch (DefineTypedProperty(name, pclass, pack, offset, enumerable))
+		UCHAR pack = tpack.symbol == SYM_INTEGER ? (UCHAR)tpack.value_int64 : 0;
+		switch (DefineTypedProperty(name, pclass, pack, toffset, enumerable))
 		{
 		case OK:
 			AddRef();
@@ -2523,7 +2544,22 @@ void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, Expr
 			desc->SetOwnProp(_T("Type"), field->tprop->class_object);
 		else
 			desc->SetOwnProp(_T("Type"), sPrimitiveClass[(int)field->tprop->type-1]);
-		desc->SetOwnProp(_T("Offset"), field->tprop->data_offset);
+		if (field->tprop->offset_by_tp)
+		{
+			for (auto f = field; f > mFields.Value(); )
+			{
+				--f;
+				if (f->symbol == SYM_TYPED_FIELD && f->tprop == field->tprop->data_offset_tp)
+				{
+					desc->SetOwnProp(_T("Offset"), f->name);
+					break;
+				}
+			}
+		}
+		else if (field->tprop->data_offset != -1)
+			desc->SetOwnProp(_T("Offset"), field->tprop->data_offset);
+		if (field->tprop->pack)
+			desc->SetOwnProp(_T("Pack"), field->tprop->pack);
 	}
 	else
 	{
@@ -2590,7 +2626,7 @@ void PropRef::__Value(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 
 ResultType Object::Initialize(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (auto si = mBase->GetStructInfo(true))
+	if (auto si = mBase->CloseStructInfo())
 	{
 		if (si->nested_object_size >= sizeof(Object)) // May have constructible properties.
 		{
@@ -4394,7 +4430,7 @@ void Object::CreateRootPrototypes()
 	Func::sPrototype = CreatePrototype(_T("Func"), Object::sPrototype);
 
 	// This ensures GetStructInfo() has something to return for every Prototype or Object:
-	sAnyPrototype->mFlags |= StructInfoInitialized | StructInfoLocked | NativeClassPrototype;
+	sAnyPrototype->mFlags |= StructInfoClosed | NativeClassPrototype;
 
 	// These methods correspond to global functions, as BuiltInMethod
 	// only handles Objects, and these must handle primitive values.
@@ -4422,12 +4458,12 @@ void Object::CreateRootPrototypes()
 	Object::sObjectCall = Object::sClass->GetOwnPropMethod(_T("Call"));
 	{
 		// Each Class is suffixed with a pointer to the Prototype. This instructs ~Object() to release it.
-		sClassPrototype->mFlags |= StructInfoInitialized | StructInfoLocked;
 		auto &si = *(StructInfo*)(sClassPrototype + 1);
 		si.nested_object_size = sizeof(Object*); // Pointer to Prototype.
 		si.pointed_class = sClass; // Must be non-zero for ~Object().
 		si.object_size = sizeof(Object); // For Class() without parameters.
 		si.ctor = NewObject<Object>;
+		sClassPrototype->mFlags |= StructInfoClosed;
 	}
 
 	ObjectCtor no_ctor = nullptr;
@@ -4512,7 +4548,6 @@ void Object::CreateRootPrototypes()
 	sPtrClass = CreateClass(sPtrPrototype, sStructClass);
 	{
 		sPtrPrototype->mFlags &= ~NativeClassPrototype; // Allow Struct.Call to construct Ptr.
-		sPtrPrototype->mFlags |= StructInfoInitialized | StructInfoLocked;
 		auto &tp = *sPtrPrototype->DefineTypedProperty(_T("Value"));
 		tp.type = MdType::IntPtr;
 		tp.class_object = nullptr;
@@ -4524,18 +4559,21 @@ void Object::CreateRootPrototypes()
 		psi.nested_object_size = sizeof(Object*);
 		psi.object_size = sizeof(Object);
 		psi.ctor = NewObject<Object>;
+		psi.kind = StructKind::Ptr;
 		auto &ssi = *(StructInfo*)(sStructPrototype + 1);
 		ssi.align = 1;
 		ssi.pointer_class = sPtrClass;
 		ssi.object_size = sizeof(Object);
 		ssi.ctor = NewObject<Object>;
+		ssi.kind = StructKind::Struct;
 		++sPtrClass->mRefCount; // For correctness, though it should never be released.
-		sStructPrototype->mFlags |= StructInfoInitialized | StructInfoLocked;
+		sStructPrototype->mFlags |= StructInfoClosed;
+		sPtrPrototype->mFlags |= StructInfoClosed;
 	}
 
 	sCArrayPrototype = CreatePrototype(_T("Struct.Array"), sStructPrototype, sCArrayMembers, _countof(sCArrayMembers));
 	sCArrayPrototype->mFlags &= ~NativeClassPrototype;
-	sCArrayPrototype->mFlags |= StructInfoLocked;
+	sCArrayPrototype->mFlags |= StructInfoClosed;
 	sCArrayClass = CreateClass(sCArrayPrototype, sStructClass);
 	sStructClass->DefineClass(_T("Array"), sCArrayClass, true);
 
@@ -4546,18 +4584,19 @@ void Object::CreateRootPrototypes()
 	{
 		auto p = CreatePrototype(type_names[i], sStructPrototype);
 		auto si = (StructInfo*)(p + 1);
-		p->mFlags |= StructInfoInitialized | StructInfoLocked;
 		si->ctor = NewObject<Object>;
 		si->object_size = sizeof(Object);
 		si->native_type = type_codes[i];
 		si->dllcall_type = type_dllcall[i];
 		si->is_unsigned = type_names[i][0] == 'U';
 		si->align = si->size = TypeSize(type_codes[i]);
+		si->kind = StructKind::Number;
 		auto tp = p->DefineTypedProperty(_T("__Value"));
 		tp->type = type_codes[i];
 		tp->class_object = nullptr;
 		tp->pointed_proto = nullptr;
 		tp->data_offset = 0;
+		p->mFlags |= StructInfoClosed;
 		auto c = CreateClass(type_names[i], sStructClass, p, nullptr);
 		//CreatePtrClass(c, p, si);
 		sPrimitiveClass[(int)type_codes[i] - 1] = c;

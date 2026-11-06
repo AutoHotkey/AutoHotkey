@@ -4053,15 +4053,10 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 	if (IS_DIRECTIVE_MATCH(_T("#StructPack")))
 	{
-		int i = parameter ? IsNumeric(parameter, FALSE, FALSE) ? ATOI(parameter) : -1 : 0;
-		switch (i)
+		auto i = parameter ? IsNumeric(parameter, FALSE, FALSE) ? ATOI64(parameter) : -1 : 0;
+		if (Object::IsValidStructPack(i))
 		{
-		case 0:
-		case 1:
-		case 2:
-		case 4:
-		case 8:
-			mClassStructPack[mClassObjectCount] = i;
+			mClassStructPack[mClassObjectCount] = (UCHAR)i;
 			return CONDITION_TRUE;
 		}
 		return ScriptError(ERR_PARAM1_INVALID, parameter);
