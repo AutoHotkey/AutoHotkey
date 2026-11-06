@@ -1867,7 +1867,7 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	auto sc_ = TokenToObject(aOfClass);
 	auto sc = sc_->IsOfType(Object::sPrototype) ? (Object*)sc_ : nullptr;
 	auto sp = sc ? sc->ClassGetPrototype() : nullptr;
-	auto spsi = sp ? sp->CloseStructInfo() : nullptr;
+	auto spsi = sp ? (StructInfo*)(sp + 1) : nullptr;
 	Map *map = spsi ? spsi->array_class_map : nullptr;
 	ExprTokenType key = (__int64)aCount;
 	if (!map)
@@ -1892,7 +1892,6 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	auto ap = CreatePrototype(class_name, Object::sCArrayPrototype);
 	auto ac = CreateClass(ap, Object::sCArrayClass);
 	auto si = (StructInfo*)(ap + 1);
-	ap->mFlags |= StructInfoClosed;
 	ap->Release();
 
 	// Cache it.
@@ -1904,20 +1903,11 @@ void Object::CreateCArrayClass(ResultToken &aResultToken, ExprTokenType &aOfClas
 	ac->mOuter = sc;
 	ac->mRefCount--;
 	ASSERT(ac->mRefCount == 1); // Only the reference to be returned below is counted.
-	sc->AddRef();
+	sc->AddRef(); // ac->mOuter is counted until ac->mRefCount reaches 0.
 
+	// Only this minimal setup is done here; the rest in CloseStructInfo().
 	si->kind = StructKind::Array;
-	si->ctor = NewObject<Object>;
-	si->object_size = sizeof(Object);
-	if (!spsi->item_count)
-		si->native_type = spsi->native_type;
-	if (si->native_type == MdType::Void)
-	{
-		si->pointed_class = sc;
-		si->nested_object_size = aCount * spsi->SizeWhenNested();
-	}
-	si->size = aCount * spsi->size;
-	si->align = spsi->align;
+	si->pointed_class = sc; // Not a counted ref.
 	si->item_count = aCount;
 
 	aResultToken.SetValue(ac);
@@ -2281,25 +2271,44 @@ Object::StructInfo *Object::CloseStructInfo()
 	auto &si = *(StructInfo*)(this + 1);
 	si.ctor = (mFlags & NativeClassPrototype) ? nullptr : bsi.ctor;
 	si.object_size = bsi.object_size;
-	si.align = bsi.align;
-	si.nested_object_size = bsi.nested_object_size;
-	si.item_count = bsi.item_count;
 	// si.first_field and next_field form a list of own field definitions.
 	// si.last_field and prev_field form a reversed list of all field definitions (own and inherited).
 	if (si.first_field)
 		si.first_field->prev_field = bsi.last_field;
 	else
 		si.last_field = bsi.last_field;
-	si.pointed_class = bsi.pointed_class;
-	// Inherit struct kind, but revert Ptr to Struct to support __new/__delete/__value.
-	si.kind = bsi.kind == StructKind::Ptr ? StructKind::Struct : bsi.kind;
 	// The following were already zero-initialized:
 	//si.pointer_class = nullptr; // Each subclass should get its own (dynamically).
 	//si.array_class_map = nullptr; // Each subclass must create its own map.
 	//si.native_type = MdType::Void; // Revert to a normal struct if extending a numeric type.
 	//si.dllcall_type = DLL_ARG_INVALID; // As above.
+
+	size_t struct_size;
+	if (si.kind == StructKind::Array)
+	{
+		// si.pointed_class and si.item_count were set by CreateCArrayClass.
+		auto &item_si = *si.pointed_class->ClassGetPrototype()->CloseStructInfo();
+		if (item_si.kind != StructKind::Array)
+			si.native_type = item_si.native_type;
+		if (si.native_type == MdType::Void)
+			si.nested_object_size = si.item_count * item_si.SizeWhenNested();
+		else
+			si.pointed_class = nullptr;
+		struct_size = si.item_count * item_si.size;
+		si.align = item_si.align;
+	}
+	else
+	{
+		struct_size = bsi.size;
+		si.align = bsi.align;
+		si.nested_object_size = bsi.nested_object_size;
+		si.item_count = bsi.item_count;
+		si.pointed_class = bsi.pointed_class;
+		// Inherit struct kind, but revert Ptr to Struct to support __new/__delete/__value.
+		si.kind = bsi.kind == StructKind::Ptr ? StructKind::Struct : bsi.kind;
+	}
 	
-	size_t offset = bsi.size, struct_size = offset;
+	size_t offset = struct_size;
 	for (auto tprop = si.first_field; tprop; tprop = tprop->next_field)
 	{
 		auto proto = tprop->class_object->ClassGetPrototype();
@@ -4576,6 +4585,11 @@ void Object::CreateRootPrototypes()
 	sCArrayPrototype->mFlags |= StructInfoClosed;
 	sCArrayClass = CreateClass(sCArrayPrototype, sStructClass);
 	sStructClass->DefineClass(_T("Array"), sCArrayClass, true);
+	{
+		auto &si = *(StructInfo*)(sCArrayPrototype + 1);
+		si.ctor = NewObject<Object>;
+		si.object_size = sizeof(Object);
+	}
 
 	LPTSTR const type_names[]{ _T("Float32"), _T("Float64"), _T("Int16"), _T("Int32"), _T("Int64"), _T("Int8"), _T("IntPtr"), _T("UInt16"), _T("UInt32"), _T("UInt8") };
 	MdType const type_codes[]{ MdType::Float32, MdType::Float64, MdType::Int16, MdType::Int32, MdType::Int64, MdType::Int8, MdType::IntPtr, MdType::UInt16, MdType::UInt32, MdType::UInt8 };
