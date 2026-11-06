@@ -255,7 +255,7 @@ UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used b
 			ret_type = ret.type;
 			if (ret.proto)
 			{
-				Object *obj;
+				Object *obj = nullptr;
 				auto result_obj = TokenToObject(result_token);
 				if (result_obj && result_obj->IsOfType(ret.proto))
 					obj = (Object*)result_obj;
@@ -278,15 +278,19 @@ UINT64 CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used b
 							auto classname = ret.proto->GetOwnPropString(_T("__Class"));
 							TypeError(classname ? classname : _T("Struct"), fr);
 						}
+						// Even if result != OK, the return value will be copied from obj
+						// (possibly all zeroes) rather than leaving it undefined.
 					}
-					//else an error was already raised.  Copy obj's data anyway (possibly all zeroes),
-					// rather than leaving the return value undefined.
+					//else an error was already raised.
 				}
-				// Copy returned struct by value into the caller-provided space.
-				// obj can be a derived struct class, in which case it must be truncated.
-				memcpy(ret_ptr, (void*)obj->DataPtr(), ret.proto->StructSize());
-				if (obj != result_obj)
-					obj->Release();
+				if (obj)
+				{
+					// Copy returned struct by value into the caller-provided space.
+					// obj can be a derived struct class, in which case it must be truncated.
+					memcpy(ret_ptr, (void*)obj->DataPtr(), ret.proto->StructSize());
+					if (obj != result_obj)
+						obj->Release();
+				}
 			}
 			else if (ret_type != MdType::Void)
 			{
