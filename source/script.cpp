@@ -7627,9 +7627,6 @@ ResultType Script::PreparseCommands(ScriptModule *aModule)
 
 	for (Line *line = aModule->mFirstLine; line; line = line->mNextLine)
 	{
-		LPTSTR line_raw_arg1 = LINE_RAW_ARG1; // Resolve only once to help reduce code size.
-		LPTSTR line_raw_arg2 = LINE_RAW_ARG2; //
-		
 		switch (line->mActionType)
 		{
 		case ACT_BLOCK_BEGIN:
@@ -7703,7 +7700,7 @@ ResultType Script::PreparseCommands(ScriptModule *aModule)
 					// It seems unlikely that computing the target loop at runtime would be useful.
 					// For simplicity, rule out things like "break(var)" and "break(func())":
 					return line->PreparseError(ERR_PARAM1_INVALID); //_T("Target label of Break/Continue cannot be dynamic."));
-				LPTSTR loop_name = line_raw_arg1;
+				LPTSTR loop_name = LINE_RAW_ARG1;
 				Label *loop_label = nullptr;
 				Line *loop_line, *innermost_loop = nullptr;
 				if (*loop_name && !IsNumeric(loop_name))
