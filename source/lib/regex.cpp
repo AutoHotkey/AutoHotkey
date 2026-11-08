@@ -68,6 +68,27 @@ ResultType RegExCreateMatchArray(LPCTSTR haystack, pcret *re, pcret_extra *extra
 }
 
 
+// PCRE can return an end offset one unit past the subject when the subject ends
+// with a lone surrogate, because UTF validation is disabled (SUPPORT_UTF_VALIDATION
+// is left undefined for performance).  Used unchecked, such an offset causes an
+// out-of-bounds read when building the match object and a negative-length tmemcpy()
+// in RegExReplace().  Clamp every captured offset into [0, length] and keep each
+// start/end pair ordered; for valid input this never changes anything.
+static void RegExClampOffsets(int *aOffset, int aCapturedPatternCount, int aSubjectLength)
+{
+	for (int i = 0; i < aCapturedPatternCount; ++i)
+	{
+		if (aOffset[i*2] < 0) // Unmatched optional subpattern; leave as-is.
+			continue;
+		if (aOffset[i*2] > aSubjectLength)
+			aOffset[i*2] = aSubjectLength;
+		if (aOffset[i*2+1] > aSubjectLength)
+			aOffset[i*2+1] = aSubjectLength;
+		if (aOffset[i*2+1] < aOffset[i*2])
+			aOffset[i*2+1] = aOffset[i*2];
+	}
+}
+
 ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
 	, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark, IObject *&aNewObject)
 {
@@ -740,6 +761,8 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		captured_pattern_count = (limit == 0) ? PCRE_ERROR_NOMATCH // Only when limit is exactly 0 are we done replacing.  All negative values are "replace all".
 			: pcret_exec(aRE, aExtra, aHaystack, aHaystackLength, aStartingOffset
 				, empty_string_is_not_a_match, aOffset, aNumberOfIntsInOffset);
+		if (captured_pattern_count > 0)
+			RegExClampOffsets(aOffset, captured_pattern_count, aHaystackLength);
 
 		if (captured_pattern_count == PCRE_ERROR_NOMATCH)
 		{
@@ -1167,6 +1190,8 @@ BIF_DECL(BIF_RegEx)
 	// EXECUTE THE REGEX.
 	int captured_pattern_count = pcret_exec(re, extra, haystack, haystack_length
 		, starting_offset, 0, offset, number_of_ints_in_offset);
+	if (captured_pattern_count > 0)
+		RegExClampOffsets(offset, captured_pattern_count, haystack_length);
 
 	int match_offset = 0; // Set default for no match/error cases below.
 
