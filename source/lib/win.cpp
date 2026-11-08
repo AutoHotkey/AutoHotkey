@@ -1880,10 +1880,10 @@ bif_impl FResult WinGetTransparent(WINTITLE_PARAMETERS_DECL, ResultToken &aResul
 	DETERMINE_TARGET_WINDOW;
 	BYTE alpha;
 	DWORD flags;
-	if (!(GetLayeredWindowAttributes(target_window, nullptr, &alpha, &flags)))
-		return OK;
-	if (flags & LWA_ALPHA)
+	if (GetLayeredWindowAttributes(target_window, nullptr, &alpha, &flags) && (flags & LWA_ALPHA))
 		aResultToken.SetValue(alpha);
+	else
+		aResultToken.SetValue(_T(""), 0);
 	return OK;
 }
 
