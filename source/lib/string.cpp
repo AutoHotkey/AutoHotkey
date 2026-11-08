@@ -1497,7 +1497,7 @@ BIF_DECL(BIF_Format)
 				if (!*cp) // Specifier runs to the end of the string: no closing brace, and the
 					continue; // checks below would match the terminator (_tcschr finds the \0).
 				
-				if (spec_len + 4 >= _countof(spec)) // Format specifier too long (probably invalid).
+				if (spec_len + 6 > _countof(spec)) // Format specifier too long (probably invalid).
 					continue;
 				// Copy options, if any (+1 to leave the leading %).
 				tmemcpy(spec + 1, cp_spec, spec_len);
