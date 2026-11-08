@@ -207,14 +207,12 @@ Var *ScriptModule::FindImportedVar(LPCTSTR aVarName)
 	auto scope = g->CurrentFunc;
 	for (auto imp = scope ? scope->mImports : mLastGlobalImport; ; imp = imp->prev)
 	{
-		if (!imp)
+		while (!imp)
 		{
 			if (!scope)
-				break;
+				return nullptr;
 			scope = scope->mOuterFunc;
 			imp = scope ? scope->mImports : mLastGlobalImport;
-			if (!imp)
-				break;
 		}
 		if (imp->wildcard && imp->mod) // mod can be null during DerefInclude().
 		{
@@ -235,7 +233,6 @@ Var *ScriptModule::FindImportedVar(LPCTSTR aVarName)
 			}
 		}
 	}
-	return nullptr;
 }
 
 
