@@ -1516,7 +1516,7 @@ int Debugger::WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncoded
 	int space_needed = DEBUGGER_BASE64_ENCODED_SIZE(utf8_size);
 	
 	// Reserve enough space for the data's length, "> and encoded data.
-	if (err = mResponseBuf.ExpandIfNecessary(mResponseBuf.mDataUsed + space_needed + MAX_INTEGER_LENGTH + 2))
+	if (err = mResponseBuf.ExpandIfNecessary(mResponseBuf.mDataUsed + space_needed * 2 + MAX_INTEGER_LENGTH + 2))
 		return err;
 	
 	// Complete the size attribute by writing the total size, in terms of UTF-8 bytes.
