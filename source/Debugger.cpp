@@ -2108,7 +2108,7 @@ DEBUGGER_COMMAND(Debugger::source)
 
 			LineNumberType current_line = 0;
 			
-			while (-1 != (line_length = tf.ReadLine(line_buf + line_remainder, LINE_SIZE)))
+			while (0 != (line_length = tf.ReadLine(line_buf + line_remainder, LINE_SIZE)))
 			{
 				if (++current_line >= begin_line)
 				{
