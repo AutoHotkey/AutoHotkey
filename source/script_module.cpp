@@ -205,6 +205,8 @@ Var *ScriptModule::FindImportedVar(LPCTSTR aVarName)
 	if (*aVarName == '_')
 		return nullptr;
 	auto scope = g->CurrentFunc;
+	if (scope && scope->mModule != this) // Searching another module's wildcard exports: only its global imports apply.
+		scope = nullptr;
 	for (auto imp = scope ? scope->mImports : mLastGlobalImport; ; imp = imp->prev)
 	{
 		while (!imp)

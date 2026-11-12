@@ -2374,6 +2374,8 @@ Object::StructInfo *Object::CloseStructInfo()
 		if (struct_size < offset) // Check each iteration in case of a subsequent explicit offset.
 			struct_size = offset;
 	}
+	if (kind == StructKind::Invalid) // Including an invalid base: callers such as GetStructArgInfo test the size.
+		struct_size = 0;
 	// Store the struct's final size, adjusted for alignment.
 	si.size = (struct_size + si.align - 1) & ~(si.align - 1);
 	si.kind = kind;
