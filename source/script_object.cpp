@@ -2212,7 +2212,7 @@ TypedProperty *Object::DefineTypedProperty(name_t aName, bool aEnumerable)
 
 FResult Object::DefineTypedProperty(name_t aName, Object *aClass, UCHAR aPack, ExprTokenType &aOffset, bool aEnumerable)
 {
-	auto proto = aClass->ClassGetPrototype();
+	auto proto = aClass ? aClass->ClassGetPrototype() : nullptr; // aClass is null for a non-Object such as a ComValue.
 	if (  !(proto && proto->IsDerivedFrom(Object::sStructPrototype))  )
 		return FR_E_ARGS;
 	size_t offset = -1;
@@ -2264,6 +2264,8 @@ Object::StructInfo *Object::CloseStructInfo()
 
 	if (!(mFlags & ClassPrototype)) // Only Prototypes can have StructInfo.
 		return &bsi;
+	if (mFlags & StructInfoClosed) // Closing the base closed this one, because the base contains it by value.
+		return (StructInfo*)(this + 1);
 	mFlags |= StructInfoClosed;
 
 	// Even if this ends up being an exact copy of base, initialize it to reduce
@@ -2283,19 +2285,36 @@ Object::StructInfo *Object::CloseStructInfo()
 	//si.native_type = MdType::Void; // Revert to a normal struct if extending a numeric type.
 	//si.dllcall_type = DLL_ARG_INVALID; // As above.
 
+	// Until the layout below is complete, this structure is closed but reports
+	// StructKind::Invalid, so a by-value reference back to it (directly, through
+	// another struct or an array, or from its base) makes the containing structure
+	// invalid instead of embedding one whose size is not known yet.  Pointer classes
+	// are closed when created and never close their target, so S.Ptr fields are
+	// unaffected.
+	StructKind kind;
 	size_t struct_size;
 	if (si.kind == StructKind::Array)
 	{
+		si.kind = StructKind::Invalid;
 		// si.pointed_class and si.item_count were set by CreateCArrayClass.
 		auto &item_si = *si.pointed_class->ClassGetPrototype()->CloseStructInfo();
-		if (item_si.kind != StructKind::Array)
-			si.native_type = item_si.native_type;
-		if (si.native_type == MdType::Void)
-			si.nested_object_size = si.item_count * item_si.SizeWhenNested();
+		if (item_si.kind == StructKind::Invalid) // Includes an array of the structure being closed.
+		{
+			kind = StructKind::Invalid;
+			struct_size = 0;
+		}
 		else
-			si.pointed_class = nullptr;
-		struct_size = si.item_count * item_si.size;
-		si.align = item_si.align;
+		{
+			kind = StructKind::Array;
+			if (item_si.kind != StructKind::Array)
+				si.native_type = item_si.native_type;
+			if (si.native_type == MdType::Void)
+				si.nested_object_size = si.item_count * item_si.SizeWhenNested();
+			else
+				si.pointed_class = nullptr;
+			struct_size = si.item_count * item_si.size;
+			si.align = item_si.align;
+		}
 	}
 	else
 	{
@@ -2304,8 +2323,10 @@ Object::StructInfo *Object::CloseStructInfo()
 		si.nested_object_size = bsi.nested_object_size;
 		si.item_count = bsi.item_count;
 		si.pointed_class = bsi.pointed_class;
-		// Inherit struct kind, but revert Ptr to Struct to support __new/__delete/__value.
-		si.kind = bsi.kind == StructKind::Ptr ? StructKind::Struct : bsi.kind;
+		// Inherit struct kind, but revert Ptr and Number to Struct to support __new/__delete/__value
+		// (native_type is Void for a subclass, so a Number subclass is not converted directly).
+		kind = bsi.kind == StructKind::Ptr || bsi.kind == StructKind::Number ? StructKind::Struct : bsi.kind;
+		si.kind = StructKind::Invalid;
 	}
 	
 	size_t offset = struct_size;
@@ -2315,7 +2336,7 @@ Object::StructInfo *Object::CloseStructInfo()
 		auto &psi = *proto->CloseStructInfo();
 		if (!psi.IsValidPropertyType())
 		{
-			si.kind = StructKind::Invalid;
+			kind = StructKind::Invalid;
 			struct_size = 0;
 			break;
 		}
@@ -2355,6 +2376,7 @@ Object::StructInfo *Object::CloseStructInfo()
 	}
 	// Store the struct's final size, adjusted for alignment.
 	si.size = (struct_size + si.align - 1) & ~(si.align - 1);
+	si.kind = kind;
 	return (StructInfo*)(this + 1);
 }
 
@@ -2555,9 +2577,9 @@ void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, Expr
 			desc->SetOwnProp(_T("Type"), sPrimitiveClass[(int)field->tprop->type-1]);
 		if (field->tprop->offset_by_tp)
 		{
-			for (auto f = field; f > mFields.Value(); )
+			// mFields is sorted by name, not definition order, so the referenced field can be on either side.
+			for (auto f = mFields.Value(), f_end = f + mFields.Length(); f < f_end; ++f)
 			{
-				--f;
 				if (f->symbol == SYM_TYPED_FIELD && f->tprop == field->tprop->data_offset_tp)
 				{
 					desc->SetOwnProp(_T("Offset"), f->name);
