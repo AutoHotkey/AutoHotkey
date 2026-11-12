@@ -2108,7 +2108,7 @@ DEBUGGER_COMMAND(Debugger::source)
 
 			LineNumberType current_line = 0;
 			
-			while (-1 != (line_length = tf.ReadLine(line_buf + line_remainder, LINE_SIZE)))
+			while (0 != (line_length = tf.ReadLine(line_buf + line_remainder, LINE_SIZE)))
 			{
 				if (++current_line >= begin_line)
 				{
@@ -2306,7 +2306,7 @@ int Debugger::ReceiveCommand(int *aCommandLength)
 		// Receive and append data.
 		int bytes_received = recv(mSocket, mCommandBuf.mData + mCommandBuf.mDataUsed, (int)(mCommandBuf.mDataSize - mCommandBuf.mDataUsed), 0);
 
-		if (bytes_received == SOCKET_ERROR)
+		if (bytes_received == SOCKET_ERROR || bytes_received == 0)
 			return FatalError();
 
 		mCommandBuf.mDataUsed += bytes_received;
