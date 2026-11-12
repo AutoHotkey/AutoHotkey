@@ -33,7 +33,18 @@ struct RCCallbackFunc // Used by BIF_CallbackCreate() and related.
 	ULONG data4;	//59 84 C4 nn
 	USHORT data5;	//FF E1
 #endif
-#ifdef _WIN64
+#ifdef _M_ARM64
+	// ARM64 executable callback thunk, followed by data used by the thunk.
+	// Instructions:
+	//   adr x9, #0          ; x9 = address of this RCCallbackFunc
+	//   ldr x10, #12        ; x10 = stub pointer stored at offset 16
+	//   br x10              ; jump to RegisterCallbackAsmStub
+	//   nop
+	UINT64 data1;
+	UINT64 data2;
+	void (*stub)();
+	UINT_PTR (CALLBACK *callfuncptr)(UINT_PTR*, char*);
+#elif defined(_WIN64)
 	UINT64 data1; // 0xfffffffff9058d48
 	UINT64 data2; // 0x9090900000000325
 	void (*stub)();
@@ -250,7 +261,21 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 	cb.data5=0xE1FF; // jmp ecx -- FF E1 ;return
 #endif
 
-#ifdef _WIN64
+#ifdef _M_ARM64
+	// ARM64 equivalent of the x64 in-structure callback thunk.
+	// Memory layout at aRetVal/callbackfunc:
+	//   +00: adr x9, #0
+	//   +04: ldr x10, #12      ; loads cb.stub from +16
+	//   +08: br x10
+	//   +12: nop
+	//   +16: RegisterCallbackAsmStub
+	//   +24: RegisterCallbackCStub
+	// RegisterCallbackAsmStub expects x9 to point to this RCCallbackFunc.
+	cb.data1 = 0x5800006A10000009ULL;
+	cb.data2 = 0xD503201FD61F0140ULL;
+	cb.stub = RegisterCallbackAsmStub;
+	cb.callfuncptr = RegisterCallbackCStub;
+#elif defined(_WIN64)
 	/* Adapted from http://www.dyncall.org/
 		lea rax, (rip)  # copy RIP (=p?) to RAX and use address in
 		jmp [rax+16]    # 'entry' (stored at RIP+16) for jump
@@ -277,6 +302,11 @@ bif_impl FResult CallbackCreate(IObject *func, optl<StrArg> aOptions, optl<int> 
 	// protection of the page of memory in which the callback resides to allow it to execute:
 	DWORD dwOldProtect;
 	VirtualProtect(callbackfunc, sizeof(RCCallbackFunc), PAGE_EXECUTE_READWRITE, &dwOldProtect);
+#ifdef _M_ARM64
+	// ARM64 has separate instruction/data cache behaviour in practice; after
+	// generating executable code in memory, make the new instructions visible.
+	FlushInstructionCache(GetCurrentProcess(), callbackfunc, sizeof(RCCallbackFunc));
+#endif
 
 	aRetVal = (UINT_PTR)callbackfunc; // Yield the callable address as the result.
 	return OK;

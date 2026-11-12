@@ -232,12 +232,81 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 #endif // WIN32_PLATFORM
 #ifdef _WIN64
 
+#ifdef _M_ARM64
+	// Windows ARM64 uses separate register banks for the first 8 integer/pointer
+	// arguments (x0-x7) and the first 8 floating-point arguments (d0-d7).
+	// The ARM64 assembler bridge expects regArgs laid out as:
+	//   [0..7]   = d0-d7 payload slots
+	//   [8..15]  = x0-x7 payload slots
+	// Arguments which overflow their register class are placed on the stack in
+	// 8-byte slots, in call order.  This is essential for calls such as
+	// BASS_ChannelSeconds2Bytes(DWORD, double), where the DWORD must go to x0
+	// and the double must go to d0, not d1.
+	DWORD_PTR regArgs[16] = {};
+	DWORD_PTR* stackArgs = NULL;
+	size_t stackArgsSize = 0;
+	int int_reg = 0, fp_reg = 0, stack_count = 0;
+
+	for (int i = 0; i < aParamCount; ++i)
+	{
+		DYNAPARM &parm = aParam[i];
+		DWORD_PTR elem = DynaParamToElement(parm);
+		bool is_float_arg = !parm.passed_by_address
+			&& (parm.type == DLL_ARG_FLOAT || parm.type == DLL_ARG_DOUBLE);
+
+		if (is_float_arg)
+		{
+			if (fp_reg < 8)
+			{
+				regArgs[fp_reg++] = elem;
+				continue;
+			}
+		}
+		else
+		{
+			if (int_reg < 8)
+			{
+				regArgs[8 + int_reg++] = elem;
+				continue;
+			}
+		}
+		++stack_count;
+	}
+
+	if (stack_count)
+	{
+		stackArgsSize = stack_count * 8;
+		stackArgs = (DWORD_PTR*) _alloca(stackArgsSize);
+		int stack_index = 0;
+		int int_reg2 = 0, fp_reg2 = 0;
+
+		for (int i = 0; i < aParamCount; ++i)
+		{
+			DYNAPARM &parm = aParam[i];
+			DWORD_PTR elem = DynaParamToElement(parm);
+			bool is_float_arg = !parm.passed_by_address
+				&& (parm.type == DLL_ARG_FLOAT || parm.type == DLL_ARG_DOUBLE);
+
+			if (is_float_arg)
+			{
+				if (fp_reg2++ < 8)
+					continue;
+			}
+			else
+			{
+				if (int_reg2++ < 8)
+					continue;
+			}
+			stackArgs[stack_index++] = elem;
+		}
+	}
+#else
 	int params_left = aParamCount;
 	DWORD_PTR regArgs[4];
 	DWORD_PTR* stackArgs = NULL;
 	size_t stackArgsSize = 0;
 
-	// The first four parameters are passed in x64 through registers... like ARM :D
+	// The first four parameters are passed in x64 through registers.
 	for(int i = 0; (i < 4) && params_left; i++, params_left--)
 		regArgs[i] = DynaParamToElement(aParam[i]);
 
@@ -250,6 +319,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		for(int i = 0; i < params_left; i ++)
 			stackArgs[i] = DynaParamToElement(aParam[i+4]);
 	}
+#endif
 
 	// Call the function.
 	__try
