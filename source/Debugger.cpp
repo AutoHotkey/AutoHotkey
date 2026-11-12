@@ -1524,7 +1524,7 @@ int Debugger::WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncoded
 		return err;
 
 	// Convert to UTF-8, using mResponseBuf temporarily.
-	char *utf8_value = mResponseBuf.mData + mResponseBuf.mDataSize - space_needed;
+	char *utf8_value = mResponseBuf.mData + mResponseBuf.mDataSize - utf8_size;
 	utf8_size = WideCharToMultiByte(CP_UTF8, 0, utf16_value, utf16_size, utf8_value, utf8_size, NULL, NULL);
 	if (!utf8_size && utf16_size) // Conversion failed.
 		return DEBUGGER_E_INTERNAL_ERROR;
@@ -2496,6 +2496,9 @@ size_t Debugger::Base64Encode(char *aBuf, const char *aInput, size_t aInputSize/
 
 	if (aInputSize == -1) // Direct comparison since aInputSize is unsigned.
 		aInputSize = strlen(aInput);
+#ifdef _DEBUG
+	auto input_end = aInput + aInputSize;
+#endif
 
 	for (i = aInputSize; i > 2; i -= 3)
 	{
@@ -2508,6 +2511,7 @@ size_t Debugger::Base64Encode(char *aBuf, const char *aInput, size_t aInputSize/
 		aBuf[len + 3] = BINARY_TO_BASE64_CHAR(buffer);
 		len += 4;
 	}
+	ASSERT(!(aBuf + len > aInput && aBuf < input_end)); // Overlap is permitted, but should be calculated to avoid overwriting input before finishing.
 	if (i > 0)
 	{
 		buffer = (UCHAR)aInput[0] << 16;
