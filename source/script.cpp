@@ -7656,13 +7656,11 @@ ResultType Script::PreparseCommands(ScriptModule *aModule)
 				// from its body, the statement will execute correctly.  For example:
 				//    if cond          ; parent
 				//        x(y() => 1)  ; block_begin, (return 1), line (block end), (call to x)
-				Line *next = line->mNextLine;
-				// Set the next link to exclude subsequent functions, so when the debugger searches
-				// for breakpoints it will only search each function once.
-				while (next->mActionType == ACT_BLOCK_BEGIN && next->mAttribute)
-					next = next->mRelatedLine;
 				Line *prev = block_begin->mPrevLine;
-				// Remove the function from the outer Line list.
+				Line *next = line->mNextLine;
+				// Remove the function from the outer Line list.  When there are consecutive functions,
+				// each one must be removed only after preparsing its body, and the line list must be
+				// kept consistent in both directions in case an error is shown (see comment below).
 				if (prev)
 					prev->mNextLine = next;
 				else
