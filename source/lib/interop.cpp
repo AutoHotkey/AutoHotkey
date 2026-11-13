@@ -29,6 +29,10 @@ struct NumGetParams
 
 bool Object::GetNumGetArgInfo(size_t &aSize, BOOL &aIsInt, BOOL &aIsSigned)
 {
+	// Avoid CloseStructInfo() since callers of that should be documented,
+	// and any struct which needs closing is invalid with NumPut/NumGet.
+	if (!(mFlags & StructInfoClosed))
+		return false;
 	auto &si = *GetStructInfo();
 	if (!DLLARGTYPE_IS_NUMERIC(si.dllcall_type))
 		return false;
