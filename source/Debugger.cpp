@@ -108,18 +108,23 @@ Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
 {
 	Line *best_line = nullptr;
 	for (auto mod = g_script.mLastModule; mod; mod = mod->mPrev)
-		if (mod->HasFileIndex(file_index))
+		if (mod->mFileIndex == file_index || mod->HasFileIndex(file_index))
 		{
-			best_line = FindFirstLineForBreakpoint(file_index, line_no, mod->mFirstLine);
+			if (auto line = FindFirstLineForBreakpoint(file_index, line_no, mod->mFirstLine))
+			{
+				if (line->mLineNumber == line_no // Exact match.
+					&& line->mActionType != ACT_END_MODULE) // Exclude ACT_END_MODULE because it can overlap with an FDE or the next #Module.
+					return line;
+				if (!best_line || line->mLineNumber < best_line->mLineNumber)
+					best_line = line;
+				// Keep searching for a better match.
+			}
 			// We currently presume that if it wasn't found in this module, it won't be
 			// found in any module which includes this file.  We don't really support
 			// cases where multiple modules #include a file anyway, as the Breakpoint
 			// would only be set on the first found Line instance.
-			if (best_line && best_line->mLineNumber == line_no
-				&& best_line->mActionType != ACT_END_MODULE) // Exclude ACT_END_MODULE because it can overlap with an FDE.
-				return best_line;
-			// Otherwise, search for a better match inside a function.
-			break;
+			if (mod->IsFileModule() || mod->mFileIndex != file_index)
+				break;
 		}
 	bool mod_has_file = false;
 	ScriptModule *mod = nullptr;
@@ -138,7 +143,7 @@ Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
 				// Functions tend to be grouped by module, so this might help performance
 				// by skipping many functions which can't possibly be in/contain this file.
 				mod = func.mModule;
-				mod_has_file = mod->HasFileIndex(file_index);
+				mod_has_file = mod->mFileIndex == file_index || mod->HasFileIndex(file_index);
 			}
 			if (!mod_has_file)
 				continue;
