@@ -350,13 +350,13 @@ FResult GuiType::__New(optl<StrArg> aOptions, optl<StrArg> aTitle, optl<IObject*
 	else
 		mDPI = g_ScreenDPI;
 
-	if (g_ScreenDPI != mDPI)
-	{
-		int font_index = RescaleFontForDPI(sFont[0].hfont, g_ScreenDPI, mDPI);
-		if (font_index != -1)
-			mCurrentFontIndex = font_index;
-		//else use default index 0 (unlikely to occur).
-	}
+	// Select font according to current DPI.  RescaleFontForDPI is not used because sFont[0]
+	// comes from GetStockObject(DEFAULT_GUI_FONT), which apparently scales according to a
+	// different concept of "system DPI" depending on DPI awareness:
+	//  - System DPI aware: s8 relative to the "system DPI" at process startup.
+	//  - Per-monitor aware: s8 relative to the system DPI at time of logon.
+	// g_ScreenDPI and GetDpiForSystem() are both the process startup value.
+	mCurrentFontIndex = FindOrCreateFont(_T("s8"), _T(""), &sFont[0]);
 
 	bool set_last_found_window = false;
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
