@@ -136,8 +136,21 @@ for (p = string; length-- > 0; p++)
   }
 
 #else  /* SUPPORT_UTF */
-(void)(string);  /* Keep picky compilers happy */
-(void)(length);
+/* AutoHotkey: For performance, we don't scan the entire string, but the start
+and end character must be validated to prevent PCRE from reading out of bounds. */
+if (length)
+  {
+    if ((*string & 0xdc00) == 0xdc00)
+      {
+      *erroroffset = 0;
+      return PCRE_UTF16_ERR3;
+      }
+    if ((string[length - 1] & 0xdc00) == 0xd800)
+      {
+      *erroroffset = length - 1;
+      return PCRE_UTF16_ERR1;
+      }
+  }
 #endif /* SUPPORT_UTF */
 
 return PCRE_UTF16_ERR0;   /* This indicates success */
