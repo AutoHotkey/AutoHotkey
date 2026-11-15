@@ -1222,6 +1222,10 @@ ResultType Script::ShowError(Line* aLine, ResultType aErrorType, ExprTokenType *
 			message = TokenToString(t, message_buf);
 		if (ex->GetOwnProp(t, _T("Extra")))
 			extra = TokenToString(t, extra_buf);
+#ifdef CONFIG_DEBUGGER
+		// If debugger support is disabled, it's probably to reduce code size, so it seems
+		// acceptable to also use simpler, less-accurate Line-displaying logic. Otherwise,
+		// we'd need to move FindFirstLineForErrorBox() out of Debugger.
 		LPCTSTR file = ex->GetOwnPropString(_T("File"));
 		LineNumberType line_no = (LineNumberType)ex->GetOwnPropInt64(_T("Line"));
 		if (file && *file && line_no)
@@ -1234,16 +1238,12 @@ ResultType Script::ShowError(Line* aLine, ResultType aErrorType, ExprTokenType *
 					break;
 			if (!aLine || aLine->mFileIndex != file_index || aLine->mLineNumber != line_no) // Keep aLine if it matches, in case of multiple Lines with the same number.
 			{
-				Line *line = nullptr;
-				for (auto mod = mLastModule; mod; mod = mod->mPrev)
-				for (line = mod->mFirstLine;
-					line && (line->mLineNumber != line_no || line->mFileIndex != file_index
-						|| !line->mArgc && line->mNextLine && line->mNextLine->mLineNumber == line_no); // Skip any same-line block-begin/end, try, else or finally.
-					line = line->mNextLine);
+				Line *line = g_Debugger.FindFirstLineForErrorBox(file_index, line_no);
 				if (line)
 					aLine = line;
 			}
 		}
+#endif
 	}
 	else
 	{

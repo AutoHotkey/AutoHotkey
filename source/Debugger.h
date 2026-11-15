@@ -198,6 +198,8 @@ public:
 
 	LPCTSTR WhatThrew();
 
+	Line *FindFirstLineForErrorBox(int file_index, UINT line_no) { return FindFirstLineForBreakpoint(file_index, line_no); }
+
 	// Code flow notification functions:
 	int PreExecLine(Line *aLine); // Called before executing each line.
 	void LeaveFunction();
