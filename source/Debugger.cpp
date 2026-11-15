@@ -148,7 +148,18 @@ Line *Debugger::FindFirstLineForBreakpoint(int file_index, UINT line_no)
 			if (!mod_has_file)
 				continue;
 		}
-		if (auto line = FindFirstLineForBreakpoint(file_index, line_no, func.mJumpToLine))
+		// After the script loads, a function's parameter default initializers precede mJumpToLine.
+		// SetBreakpointForLineGroup() handles these only if mLineNumber matches the chosen line,
+		// and it never does if mJumpToLine is chosen.  Arrow functions need not be considered
+		// because the outer expression line would have been chosen already.
+		Line *line = func.mJumpToLine->mPrevLine;
+		if (line->mFileIndex == file_index && line->mLineNumber > line_no)
+		{
+			// Breakpoint seems to be outside the function, so don't shift it in.
+			// This also avoids shifting it to an initializer, which might not execute.
+			return best_line && best_line->mLineNumber < line->mLineNumber ? best_line : nullptr;
+		}
+		if (line = FindFirstLineForBreakpoint(file_index, line_no, line))
 		{
 			if (line->mLineNumber == line_no)
 				return line;
@@ -223,8 +234,7 @@ void Debugger::SetBreakpointForLineGroup(Line *line, Breakpoint *bp)
 	{
 		auto &func = *g_script.mFuncs.mItem[i];
 		auto fl = func.mJumpToLine;
-		// Fat arrow functions are either removed from the main line list or come after the
-		// line which contains them, in which case our caller would have found the latter.
+		// This handles arrow functions within the expression on the caller-supplied line.
 		if (fl->mLineNumber == line_no && fl->mFileIndex == file_no && func.mIsFuncExpression == FuncDefFatArrow)
 			fl->mBreakpoint = bp;
 		// After the script loads, a function's parameter default initializers precede mJumpToLine.
