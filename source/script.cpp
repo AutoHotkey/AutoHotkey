@@ -12348,6 +12348,8 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 		int i = 0;
 		if (mActionType == ACT_ASSIGNEXPR)
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s := "), mArg[i++].text);
+		else if (mActionType == ACT_BLOCK_BEGIN && mAttribute)
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s(\u2026) {"), ((UserFunc*)mAttribute)->mName);
 		else if (mActionType != ACT_EXPRESSION)
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), g_act[mActionType].Name);
 		for (; i < mArgc; ++i)
