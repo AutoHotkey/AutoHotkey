@@ -867,24 +867,39 @@ bif_impl void ListHotkeys()
 
 
 
-bif_impl FResult KeyHistory(optl<int> aMaxEvents)
+bif_impl FResult KeyHistory(optl<int> aMaxEvents, optl<BOOL> showMouse, optl<BOOL> showKeyboard)
 {
-	if (!aMaxEvents.has_value())
+	if (!aMaxEvents.has_value() && !showMouse.has_value() && !showKeyboard.has_value())
 	{
 		ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
 		return OK;
 	}
-	int value = *aMaxEvents;
-	if (value < 0 || value > 500)
-		return FR_E_ARG(0);
-	// GetHookStatus() only has a limited size buffer in which to transcribe the keystrokes.
-	// 500 events is about what you would expect to fit in a 32 KB buffer (in the unlikely
-	// event that the transcribed events create too much text, the text will be truncated,
-	// so it's not dangerous anyway).
-	if (g_KeybdHook || g_MouseHook)
-		PostThreadMessage(g_HookThreadID, AHK_HOOK_SET_KEYHISTORY, value, 0);
-	else
-		SetKeyHistoryMax(value);
+
+	if (aMaxEvents.has_value())
+	{
+		int value = *aMaxEvents;
+		if (value < 0 || value > 500)
+			return FR_E_ARG(0);
+		// GetHookStatus() only has a limited size buffer in which to transcribe the keystrokes.
+		// 500 events is about what you would expect to fit in a 32 KB buffer (in the unlikely
+		// event that the transcribed events create too much text, the text will be truncated,
+		// so it's not dangerous anyway).
+		if (g_KeybdHook || g_MouseHook)
+			PostThreadMessage(g_HookThreadID, AHK_HOOK_SET_KEYHISTORY, value, 0);
+		else
+			SetKeyHistoryMax(value);
+	}
+
+	if (showMouse.has_value())
+	{
+		g_ShowMouseKeyHistory = *showMouse;
+	}
+
+	if (showKeyboard.has_value())
+	{
+		g_ShowKeyboardKeyHistory = *showKeyboard;
+	}
+
 	return OK;
 }
 
