@@ -8280,7 +8280,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// 16-bit Windows.  For simplicity (and because the window may have actually been resized)
 		// let wParam have its current (unexpected) value, if that's ever possible.
 		}
-		// probably never contain those values, and as a result they are not documented in the help file.
 		if (pgui->IsMonitoring(GUI_EVENT_RESIZE))
 			POST_AHK_GUI_ACTION(hWnd, NO_CONTROL_INDEX, MAKEWORD(GUI_EVENT_RESIZE, wParam), lParam);
 			// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
