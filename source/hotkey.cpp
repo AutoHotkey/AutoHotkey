@@ -2555,16 +2555,14 @@ void Hotstring::ParseOptions(LPCTSTR aOptions, int &aPriority, int &aKeyDelay, S
 			aSendRaw = (*cp1 != '0') ? SCM_RAW_TEXT : SCM_NOT_RAW;
 			break;
 		case 'S':
-			if (*cp1)
-				++cp; // Skip over S's sub-letter (if any) to exclude it from  further consideration.
 			switch (ctoupper(*cp1))
 			{
 			// There is no means to choose SM_INPUT because it seems too rarely desired (since auto-replace
 			// hotstrings would then become interruptible, allowing the keystrokes of fast typists to get
 			// interspersed with the replacement text).
-			case 'I': aSendMode = SM_INPUT_FALLBACK_TO_PLAY; break;
-			case 'E': aSendMode = SM_EVENT; break;
-			case 'P': aSendMode = SM_PLAY; break;
+			case 'I': aSendMode = SM_INPUT_FALLBACK_TO_PLAY; ++cp; break;
+			case 'E': aSendMode = SM_EVENT; ++cp; break;
+			case 'P': aSendMode = SM_PLAY; ++cp; break;
 			default: aSuspendExempt = (*cp1 != '0'); break;
 			}
 			break;
