@@ -2252,7 +2252,10 @@ process_completed_line:
 					mCombinedLineNumber--;	// It must be the previous line.
 					return ScriptError(ERR_HOTKEY_MISSING_BRACE);
 				}
-				
+
+				if (!Hotstring::ValidOptions(hotstring_options, ':'))
+					return FAIL;
+
 				if (!Hotstring::AddHotstring(buf, mLastHotFunc, hotstring_options
 					, hotstring_start, hotstring_execute || hotkey_uses_otb ? _T("") : hotkey_flag, has_continuation_section))
 					return FAIL;
@@ -3696,26 +3699,23 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	{
 		if (parameter)
 		{
-			LPTSTR suboption = tcscasestr(parameter, _T("EndChars"));
-			if (suboption)
+			if (!_tcsnicmp(parameter, _T("EndChars"), 8) && IS_SPACE_OR_TAB(parameter[8]))
 			{
 				// Since it's not realistic to have only a couple, spaces and literal tabs
 				// must be included in between other chars, e.g. `n `t has a space in between.
 				// Also, EndChar  \t  will have a space and a tab since there are two spaces
 				// after the word EndChar.
-				if (    !(parameter = StrChrAny(suboption, _T("\t ")))   )
-					return CONDITION_TRUE;
-				tcslcpy(g_EndChars, ++parameter, _countof(g_EndChars));
+				tcslcpy(g_EndChars, parameter + 9, _countof(g_EndChars));
 				ConvertEscapeSequences(g_EndChars, NULL);
 				return CONDITION_TRUE;
 			}
-			if (!_tcsnicmp(parameter, _T("NoMouse"), 7)) // v1.0.42.03
+			if (!_tcsicmp(parameter, _T("NoMouse"))) // v1.0.42.03
 			{
 				g_HSResetUponMouseClick = false;
 				return CONDITION_TRUE;
 			}
-			// Otherwise assume it's a list of options.  Note that for compatibility with its
-			// other caller, it will stop at end-of-string or ':', whichever comes first.
+			if (!Hotstring::ValidOptions(parameter))
+				return FAIL;
 			Hotstring::ParseOptions(parameter, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
 				, g_HSConformToCase, g_HSDoBackspace, g_HSOmitEndChar, g_HSSendRaw, g_HSEndCharRequired
 				, g_HSDetectWhenInsideWord, g_HSDoReset, g_HSSameLineAction, g_SuspendExemptHS);

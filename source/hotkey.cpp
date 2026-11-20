@@ -2490,6 +2490,47 @@ Hotstring::Hotstring(LPCTSTR aName, IObjectPtr aCallback, LPCTSTR aOptions, LPCT
 
 
 
+// Validation is separate so that callers can verify options are valid before making
+// any changes to a hotstring or global options, in particular when the string is a
+// typo of a word-based option like "RndChars" or "OnMouse".
+bool Hotstring::ValidOptions(LPCTSTR aOptions, TCHAR aTerminator)
+{
+	for (auto cp = aOptions; *cp != aTerminator; ++cp)
+	{
+		auto c = ctoupper(*cp);
+		if (_tcschr(_T("*?BCORTXZ"), c))
+		{
+			if (cp[1] == '0' || cp[1] == '1')
+				++cp;
+			continue;
+		}
+		switch (c)
+		{
+		case ' ':
+		case '\t':
+			break;
+		case 'K':
+		case 'P':
+			if ((cp[1] == '-' || cp[1] == '+') && cisdigit(cp[2]))
+				++cp;
+			while (cisdigit(cp[1]))
+				++cp;
+			break;
+		case 'S':
+			c = ctoupper(cp[1]);
+			if (c == 'I' || c == 'E' || c == 'P' || c == '0' || c == '1')
+				++cp;
+			break;
+		default:
+			g_script.ScriptError(ERR_INVALID_OPTION, cp);
+			return false;
+		}
+	}
+	return true;
+}
+
+
+
 void Hotstring::ParseOptions(LPCTSTR aOptions)
 {
 	bool unused_X_option;
@@ -2636,6 +2677,8 @@ bif_impl FResult BIF_Hotstring(StrArg name, ExprTokenType *aReplacement, optl<St
 	}
 	else if (!aReplacement && !aOnOff.has_value() && *name != ':') // Equivalent to #Hotstring <name>
 	{
+		if (!Hotstring::ValidOptions(name))
+			return FAIL;
 		// TODO: Build string of current options and return it?
 		bool unused_X_option; // 'X' option is required to be passed for each Hotstring() call, for clarity.
 		Hotstring::ParseOptions(name, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
@@ -2672,7 +2715,11 @@ bif_impl FResult BIF_Hotstring(StrArg name, ExprTokenType *aReplacement, optl<St
 	bool un; int iun; SendModes sm; SendRawType sr; // Unused.
 	bool execute_action = false;
 	if (*hotstring_options)
+	{
+		if (!Hotstring::ValidOptions(hotstring_options, ':'))
+			return FR_FAIL;
 		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, execute_action, un);
+	}
 
 	IObject *action_obj = NULL;
 	if (aReplacement)

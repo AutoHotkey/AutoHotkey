@@ -383,6 +383,7 @@ public:
 	static Hotstring *FindHotstring(LPCTSTR aHotstring, bool aCaseSensitive, bool aDetectWhenInsideWord, HotkeyCriterion *aHotCriterion);
 	static ResultType AddHotstring(LPCTSTR aName, IObjectPtr aCallback, LPCTSTR aOptions, LPCTSTR aHotstring
 		, LPCTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend = FALSE);
+	static bool ValidOptions(LPCTSTR aOptions, TCHAR aTerminator = '\0');
 	static void ParseOptions(LPCTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 		, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
 		, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction, bool &aSuspendExempt);
